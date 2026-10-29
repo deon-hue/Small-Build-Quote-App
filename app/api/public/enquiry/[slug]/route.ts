@@ -9,7 +9,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { siteOrigin } from '@/lib/site-origin'
 import { checkEnquiry } from '@/lib/enquiry'
 import { companyForSlug, saveEnquiry } from '@/lib/enquiry-submit'
-import { notifyBuilderOfEnquiry } from '@/lib/enquiry-notify'
+import { notifyBuilderOfEnquiry, sendEnquiryThanks } from '@/lib/enquiry-notify'
 
 export const maxDuration = 30
 
@@ -60,6 +60,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ slug: stri
   if (!company.enabled) return NextResponse.json({ error: 'This company is not taking enquiries through this form at the moment.' }, { status: 403 })
 
   const result = await saveEnquiry(sb, company, check.value)
+
+  // the enquirer's own thank-you: only if the company switched it on, and only to an address that passed the checks
+  if (result.created && company.thanks && check.value.email) {
+    await sendEnquiryThanks({ companyName: company.companyName, companyEmail: company.email, input: check.value, origin: siteOrigin(req), ownerId: company.ownerId, hasLogo: company.hasLogo })
+  }
 
   if (result.created && company.notify) {
     // the company's own email, or failing that the email it signs in with

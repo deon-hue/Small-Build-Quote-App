@@ -2,7 +2,7 @@
 //   GET   the current settings (and the names the company has had)
 //   POST  { action: 'check', slug }   is that name free?
 //         { action: 'claim', slug }   take that name (the old ones keep working)
-//         { action: 'save', enabled, intro, notify }
+//         { action: 'save', enabled, intro, notify, thanks }
 // Link names are held in enquiry_slugs, which only the server can touch (service role), after checking who is asking here.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,7 +23,7 @@ async function owner() {
 export async function GET() {
   const who = await owner()
   if (!who) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
-  const { data, error } = await who.sb.from('settings').select('company_name, enquiry_slug, enquiry_enabled, enquiry_intro, enquiry_notify').eq('user_id', who.user.id).maybeSingle()
+  const { data, error } = await who.sb.from('settings').select('company_name, enquiry_slug, enquiry_enabled, enquiry_intro, enquiry_notify, enquiry_thanks').eq('user_id', who.user.id).maybeSingle()
   if (error) return NextResponse.json({ setupNeeded: isMissingSchema(error), error: isMissingSchema(error) ? SETUP_NEEDED : 'Could not read your settings.' }, { status: isMissingSchema(error) ? 200 : 500 })
   if (!data) return NextResponse.json({ error: 'Only the company owner can set up the enquiry form.' }, { status: 403 })
 
@@ -43,6 +43,7 @@ export async function GET() {
     enabled: data.enquiry_enabled !== false,
     intro: (data.enquiry_intro as string) || '',
     notify: data.enquiry_notify !== false,
+    thanks: data.enquiry_thanks === true,
     slugs,
   })
 }
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   const who = await owner()
   if (!who) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  let body: { action?: string; slug?: string; enabled?: unknown; intro?: unknown; notify?: unknown }
+  let body: { action?: string; slug?: string; enabled?: unknown; intro?: unknown; notify?: unknown; thanks?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }) }
 
   // the signed-in person must have a company settings row of their own (a team member does not)
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = { enquiry_intro: intro }
     if (typeof body.enabled === 'boolean') patch.enquiry_enabled = body.enabled
     if (typeof body.notify === 'boolean') patch.enquiry_notify = body.notify
+    if (typeof body.thanks === 'boolean') patch.enquiry_thanks = body.thanks
     const { error } = await who.sb.from('settings').update(patch).eq('user_id', who.user.id)
     if (error) return NextResponse.json({ error: isMissingSchema(error) ? SETUP_NEEDED : 'Could not save just now. Please try again.' }, { status: 500 })
     return NextResponse.json({ ok: true })

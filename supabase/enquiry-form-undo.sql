@@ -5,3 +5,4 @@ ALTER TABLE public.settings DROP COLUMN IF EXISTS enquiry_slug;
 ALTER TABLE public.settings DROP COLUMN IF EXISTS enquiry_enabled;
 ALTER TABLE public.settings DROP COLUMN IF EXISTS enquiry_intro;
 ALTER TABLE public.settings DROP COLUMN IF EXISTS enquiry_notify;
+ALTER TABLE public.settings DROP COLUMN IF EXISTS enquiry_thanks;

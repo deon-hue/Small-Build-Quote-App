@@ -61,3 +61,46 @@ export async function notifyBuilderOfEnquiry(opts: { to: string; companyName: st
     console.error('[enquiry] notification email failed (the enquiry is saved):', err)
   }
 }
+
+// ── The thank-you to the person who sent the enquiry (a company switches it on; it is off to start) ────────────────
+
+/** The email's words. The enquirer typed their own name and address, so everything is escaped; the company's name is escaped too. Nothing in it is a link, and it says what to do if the enquiry was not theirs. */
+export function buildEnquiryThanksEmail(companyName: string, e: EnquiryInput, logoUrl?: string): EnquiryEmail {
+  const first = (e.name || '').trim().split(/\s+/)[0] || ''
+  const sent = [e.jobType ? `Kind of job: ${e.jobType}` : '', [e.address, e.postcode].filter(Boolean).join(', ') ? `Address: ${[e.address, e.postcode].filter(Boolean).join(', ')}` : '', e.files.length ? `${e.files.length} ${e.files.length === 1 ? 'file' : 'files'} attached` : '']
+    .filter(Boolean).map(l => `<div style="font-size:14px;color:${BRAND.ink};padding:2px 0">${escapeHtml(l)}</div>`).join('')
+  const html = emailShell({
+    company: escapeHtml(companyName), kicker: 'Enquiry received', title: first ? `Thank you, ${escapeHtml(first)}` : 'Thank you', logoUrl,
+    body: [
+      emailPara(`${escapeHtml(companyName)} has received your enquiry and will be in touch.`, 14),
+      sent ? `<div style="margin:0 0 18px;padding:12px 16px;background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:6px"><div style="font-size:12px;color:${BRAND.muted};margin-bottom:4px">What you sent</div>${sent}</div>` : '',
+      `<p style="margin:0;font-size:13px;color:${BRAND.muted};line-height:1.6">You can reply to this email to add anything you forgot. If you did not send an enquiry, you can ignore this message.</p>`,
+    ].join('\n      '),
+    footerHtml: `Kind regards · ${escapeHtml(companyName)}`,
+  })
+  return { subject: oneLine(`We have received your enquiry — ${companyName}`).slice(0, 200), html }
+}
+
+/** Sends the thank-you. Only to an address that passed the enquiry checks; replies go to the company. Never throws. */
+export async function sendEnquiryThanks(opts: { companyName: string; companyEmail: string; input: EnquiryInput; origin: string; ownerId: string; hasLogo: boolean }): Promise<void> {
+  try {
+    const key = process.env.RESEND_API_KEY
+    if (!key || !opts.input.email) return
+    const origin = opts.origin.replace(/\/+$/, '')
+    const mail = buildEnquiryThanksEmail(opts.companyName, opts.input, opts.hasLogo && origin ? `${origin}/api/public/company-logo/${opts.ownerId}` : undefined)
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: senderFrom(process.env.NOTIFY_FROM_EMAIL || 'noreply@resend.dev', opts.companyName),
+        to: opts.input.email,
+        ...(opts.companyEmail ? { reply_to: opts.companyEmail } : {}),
+        subject: mail.subject,
+        html: withPoweredBy(mail.html),
+      }),
+    })
+    if (!res.ok) console.error('[enquiry] thank-you email refused:', res.status)
+  } catch (err) {
+    console.error('[enquiry] thank-you email failed (the enquiry is saved):', err)
+  }
+}

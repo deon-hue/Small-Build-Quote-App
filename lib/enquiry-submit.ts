@@ -11,6 +11,8 @@ export interface EnquiryCompany {
   intro: string
   enabled: boolean
   notify: boolean
+  /** send the enquirer a thank-you email (off unless the company switches it on) */
+  thanks: boolean
   /** the company's own email, where "a new enquiry" is sent */
   email: string
   hasLogo: boolean
@@ -35,9 +37,9 @@ export async function companyForSlug(sb: SupabaseClient, rawSlug: string): Promi
   const ownerId = (found.data as { user_id?: string } | null)?.user_id
   if (!ownerId) return { ok: false, reason: 'not-found' }
 
-  const s = await sb.from('settings').select('company_name, logo, email, enquiry_enabled, enquiry_intro, enquiry_notify').eq('user_id', ownerId).maybeSingle()
+  const s = await sb.from('settings').select('company_name, logo, email, enquiry_enabled, enquiry_intro, enquiry_notify, enquiry_thanks').eq('user_id', ownerId).maybeSingle()
   if (s.error) return { ok: false, reason: isMissingSchema(s.error) ? 'setup-needed' : 'not-found' }
-  const row = s.data as { company_name?: string; logo?: string; email?: string; enquiry_enabled?: boolean; enquiry_intro?: string; enquiry_notify?: boolean } | null
+  const row = s.data as { company_name?: string; logo?: string; email?: string; enquiry_enabled?: boolean; enquiry_intro?: string; enquiry_notify?: boolean; enquiry_thanks?: boolean } | null
   if (!row) return { ok: false, reason: 'not-found' }
   return {
     ok: true,
@@ -47,6 +49,7 @@ export async function companyForSlug(sb: SupabaseClient, rawSlug: string): Promi
       intro: (row.enquiry_intro || '').trim(),
       enabled: row.enquiry_enabled !== false,
       notify: row.enquiry_notify !== false,
+      thanks: row.enquiry_thanks === true,
       email: (row.email || '').trim(),
       hasLogo: /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(row.logo || ''),
     },

@@ -11,7 +11,7 @@ import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import { slugProblem, enquiryLink, embedCode, cleanSrcTag, SOURCE_LINKS, SLUG_MAX } from '@/lib/enquiry'
 
-interface Cfg { companyName: string; slug: string | null; suggestion: string; enabled: boolean; intro: string; notify: boolean; slugs: string[] }
+interface Cfg { companyName: string; slug: string | null; suggestion: string; enabled: boolean; intro: string; notify: boolean; thanks: boolean; slugs: string[] }
 type Avail = 'free' | 'yours' | 'taken' | 'invalid' | 'unknown'
 
 const input: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box', background: '#fff' }
@@ -31,6 +31,7 @@ export default function EnquiryFormSetup({ onClose }: { onClose: () => void }) {
   const [enabled, setEnabled] = useState(true)
   const [intro, setIntro] = useState('')
   const [notify, setNotify] = useState(true)
+  const [thanks, setThanks] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState('')
@@ -47,7 +48,7 @@ export default function EnquiryFormSetup({ onClose }: { onClose: () => void }) {
         const d = await r.json().catch(() => ({}))
         if (!alive) return
         if (d.setupNeeded || !r.ok || d.error) { setFatal(d.error || 'Could not load the enquiry form settings.'); return }
-        setCfg(d); setSlugInput(d.slug || d.suggestion || ''); setEnabled(d.enabled); setIntro(d.intro); setNotify(d.notify)
+        setCfg(d); setSlugInput(d.slug || d.suggestion || ''); setEnabled(d.enabled); setIntro(d.intro); setNotify(d.notify); setThanks(!!d.thanks)
       })
       .catch(() => { if (alive) setFatal('Could not load the enquiry form settings. Please check your connection.') })
     return () => { alive = false }
@@ -97,9 +98,9 @@ export default function EnquiryFormSetup({ onClose }: { onClose: () => void }) {
   async function save() {
     setSaving(true); setMsg(''); setSaved(false)
     try {
-      const r = await fetch('/api/enquiry/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', enabled, intro, notify }) })
+      const r = await fetch('/api/enquiry/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', enabled, intro, notify, thanks }) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok) { setSaved(true); setCfg(c => c ? { ...c, enabled, intro: intro.trim(), notify } : c) } else setMsg(d.error || 'Could not save. Please try again.')
+      if (r.ok) { setSaved(true); setCfg(c => c ? { ...c, enabled, intro: intro.trim(), notify, thanks } : c) } else setMsg(d.error || 'Could not save. Please try again.')
     } catch { setMsg('Could not save. Please check your connection.') }
     finally { setSaving(false) }
   }
@@ -121,7 +122,7 @@ export default function EnquiryFormSetup({ onClose }: { onClose: () => void }) {
     const a = document.createElement('a'); a.href = url; a.download = `enquiry-qr-${slug}.svg`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000)
   }
 
-  const dirty = !!cfg && (enabled !== cfg.enabled || intro.trim() !== cfg.intro || notify !== cfg.notify)
+  const dirty = !!cfg && (enabled !== cfg.enabled || intro.trim() !== cfg.intro || notify !== cfg.notify || thanks !== cfg.thanks)
   // a function that returns a button (not a component defined here): a component defined inside would be a new one on every render, and its button would be rebuilt each time
   const copyBtn = (text: string, id: string, label = 'Copy') => (
     <button key={id} className="btn-sm btn-outline" style={{ fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => copy(text, id)}>{copied === id ? 'Copied ✓' : label}</button>
@@ -196,6 +197,10 @@ export default function EnquiryFormSetup({ onClose }: { onClose: () => void }) {
               <textarea value={intro} onChange={e => { setIntro(e.target.value); setSaved(false) }} maxLength={300} rows={3} placeholder="For example: We cover Bucks and Berks. Tell us about your project and we will come back to you within two working days." style={{ ...input, resize: 'vertical' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 10 }}>
                 <input type="checkbox" checked={notify} onChange={e => { setNotify(e.target.checked); setSaved(false) }} /> Email me when an enquiry comes in (to your company email; replying goes straight to them)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, marginTop: 10 }}>
+                <input type="checkbox" checked={thanks} onChange={e => { setThanks(e.target.checked); setSaved(false) }} style={{ marginTop: 3 }} />
+                <span>Send the person a thank-you email when they send an enquiry (only if they gave an email address; replies come to your company email). Off to start: the form already thanks them on screen.</span>
               </label>
               {msg && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 6 }}>{msg}</div>}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
