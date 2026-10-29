@@ -9,6 +9,7 @@ import { withCode } from '@/lib/mail-address'
 
 const QUOTES = (process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim()
 const DOCS = (process.env.NEXT_PUBLIC_DOCUMENTS_EMAIL || '').trim()
+const LEADS = (process.env.NEXT_PUBLIC_LEADS_EMAIL || '').trim()
 
 export default function MailAddresses() {
   const [code, setCode] = useState('')
@@ -16,7 +17,7 @@ export default function MailAddresses() {
   const [log, setLog] = useState<{ id: string; at: string; from: string; subject: string; file: string; outcome: string; detail: string }[]>([])
 
   useEffect(() => {
-    if (!QUOTES && !DOCS) return
+    if (!QUOTES && !DOCS && !LEADS) return
     ;(async () => {
       const sb = createClient()
       const { data: { user } } = await sb.auth.getUser()
@@ -29,7 +30,7 @@ export default function MailAddresses() {
     })()
   }, [])
 
-  if (!QUOTES && !DOCS) return null
+  if (!QUOTES && !DOCS && !LEADS) return null
 
   async function copy(text: string) {
     try { await navigator.clipboard.writeText(text); setCopied(text); setTimeout(() => setCopied(''), 2000) } catch { /* the address is on screen to copy by hand */ }
@@ -55,12 +56,17 @@ export default function MailAddresses() {
         </p>
         {row('Supplier quotes', 'Suppliers email their own quote here, with your PO number on it. It is read and added to the right price request for you to check. Your price request emails already tell them.', QUOTES ? withCode(QUOTES, code) : '')}
         {row('Documents', 'Forward or send invoices, receipts and delivery notes here. They go into your Documents inbox.', DOCS ? withCode(DOCS, code) : '')}
+        {row('Leads', 'Forward an enquiry you have received here (or give this address to people who want to email you). It becomes a New lead in your Leads list, with their name, phone, email and what they asked for, and any photos or plans.', LEADS ? withCode(LEADS, code) : '')}
+        <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+          <strong style={{ color: 'var(--text, inherit)', fontSize: 14 }}>Forwarding an enquiry as a lead</strong><br />
+          Forward the email to your {LEADS ? 'Leads' : 'Documents'} address{LEADS ? '' : ' and put LEAD: at the very start of the subject (for example “LEAD: Loft conversion, Mrs Patel”)'}. Anything you type above the forwarded message is kept as a private note on the lead.{LEADS ? ' You can also put LEAD: at the start of the subject when forwarding to any of your other addresses.' : ''} If that person already has an open lead, the email is added to it instead of making a second one.
+        </div>
         <div style={{ padding: '12px 0 0', borderTop: '1px solid var(--border)', marginTop: 4 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Emails received</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 8px', lineHeight: 1.4 }}>The latest emails that reached these addresses, and what the app did with each one.</div>
           {log.length === 0 ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>Nothing yet.</div> : log.map(l => {
-            const tone = l.outcome === 'quote_attached' ? '#166534' : l.outcome === 'error' || l.outcome === 'unknown_address' ? '#991b1b' : l.outcome === 'quote_unmatched' || l.outcome === 'no_attachments' ? '#92400e' : '#475569'
-            const word = l.outcome === 'quote_attached' ? 'Quote added' : l.outcome === 'quote_unmatched' ? 'Quote to place' : l.outcome === 'filed_as_document' ? 'Document filed' : l.outcome === 'no_attachments' ? 'No attachment' : l.outcome === 'unknown_address' ? 'Unknown address' : 'Problem'
+            const tone = l.outcome === 'quote_attached' || l.outcome === 'lead_created' || l.outcome === 'lead_updated' ? '#166534' : l.outcome === 'error' || l.outcome === 'unknown_address' ? '#991b1b' : l.outcome === 'quote_unmatched' || l.outcome === 'no_attachments' || l.outcome === 'lead_skipped' ? '#92400e' : '#475569'
+            const word = l.outcome === 'lead_created' ? 'New lead' : l.outcome === 'lead_updated' ? 'Lead updated' : l.outcome === 'lead_skipped' ? 'Not made a lead' : l.outcome === 'quote_attached' ? 'Quote added' : l.outcome === 'quote_unmatched' ? 'Quote to place' : l.outcome === 'filed_as_document' ? 'Document filed' : l.outcome === 'no_attachments' ? 'No attachment' : l.outcome === 'unknown_address' ? 'Unknown address' : 'Problem'
             return (
               <div key={l.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border)', fontSize: 13 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>

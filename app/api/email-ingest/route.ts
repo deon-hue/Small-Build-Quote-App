@@ -3,8 +3,12 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { extractDocument } from '@/lib/doc-extract'
 import { processQuoteAttachment } from '@/lib/quote-inbox'
 import { askForAttachment } from '@/lib/ask-for-attachment'
-import { codeFromRecipients } from '@/lib/mail-address'
-import { normaliseInbound, readableAttachments, describeAttachments, type NormalisedEmail } from '@/lib/inbound-email'
+import { codeFromRecipients, isLeadsRecipient } from '@/lib/mail-address'
+import { normaliseInbound, readableAttachments, describeAttachments, looksAutomated, type NormalisedEmail } from '@/lib/inbound-email'
+import { parseLeadEmail, hasLeadTag } from '@/lib/lead-from-message'
+import { saveLeadFromEmail, uploadLeadFiles } from '@/lib/lead-email-submit'
+import { notifyBuilderOfEnquiry } from '@/lib/enquiry-notify'
+import { siteOrigin } from '@/lib/site-origin'
 
 // reading a quote with the AI can take a while; give the request room to finish
 export const maxDuration = 60
@@ -20,7 +24,7 @@ function safeName(n: string)   { return n.replace(/[^a-z0-9._-]/gi, '_').toLower
 // Required Netlify env vars:
 //   EMAIL_INGEST_TOKEN   — secret appended to the webhook URL as ?token=
 //   EMAIL_INGEST_USER_ID — your Supabase user UUID (Auth → Users in Supabase dashboard)
-type LogOutcome = 'no_attachments' | 'unknown_address' | 'quote_attached' | 'quote_unmatched' | 'filed_as_document' | 'error'
+type LogOutcome = 'no_attachments' | 'unknown_address' | 'quote_attached' | 'quote_unmatched' | 'filed_as_document' | 'error' | 'lead_created' | 'lead_updated' | 'lead_skipped'
 
 /** One line in the "emails received" log shown in Settings. Never allowed to break the email itself. */
 async function logEmail(userId: string | null, email: NormalisedEmail, outcome: LogOutcome, detail = '', fileName = '') {
@@ -29,6 +33,41 @@ async function logEmail(userId: string | null, email: NormalisedEmail, outcome: 
       user_id: userId, from_address: email.from.slice(0, 200), to_address: email.recipients.join(' ').slice(0, 300), subject: email.subject.slice(0, 300), file_name: fileName.slice(0, 200), outcome, detail: detail.slice(0, 500),
     })
   } catch { /* the log is a convenience */ }
+}
+
+/** An email that is a lead. Never answers the sender (no auto-reply: two machines could answer each other for ever); never refuses the webhook, so the mail host does not keep retrying. */
+async function handleLeadEmail(req: NextRequest, userId: string, email: NormalisedEmail) {
+  try {
+    const sb = createServiceRoleClient()
+    if (looksAutomated(email)) {
+      await logEmail(userId, email, 'lead_skipped', 'It looks like an automatic email (a no-reply sender, a mailing list or an auto-reply), so it was not made into a lead.')
+      return NextResponse.json({ lead: 'skipped', reason: 'automated' })
+    }
+    const { data: st } = await sb.from('settings').select('company_name, email').eq('user_id', userId).maybeSingle()
+    let notifyOn = true
+    const n = await sb.from('settings').select('enquiry_notify').eq('user_id', userId).maybeSingle()   // only there once supabase/enquiry-form.sql has been run
+    if (!n.error) notifyOn = (n.data as { enquiry_notify?: boolean } | null)?.enquiry_notify !== false
+    let ownerEmail = ''
+    try { ownerEmail = (await sb.auth.admin.getUserById(userId)).data?.user?.email || '' } catch { /* the company address is enough */ }
+    const own = [(st?.email as string) || '', ownerEmail].map(x => x.trim().toLowerCase()).filter(Boolean)
+
+    const parsed = parseLeadEmail({ from: email.from, fromEmail: email.fromEmail, subject: email.subject, body: email.body }, own)
+    const files = readableAttachments(email).map(a => ({ name: a.name || 'file', mime: a.mime, base64: a.base64 }))
+    const res = await saveLeadFromEmail(sb, userId, parsed, files, { upload: f => uploadLeadFiles(sb, f) })
+    await logEmail(userId, email, res.outcome, res.detail)
+
+    if (res.outcome === 'lead_created' && res.notify && notifyOn) {
+      await notifyBuilderOfEnquiry({
+        to: ((st?.email as string) || ownerEmail).trim(), companyName: (st?.company_name as string) || 'Your company', origin: siteOrigin(req), ownerId: userId, hasLogo: false, via: 'email',
+        input: { name: parsed.name || res.detail.replace(/^New lead: /, '').split(' <')[0] || 'Someone', email: parsed.email, phone: parsed.phone, address: '', postcode: '', jobType: '', description: parsed.message || parsed.subject || '(no words, files only)', timing: '', files: res.files ?? [], src: 'email' },
+      })
+    }
+    return NextResponse.json({ lead: res.outcome })
+  } catch (err) {
+    console.error('email-ingest: lead failed', err)
+    await logEmail(userId, email, 'error', 'The email was meant to be a lead but something went wrong: ' + (err instanceof Error ? err.message : 'unknown'))
+    return NextResponse.json({ lead: 'error' })
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +90,8 @@ export async function POST(req: NextRequest) {
   // Whose is it? A company code in the address it was sent to (quotes+ab12cd34@...) names the company. With no code it is the default company (the one set in EMAIL_INGEST_USER_ID),
   // as it always was. A code that matches no company is refused rather than filed under someone else.
   const sbLookup = createServiceRoleClient()
-  const ourDomains = [process.env.NEXT_PUBLIC_QUOTES_EMAIL, process.env.NEXT_PUBLIC_DOCUMENTS_EMAIL].map(x => (x || '').split('@')[1] || '').filter(Boolean)
+  const leadsBase = (process.env.NEXT_PUBLIC_LEADS_EMAIL || '').trim()
+  const ourDomains = [process.env.NEXT_PUBLIC_QUOTES_EMAIL, process.env.NEXT_PUBLIC_DOCUMENTS_EMAIL, leadsBase].map(x => (x || '').split('@')[1] || '').filter(Boolean)
   const code = codeFromRecipients(email.recipients, ourDomains)
   let userId = defaultUserId
   if (code) {
@@ -62,6 +102,11 @@ export async function POST(req: NextRequest) {
   if (!userId) {
     console.error('email-ingest: no company for this email and EMAIL_INGEST_USER_ID not set')
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+  }
+
+  // A LEAD: an email to the company's leads address, or one forwarded to any of its addresses with LEAD at the start of the subject, becomes a lead in the Leads list (lib/lead-from-message.ts, lib/lead-email-submit.ts)
+  if (isLeadsRecipient(email.recipients, leadsBase) || hasLeadTag(email.subject)) {
+    return handleLeadEmail(req, userId, email)
   }
 
   const attachments = readableAttachments(email)
