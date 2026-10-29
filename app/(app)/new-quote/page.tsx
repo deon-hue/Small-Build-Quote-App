@@ -13,6 +13,7 @@ import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import { linkLeadToQuote } from '@/lib/leads-db'
+import { buildTakeoffScope } from '@/lib/takeoff-scope'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
@@ -1487,8 +1488,18 @@ export default function NewQuotePage() {
           ), takeoffItemId: item.id + '|labour' })
         }
 
+        // A first draft of the scope of works, written from what is in the take-off (lib/takeoff-scope.ts): the phases in building order with the sizes measured on the plan
+        const draftAddr = data.siteAddress
+          || (data.client && [data.client.addressLine1, data.client.town, data.client.postcode].filter(Boolean).join(', '))
+          || data.address
+          || ''
+        const scopeDraft = buildTakeoffScope({
+          items: data.items as TakeoffItem[], jobType: data.jobType, address: draftAddr,
+          makeupName: id => (dbWallTypes.find(m => m.id === id) ?? ALL_MAKEUPS.find(m => m.id === id))?.name,
+        })
+
         // sent INTO a saved quote: add to what is there (nothing is replaced unless the estimator says so)
-        if (opts?.into) { await mergeIntoQuote(newPhases, opts.into); return }
+        if (opts?.into) { await mergeIntoQuote(newPhases, opts.into, scopeDraft); return }
 
         setPhases(newPhases)
         setViewMode('breakdown')  // switch to structured view after import
@@ -1506,8 +1517,13 @@ export default function NewQuotePage() {
         if (!custEmail && data.client?.email) setCustEmail(data.client.email)
         if (!custPhone && data.client?.phone) setCustPhone(data.client.phone)
 
-        // Prefill project name into scope if blank
-        if (data.projectName && !scope) setScope(data.projectName)
+        // The scope of works: a blank one (or one that is only the project name or the take-off reference) is replaced by the draft from the take-off; a scope already written is kept, and the estimator chooses whether to add the draft under it
+        let scopeNote = ''
+        const curScope = scope.trim()
+        const placeholderOnly = !curScope || (!!data.projectName && curScope === data.projectName.trim()) || /^\[Ref:[^\]]*\]$/.test(curScope)
+        if (scopeDraft && placeholderOnly) { setScope(scopeDraft); scopeNote = ' A scope of works was written from the take-off: check it and edit it in the Scope of Works box.' }
+        else if (scopeDraft && confirm('Your quote already has a scope of works.\n\nAdd a scope written from the take-off underneath it?\n\nOK = add it below yours, Cancel = leave your scope as it is.')) { setScope(curScope + '\n\n' + scopeDraft); scopeNote = ' The scope of works written from the take-off was added under yours.' }
+        else if (data.projectName && !scope) setScope(data.projectName)
 
         // Prepend takeoff ref to scope so it's visible in the quote
         if (data.takeoffRef) {
@@ -1520,8 +1536,8 @@ export default function NewQuotePage() {
         const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
         const ratesNote = hasBORates ? ' Back Office rates applied.' : ' Add your rates to complete the estimate.'
         const msg = buildupCount > 0
-          ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers).${ratesNote}`
-          : `✓ Imported ${newPhases.length} sub-phases.${ratesNote}`
+          ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers).${ratesNote}${scopeNote}`
+          : `✓ Imported ${newPhases.length} sub-phases.${ratesNote}${scopeNote}`
         alert(msg)
       } catch {
         alert('Could not process take-off data. Make sure it was exported from the Take-off tool.')
@@ -1540,7 +1556,7 @@ export default function NewQuotePage() {
    * The take-off's sub-phases go INTO the saved quote `q`: what is in the quote stays, the take-off ones are added beside it (a sub-phase sent before is refreshed in place), and where the quote already has a sub-phase
    * of the same kind (one priced by hand, say) the estimator chooses to keep both or replace the quote's, each time. The quote is backed up first.
    */
-  async function mergeIntoQuote(incoming: QuotePhase[], q: Quote) {
+  async function mergeIntoQuote(incoming: QuotePhase[], q: Quote, scopeDraft = '') {
     const existing = (JSON.parse(JSON.stringify(q.phases)) as QuotePhase[]).map(p => ({ ...p, id: ++phaseCounter, items: toTypedItems(p.items).map((i: Omit<QuoteItem, 'id'>) => ({ ...i, id: ++itemCounter })) }))
     const plan = planTakeoffMerge(existing, incoming)
     const conflicts = plan.conflicts.map(c => ({ key: c.existing, name: existing[c.existing].phase, count: c.incoming.length }))
@@ -1551,8 +1567,14 @@ export default function NewQuotePage() {
     if (merged.length < existing.length - conflicts.filter(c => picked[c.key] === 'replace').length) { alert('Something went wrong merging the take-off: the quote was not changed.'); return }
     setPhases(merged)
     setViewMode('breakdown')
+    // the quote's own scope of works is never changed; only a quote with none gets the draft from the take-off
+    let scopeNote = ''
+    if (scopeDraft) {
+      if (!(q.scope || '').trim()) { setScope(scopeDraft); scopeNote = ' This quote had no scope of works, so one was written from the take-off: check it and edit it in the Scope of Works box.' }
+      else scopeNote = ' Your own scope of works was left as it is.'
+    }
     const replaced = conflicts.filter(c => picked[c.key] === 'replace').length
-    alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}. A copy of the quote as it was is saved in its version history.`)
+    alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}. A copy of the quote as it was is saved in its version history.${scopeNote}`)
   }
 
   /** What this quote tells Take-off about itself: its id and reference, its job name, and its customer's name and address (they fill the blanks of the take-off it is linked to). */
