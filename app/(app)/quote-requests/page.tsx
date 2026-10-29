@@ -15,6 +15,7 @@ import {
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
+import EnquiryFormSetup from '@/components/EnquiryFormSetup'
 import './touch.css'
 
 interface ClientFile { name: string; url: string; isImage: boolean }
@@ -82,6 +83,7 @@ export default function LeadsPage() {
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState<Filter>('open')
   const [adding, setAdding] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false)
   const [lostPick, setLostPick] = useState(false)
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const today = todayUk()
@@ -212,6 +214,7 @@ export default function LeadsPage() {
         {counts.pending > 0 && <span style={{ background: '#e67e22', color: '#fff', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>{counts.pending} new</span>}
         {counts.chase > 0 && <span style={{ background: '#c0392b', color: '#fff', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>{counts.chase} to chase</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-outline" style={{ fontSize: 13 }} onClick={() => setSetupOpen(true)} title="Your link, QR code and embed code for the enquiry form">📣 Enquiry form</button>
           <a href="/get-quote" target="_blank" style={{ fontSize: 12, color: 'var(--moss)', textDecoration: 'none', border: '1px solid var(--moss)', borderRadius: 5, padding: '5px 12px' }}>↗ View client page</a>
           <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => setAdding(true)}>＋ Add a lead</button>
         </div>
@@ -275,6 +278,8 @@ export default function LeadsPage() {
       )}
 
       {/* ── Add a lead ───────────────────────────────────────────────── */}
+      {setupOpen && <EnquiryFormSetup onClose={() => setSetupOpen(false)} />}
+
       {adding && (
         <AddLeadModal
           leads={leads} clients={clients} today={today}
