@@ -2,7 +2,7 @@
   .qr-page{padding:0!important;max-width:none!important}
   .qr-client-link{display:inline-flex;align-items:center;text-decoration:none}
   .qr-list{background:none!important;border:none!important;border-radius:0!important;overflow:visible!important;display:grid;grid-template-columns:1fr;gap:10px}
-  .qr-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"main badge" "email total" "date date";gap:6px 12px!important;align-items:center!important;padding:14px 16px!important;border:1px solid #e0e6d8!important;border-bottom:1px solid #e0e6d8!important;border-radius:18px;background:#fff!important;min-height:44px}
+  .qr-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"main badge" "email chase" "date date";gap:6px 12px!important;align-items:center!important;padding:14px 16px!important;border:1px solid #e0e6d8!important;border-bottom:1px solid #e0e6d8!important;border-radius:18px;background:#fff!important;min-height:44px}
   .qr-row.new{background:#fbfdf3!important;border-color:#c9dc95!important}
   .qr-dot{display:none}
   .qr-main{grid-area:main}
@@ -10,7 +10,7 @@
   .qr-main > div:last-child{white-space:normal!important;line-height:1.4}
   .qr-badge{grid-area:badge;justify-self:end;min-width:0!important}
   .qr-email{grid-area:email;min-width:0;overflow:hidden;text-overflow:ellipsis}
-  .qr-total{grid-area:total;min-width:0!important;font-size:20px!important;color:#41660a!important}
+  .qr-chase{grid-area:chase;min-width:0!important;justify-self:end}
   .qr-date{grid-area:date;text-align:left!important;font-size:12px!important}
 
   /* Review modal: full-width, big controls */

@@ -12,6 +12,7 @@ import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
 import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
+import { linkLeadToQuote } from '@/lib/leads-db'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
@@ -382,6 +383,8 @@ export default function NewQuotePage() {
   //   'ai-scope'  → dedicated AI scope writing screen
   //   'workspace' → full quoting workspace
   const [step, setStep] = useState<'landing' | 'ai-scope' | 'workspace'>('landing')
+  // the lead (quote_requests row) this quote was started from, when it was: linked to the quote at the first save (lib/leads-db.ts)
+  const leadIdRef = useRef<string | null>(null)
   const [quoteSource, setQuoteSource] = useState<QuoteCreationMode | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
@@ -490,6 +493,19 @@ export default function NewQuotePage() {
     // Quote request — URL params mean we came from the quote requests page.
     const params = new URLSearchParams(window.location.search)
     const reqClientName = params.get('clientName') || ''
+    leadIdRef.current = params.get('lead') || null   // the lead this quote is for: it is linked to the quote when the quote is first saved
+    // A lead with no estimate behind it (typed in, or from a call or message): the quote starts from scratch with the customer filled in, on the first screen where you choose how to build it
+    if (reqClientName && params.get('manual')) {
+      setCustName(reqClientName)
+      setCustEmail(params.get('email') || '')
+      setCustPhone(params.get('phone') || '')
+      setCustAddr(params.get('address') || '')
+      const jt = params.get('jobType') || ''
+      if (jt) setJobType(jt)
+      setPhases([])
+      setStep('landing')
+      return
+    }
     if (reqClientName) {
       const reqEmail   = params.get('email')   || ''
       const reqPhone   = params.get('phone')   || ''
@@ -970,6 +986,7 @@ export default function NewQuotePage() {
         await upsertClientFromQuote(customer)
         if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
         await reassignDraftDocuments(createClient(), draftKey, newQuote.id)
+        await linkLeadToQuote(createClient(), leadIdRef.current, newQuote.id); leadIdRef.current = null
         alert('Saved as draft — ref: ' + newQuote.ref)
       }
     } finally {
@@ -1681,6 +1698,7 @@ export default function NewQuotePage() {
         await upsertClientFromQuote(customer)
         if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
         await reassignDraftDocuments(createClient(), draftKey, newQuote.id)
+        await linkLeadToQuote(createClient(), leadIdRef.current, newQuote.id); leadIdRef.current = null
         alert('Quote saved! Reference: ' + newQuote.ref)
       }
       setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')

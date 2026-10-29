@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobProgress } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { todayUk, leadStatusOf, isDueForChase } from '@/lib/leads'
 import { quoteBudget } from '@/lib/job-costs'
 import { fetchAllJobOrders, committedTotals, type JobOrder } from '@/lib/job-orders'
 import NeedsAttentionCard from '@/components/NeedsAttentionCard'
@@ -17,18 +18,28 @@ function marginColor(pct: number): string {
   return '#c0392b'
 }
 
-// New enquiries from the website quote form that nobody has looked at yet
+// Leads that need you: new ones nobody has answered yet, and open ones whose chase date has come (see lib/leads.ts and the Leads page)
 function EnquiriesStat() {
-  const [n, setN] = useState<number | null>(null)
+  const [c, setC] = useState<{ fresh: number; chase: number } | null>(null)
   useEffect(() => {
-    createClient().from('quote_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
-      .then(({ count, error }) => setN(error ? null : (count ?? 0)))
+    // the chase column only exists once supabase/leads.sql has been run: without it the count is just the new ones
+    createClient().from('quote_requests').select('status, chase_on')
+      .then(async ({ data, error }) => {
+        if (!error) {
+          const today = todayUk()
+          const rows = (data ?? []) as { status: string; chase_on: string | null }[]
+          setC({ fresh: rows.filter(r => leadStatusOf(r.status) === 'pending').length, chase: rows.filter(r => isDueForChase(r, today)).length })
+          return
+        }
+        const { count, error: e2 } = await createClient().from('quote_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+        setC(e2 ? null : { fresh: count ?? 0, chase: 0 })
+      })
   }, [])
   return (
     <Link href="/quote-requests" className="stat sky" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-      <div className="stat-label">New enquiries</div>
-      <div className="stat-val">{n ?? '–'}</div>
-      <div className="stat-sub">{n === null ? 'Checking…' : n > 0 ? 'waiting on a reply' : 'nothing new'}</div>
+      <div className="stat-label">Leads</div>
+      <div className="stat-val">{c === null ? '–' : c.fresh}</div>
+      <div className="stat-sub">{c === null ? 'Checking…' : c.fresh === 0 && c.chase === 0 ? 'nothing waiting' : [c.fresh > 0 ? 'new, waiting on a reply' : '', c.chase > 0 ? `${c.chase} to chase today` : ''].filter(Boolean).join(' · ')}</div>
     </Link>
   )
 }

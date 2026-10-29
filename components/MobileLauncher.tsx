@@ -44,7 +44,7 @@ const FOOTER_NAV: NavItem[] = [
 const QUICK: (NavItem | { label: string; Icon: LucideIcon; perm: keyof UserPermissions; opensNotes: true })[] = [
   { label: 'Notes',          Icon: StickyNote, perm: 'jobs',     opensNotes: true },
   { label: 'Quick quote',    Icon: Zap,        perm: 'quotes',   href: '/quick-quote' },
-  { label: 'Quote requests', Icon: Mail,       perm: 'quotes',   href: '/quote-requests' },
+  { label: 'Leads', Icon: Mail,       perm: 'quotes',   href: '/quote-requests' },
   { label: 'Bills',          Icon: Wallet,     perm: 'invoices', href: '/bills' },
   { label: 'Subcontractors', Icon: Wrench,     perm: 'invoices', href: '/subcontractors' },
   { label: 'Scan to job',    Icon: Camera,     perm: 'jobs',     href: '/scan' },
@@ -138,7 +138,7 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
   if (can('quotes') && sentQuotes.length) attention.push({ id: 'sent', title: `${plural(sentQuotes.length, 'quote')} awaiting a reply`, hint: 'Follow up with the client', href: '/quotes', Icon: Send })
   if (can('quotes') && draftQuotes.length) attention.push({ id: 'draft', title: `${plural(draftQuotes.length, 'draft quote')} to finish`, hint: 'Pick up where you left off', href: '/quotes', Icon: FileText })
   if (can('jobs') && heldJobs.length) attention.push({ id: 'held', title: `${plural(heldJobs.length, 'job')} on hold`, hint: 'Review and restart', href: '/jobs', Icon: PauseCircle })
-  if (can('quotes')) attention.push({ id: 'requests', title: 'Quote requests', hint: 'Check for new enquiries', href: '/quote-requests', Icon: Mail })
+  if (can('quotes')) attention.push({ id: 'requests', title: 'Leads', hint: 'New enquiries and who to chase', href: '/quote-requests', Icon: Mail })
   if (can('invoices') && attention.length < 4) attention.push({ id: 'bills', title: 'Bills and subcontractors', hint: 'Timesheets and payments', href: '/bills', Icon: Wallet })
 
   const quick: HomeQuick[] = QUICK.filter(i => can(i.perm) && i.label !== 'Scan to job' && i.label !== 'New quote').map(i =>

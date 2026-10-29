@@ -89,7 +89,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="nav-section">Work</div>
           {can('jobs')    && navItem('/jobs',      '⬡', 'Jobs')}
           {can('quotes')  && navItem('/quotes',        '◎', 'Saved Quotes')}
-          {can('quotes')  && navItem('/quote-requests','📬', 'Quote Requests')}
+          {can('quotes')  && navItem('/quote-requests','📬', 'Leads')}
           {can('quotes')  && navItem('/new-quote',   '✎', 'New Quote')}
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',     '📐', 'Take-off & Draw', 'desktop-only')}
@@ -178,7 +178,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/documents':    'Documents',
   '/scan':         'Scan to Job',
   '/back-office':      'Back Office',
-  '/quote-requests':   'Quote Requests',
+  '/quote-requests':   'Leads',
   '/portal-preview':   'Portal Preview',
   '/team':         'Team',
   '/help':         'Help & Guides',
