@@ -16,6 +16,7 @@ import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } fr
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
+import { pdfjsResources } from '@/lib/pdfjs-resources'
 import type { TakeoffSheet } from '@/lib/takeoff-types'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
@@ -3798,7 +3799,8 @@ export default function TakeoffPage() {
         const pdfjsLib = await import('pdfjs-dist')
         // Use CDN worker — avoids Next.js bundling complexity
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
-        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+        // pdfjsResources: without it a black-and-white scan (most scanners) is read as a blank white page
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), ...pdfjsResources(pdfjsLib.version) }).promise
         let pages = [1]
         if (pdf.numPages > 1) {
           const answer = window.prompt('This PDF has ' + pdf.numPages + ' pages. Which pages should become sheets? Each page becomes its own sheet with its own scale.\n\nType all, or pages like 1-3, 5', 'all')

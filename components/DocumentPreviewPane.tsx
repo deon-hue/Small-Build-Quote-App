@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { pdfjsResources } from '@/lib/pdfjs-resources'
 
 interface Props {
   url: string | null
@@ -39,7 +40,7 @@ export default function DocumentPreviewPane({ url, isPdf, fileName }: Props) {
           `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
         const buf = await fetch(url).then(r => r.arrayBuffer())
         if (cancelled) return
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+        const pdf = await pdfjsLib.getDocument({ data: buf, ...pdfjsResources(pdfjsLib.version) }).promise
         const rendered: RenderedPage[] = []
         const scale = 2 // base render resolution — kept crisp when zoomed in
         for (let i = 1; i <= pdf.numPages; i++) {
