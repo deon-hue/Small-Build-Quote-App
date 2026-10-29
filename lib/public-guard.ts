@@ -8,6 +8,8 @@
 //   PUBLIC_AI_SITE_LIMIT         whole site per day (default 300)
 //   PUBLIC_UPLOAD_IP_LIMIT       file uploads per visitor per day (default 30)
 //   PUBLIC_UPLOAD_SITE_LIMIT     file uploads whole site per day (default 500)
+//   PUBLIC_ENQUIRY_IP_LIMIT      enquiry forms sent per visitor per day (default 10)
+//   PUBLIC_ENQUIRY_SITE_LIMIT    enquiry forms sent whole site per day (default 2000)
 
 import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
@@ -27,13 +29,13 @@ const num = (v: string | undefined, fallback: number) => {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-export async function publicGuard(req: Request, kind: 'ai' | 'upload'): Promise<NextResponse | null> {
+export async function publicGuard(req: Request, kind: 'ai' | 'upload' | 'enquiry'): Promise<NextResponse | null> {
   if (kind === 'ai' && process.env.PUBLIC_AI_DISABLED === 'true') {
     return NextResponse.json({ error: 'This feature is temporarily switched off. Please try again later.' }, { status: 503 })
   }
 
-  const ipLimit = kind === 'ai' ? num(process.env.PUBLIC_AI_IP_LIMIT, 15) : num(process.env.PUBLIC_UPLOAD_IP_LIMIT, 30)
-  const siteLimit = kind === 'ai' ? num(process.env.PUBLIC_AI_SITE_LIMIT, 300) : num(process.env.PUBLIC_UPLOAD_SITE_LIMIT, 500)
+  const ipLimit = kind === 'ai' ? num(process.env.PUBLIC_AI_IP_LIMIT, 15) : kind === 'enquiry' ? num(process.env.PUBLIC_ENQUIRY_IP_LIMIT, 10) : num(process.env.PUBLIC_UPLOAD_IP_LIMIT, 30)
+  const siteLimit = kind === 'ai' ? num(process.env.PUBLIC_AI_SITE_LIMIT, 300) : kind === 'enquiry' ? num(process.env.PUBLIC_ENQUIRY_SITE_LIMIT, 2000) : num(process.env.PUBLIC_UPLOAD_SITE_LIMIT, 500)
 
   try {
     const sb = createServiceRoleClient()

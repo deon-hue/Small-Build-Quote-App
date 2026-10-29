@@ -24,7 +24,7 @@ export function leadStatusOf(raw: string | null | undefined): LeadStatus {
 /** Still being worked on: not won and not lost */
 export const isOpenLead = (raw: string | null | undefined) => { const s = leadStatusOf(raw); return s !== 'won' && s !== 'lost' }
 
-export const LEAD_SOURCES = ['My contacts', 'Phone call', 'WhatsApp', 'Email', 'Facebook', 'Instagram', 'TikTok', 'Website form', 'Referral', 'Other'] as const
+export const LEAD_SOURCES = ['My contacts', 'Phone call', 'WhatsApp', 'Email', 'Facebook', 'Instagram', 'TikTok', 'Google', 'QR code', 'Leaflet / van', 'Website form', 'Referral', 'Other'] as const
 export const LOST_REASONS = ['Too expensive', 'Not ready yet', 'Chose someone else', 'Out of my area', 'Not the kind of job I do', 'No reply', 'Other'] as const
 
 /** Today as YYYY-MM-DD in the UK (the date a "chase on" is compared with), whatever the computer's own zone */
