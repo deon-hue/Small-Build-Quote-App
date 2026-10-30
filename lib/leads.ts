@@ -94,3 +94,39 @@ export function leadHeadline(l: { project_type?: string | null; project_address?
   const t = (l.scope_text || '').replace(/\s+/g, ' ').trim()
   return t.length > 90 ? t.slice(0, 89).trimEnd() + '…' : t
 }
+
+// ── The address and its postcode ──────────────────────────────────────────────────────────────────────────────────
+// A lead keeps ONE address text (quote_requests.project_address, 'Chalfont, 5 Oak Road, SL2 3SU': the website form, the enquiry form and an email all write it that way), so no new column is needed. The screens show the
+// postcode as its own field and put the two back together on save; the postcode is also a link to Google Maps.
+
+const UK_POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/gi
+
+/** A UK postcode written the usual way: capitals, one space before the last three characters (sl23su → SL2 3SU). Anything that is not shaped like one is returned trimmed and in capitals. */
+export function tidyPostcode(pc: string): string {
+  const s = (pc || '').trim().toUpperCase().replace(/\s+/g, ' ')
+  const m = /^([A-Z]{1,2}\d[A-Z\d]?)\s?(\d[A-Z]{2})$/.exec(s)
+  return m ? `${m[1]} ${m[2]}` : s
+}
+
+/** Splits an address text into the address and its postcode (the last UK postcode in it); the postcode is tidied and taken out, with the comma that was beside it. No postcode found: it all stays the address. */
+export function splitPostcode(text: string | null | undefined): { address: string; postcode: string } {
+  const t = (text || '').trim()
+  let last: RegExpExecArray | null = null
+  const rx = new RegExp(UK_POSTCODE.source, 'gi')
+  for (let m = rx.exec(t); m; m = rx.exec(t)) last = m
+  if (!last) return { address: t, postcode: '' }
+  const before = t.slice(0, last.index).replace(/[\s,;-]+$/, '')
+  const after = t.slice(last.index + last[0].length).replace(/^[\s,;-]+/, '')
+  return { address: [before, after].filter(Boolean).join(', '), postcode: tidyPostcode(`${last[1]} ${last[2]}`) }
+}
+
+/** The address and postcode as one text again: '5 Oak Road, Chalfont, SL2 3SU' */
+export function joinAddress(address: string | null | undefined, postcode: string | null | undefined): string {
+  return [(address || '').trim().replace(/[\s,]+$/, ''), tidyPostcode(postcode || '')].filter(Boolean).join(', ')
+}
+
+/** A Google Maps link for an address and/or postcode (opens the map search), or '' when there is nothing to look up. The postcode alone is enough for a map. */
+export function mapsUrl(address: string | null | undefined, postcode: string | null | undefined): string {
+  const q = [(address || '').trim(), tidyPostcode(postcode || '')].filter(Boolean).join(', ')
+  return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q).replace(/'/g, '%27')}` : ''
+}

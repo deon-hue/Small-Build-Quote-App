@@ -11,6 +11,7 @@ import { JOB_TEMPLATES } from '@/lib/utils'
 import {
   LEAD_STATUSES, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE, LEAD_SOURCES, LOST_REASONS,
   leadStatusOf, isOpenLead, isDueForChase, isOverdue, todayUk, addDays, chaseWords, findSamePerson, whatsappLink, leadHeadline, type LeadStatus,
+  splitPostcode, joinAddress, mapsUrl, tidyPostcode,
 } from '@/lib/leads'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
@@ -80,7 +81,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Lead | null>(null)
-  const [draft, setDraft] = useState({ name: '', phone: '', email: '', address: '', type: '', want: '', notes: '', source: 'Website form' })
+  const [draft, setDraft] = useState({ name: '', phone: '', email: '', address: '', postcode: '', type: '', want: '', notes: '', source: 'Website form' })
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState<Filter>('open')
   const [adding, setAdding] = useState(false)
@@ -114,7 +115,7 @@ export default function LeadsPage() {
 
   function openLead(l: Lead) {
     setSelected(l); setLostPick(false); setError('')
-    setDraft({ name: l.client_name || '', phone: l.client_phone || '', email: l.client_email || '', address: l.project_address || '', type: l.project_type || '', want: l.scope_text || '', notes: l.admin_notes || '', source: sourceOf(l) })
+    setDraft({ name: l.client_name || '', phone: l.client_phone || '', email: l.client_email || '', address: splitPostcode(l.project_address).address, postcode: splitPostcode(l.project_address).postcode, type: l.project_type || '', want: l.scope_text || '', notes: l.admin_notes || '', source: sourceOf(l) })
   }
 
   async function setStage(l: Lead, status: LeadStatus, lostReason = '') {
@@ -135,7 +136,7 @@ export default function LeadsPage() {
   async function saveDetails(l: Lead) {
     if (!draft.name.trim()) { setError('A lead needs a name.'); return }
     await patch(l.id, {
-      client_name: draft.name.trim(), client_phone: draft.phone.trim(), client_email: draft.email.trim().toLowerCase(), project_address: draft.address.trim(),
+      client_name: draft.name.trim(), client_phone: draft.phone.trim(), client_email: draft.email.trim().toLowerCase(), project_address: joinAddress(draft.address, draft.postcode),
       project_type: draft.type.trim(), scope_text: draft.want, admin_notes: draft.notes, source: draft.source,
     })
   }
@@ -160,7 +161,7 @@ export default function LeadsPage() {
     const p = new URLSearchParams({
       lead: l.id,
       clientName: draft.name || l.client_name || '', email: draft.email || l.client_email || '', phone: draft.phone || l.client_phone || '',
-      address: draft.address || l.project_address || '', jobType: draft.type || l.project_type || '',
+      address: joinAddress(draft.address, draft.postcode) || l.project_address || '', jobType: draft.type || l.project_type || '',
       ...(hasAi ? {} : { manual: '1' }),
     })
     window.location.href = `/new-quote?${p.toString()}`
@@ -375,7 +376,13 @@ export default function LeadsPage() {
                   <input value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} style={input} />
                   {draft.email.trim() && <div style={{ fontSize: 12, marginTop: 4 }}><a href={`mailto:${draft.email.trim()}`} style={{ color: 'var(--moss)' }}>✉ Email them</a></div>}
                 </div>
-                <div style={{ gridColumn: '1 / span 2' }}><span style={label}>Property address</span><input value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} style={input} /></div>
+                <div style={{ gridColumn: '1 / span 2' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+                    <div><span style={label}>Property address</span><input value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} style={input} /></div>
+                    <div><span style={label}>Postcode</span><input value={draft.postcode} onChange={e => setDraft({ ...draft, postcode: e.target.value.toUpperCase() })} onBlur={() => setDraft(d => ({ ...d, postcode: tidyPostcode(d.postcode) }))} autoComplete="postal-code" maxLength={10} style={{ ...input, textTransform: 'uppercase' }} /></div>
+                  </div>
+                  {mapsUrl(draft.address, draft.postcode) && <div style={{ fontSize: 12, marginTop: 4 }}><a href={mapsUrl(draft.address, draft.postcode)} target="_blank" rel="noreferrer" style={{ color: 'var(--moss)' }}>📍 {draft.postcode ? tidyPostcode(draft.postcode) + ' on' : 'Show on'} Google Maps</a></div>}
+                </div>
                 <div><span style={label}>Kind of job</span><input list="lead-job-types" value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value })} style={input} /></div>
               </div>
               <div style={{ marginBottom: 12 }}>
@@ -474,7 +481,7 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
 }) {
   const sb = createClient()
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
-  const [f, setF] = useState({ name: '', phone: '', email: '', address: '', type: '', want: '', source: 'My contacts' })
+  const [f, setF] = useState({ name: '', phone: '', email: '', address: '', postcode: '', type: '', want: '', source: 'My contacts' })
   const [chase, setChase] = useState<string | null>(addDays(today, 1))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -509,7 +516,7 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setErr('You are not signed in: please refresh and try again.'); setBusy(false); return }
     const { data, error } = await sb.from('quote_requests').insert({
-      user_id: user.id, client_name: f.name.trim(), client_phone: f.phone.trim(), client_email: f.email.trim().toLowerCase(), project_address: f.address.trim(),
+      user_id: user.id, client_name: f.name.trim(), client_phone: f.phone.trim(), client_email: f.email.trim().toLowerCase(), project_address: joinAddress(f.address, f.postcode),
       project_type: f.type.trim(), scope_text: f.want.trim(), source: f.source, status: 'pending', chase_on: chase,
     }).select('*').single()
     setBusy(false)
@@ -556,6 +563,10 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
           <div><span style={label}>What they want</span><textarea value={f.want} onChange={e => setF({ ...f, want: e.target.value })} rows={3} placeholder="A few words about the job" style={{ ...input, resize: 'vertical' }} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
             <div><span style={label}>Property address</span><input value={f.address} onChange={e => setF({ ...f, address: e.target.value })} style={input} /></div>
+            <div><span style={label}>Postcode</span><input value={f.postcode} onChange={e => setF({ ...f, postcode: e.target.value.toUpperCase() })} onBlur={() => setF(c => ({ ...c, postcode: tidyPostcode(c.postcode) }))} autoComplete="postal-code" maxLength={10} style={{ ...input, textTransform: 'uppercase' }} /></div>
+          </div>
+          {mapsUrl(f.address, f.postcode) && <div style={{ fontSize: 12, marginTop: -6 }}><a href={mapsUrl(f.address, f.postcode)} target="_blank" rel="noreferrer" style={{ color: 'var(--moss)' }}>📍 Show on Google Maps</a></div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
             <div><span style={label}>Kind of job</span><input list="lead-job-types-add" value={f.type} onChange={e => setF({ ...f, type: e.target.value })} style={input} /></div>
           </div>
           <datalist id="lead-job-types-add">{Object.keys(JOB_TEMPLATES).map(t => <option key={t} value={t} />)}</datalist>
