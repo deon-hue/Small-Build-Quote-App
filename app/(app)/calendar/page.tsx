@@ -12,6 +12,8 @@ import { assignableContacts, assignmentsFor, assignmentKey, assigneesForRow, all
 import AssigneePicker, { picksFromKeys } from '@/components/AssigneePicker'
 import { taskDays as buildTaskDays, bookedDays } from '@/lib/task-days'
 import { createClient } from '@/lib/supabase/client'
+import { localParts, visitWhenLong, durationWords } from '@/lib/lead-visit'
+import { mapsUrl } from '@/lib/leads'
 import { fetchAllJobOrders, updateJobOrder, deliveryMarkers, poRef, expectedNet, ORDER_STATUS_LABEL, todayYmd, type JobOrder, type DeliveryMarker } from '@/lib/job-orders'
 
 // ── Date helpers ───────────────────────────────────────────────
@@ -57,6 +59,9 @@ interface WeekSlot {
   startsHere: boolean
   endsHere: boolean
 }
+
+/** A site visit booked with a lead (Leads page > Book a site visit; supabase/lead-visits.sql), drawn on its day beside the deliveries */
+interface CalVisit { id: string; name: string; phone: string; address: string; at: string; minutes: number; note: string }
 
 // ── Constants ──────────────────────────────────────────────────
 // Deliveries and collections from each job's Orders (supabase/job-orders.sql), drawn as small chips on their day
@@ -124,6 +129,23 @@ export default function CalendarPage() {
   useEffect(() => {
     void reloadOrders()
     const onVis = () => { if (document.visibilityState === 'visible') void reloadOrders() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  // Site visits booked with leads. Without the visit columns (supabase/lead-visits.sql not run) there are simply none.
+  const [visits, setVisits] = useState<CalVisit[]>([])
+  const [openVisit, setOpenVisit] = useState<CalVisit | null>(null)
+  async function reloadVisits() {
+    try {
+      const { data, error } = await createClient().from('quote_requests').select('id, client_name, client_phone, project_address, visit_at, visit_minutes, visit_note, visit_address').eq('visit_status', 'booked')
+      if (error || !data) { setVisits([]); return }
+      setVisits(data.filter(r => r.visit_at).map(r => ({ id: r.id as string, name: (r.client_name as string) || 'Lead', phone: (r.client_phone as string) || '', address: ((r.visit_address as string) || (r.project_address as string) || '').replace(/\s*\n\s*/g, ', '), at: r.visit_at as string, minutes: (r.visit_minutes as number) || 60, note: (r.visit_note as string) || '' })))
+    } catch { setVisits([]) }
+  }
+  useEffect(() => {
+    void reloadVisits()
+    const onVis = () => { if (document.visibilityState === 'visible') void reloadVisits() }
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
@@ -539,31 +561,45 @@ export default function CalendarPage() {
     return `${DELIVERY_STYLE[m.kind].word}: ${m.order.title}\n${m.order.supplierName} · ${poRef(m.order.poNumber)}${j ? ' · ' + j.client : ''}${m.done ? '\n✓ done' : ''}${m.tentative ? '\nnot sent to the supplier yet' : ''}`
   }
 
-  /** The small coloured chips for one day: the first delivery in a month cell, up to three under a weekday heading, then "+N". */
+  // ── Site visits (hidden while the calendar is filtered to one person, like deliveries) ──
+  const VISIT_STYLE = { bg: '#dcfce7', fg: '#166534' }
+  const visitsOn = (d: Date) => (personFilter ? [] : visits.filter(v => localParts(v.at)?.ymd === toISODate(d))).sort((x, y) => x.at.localeCompare(y.at))
+  const visitWhenShortDay = (iso: string) => fmtShort(new Date((localParts(iso)?.ymd || '') + 'T12:00:00'))
+  const visitLabel = (v: CalVisit) => `🏠 ${localParts(v.at)?.hm ?? ''} ${v.name}`
+  const visitTip = (v: CalVisit) => `Site visit: ${v.name}\n${visitWhenLong(v.at)}${v.address ? '\n' + v.address : ''}`
+
+  /** The small coloured chips for one day: site visits first, then deliveries; the first in a month cell, up to three under a weekday heading, then "+N". */
   function renderChips(d: Date, mode: 'month' | 'week') {
+    const vs = visitsOn(d)
     const list = markersOn(d)
-    if (list.length === 0) return null
+    if (vs.length + list.length === 0) return null
     const max = mode === 'month' ? 1 : 3
-    return (
-      <div style={{ display: 'flex', flexDirection: mode === 'week' ? 'column' : 'row', gap: 2, minWidth: 0, flex: 1, alignItems: mode === 'week' ? 'stretch' : 'center' }}>
-        {list.slice(0, max).map(m => {
-          const st = DELIVERY_STYLE[m.kind]
-          return (
+    const chip: React.CSSProperties = { fontSize: 10, fontWeight: 700, fontFamily: 'inherit', borderRadius: 3, padding: '1px 4px', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, maxWidth: '100%' }
+    const items: { key: string; label: string; node: ReactNode }[] = [
+      ...vs.map(v => ({
+        key: 'v-' + v.id, label: visitLabel(v),
+        node: <button key={'v-' + v.id} onClick={e => { e.stopPropagation(); setOpenVisit(v) }} title={visitTip(v)} style={{ ...chip, background: VISIT_STYLE.bg, color: VISIT_STYLE.fg, border: '1px solid transparent' }}>{visitLabel(v)}</button>,
+      })),
+      ...list.map(m => {
+        const st = DELIVERY_STYLE[m.kind]
+        return {
+          key: m.id, label: markerLabel(m),
+          node: (
             <button
               key={m.id}
               onClick={e => { e.stopPropagation(); setOpenDelivery(m) }}
               title={markerTip(m)}
-              style={{
-                fontSize: 10, fontWeight: 700, fontFamily: 'inherit', background: st.bg, color: st.fg, borderRadius: 3, padding: '1px 4px',
-                border: m.tentative ? `1px dashed ${st.fg}` : '1px solid transparent', cursor: 'pointer', textAlign: 'left',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, maxWidth: '100%',
-                opacity: m.done ? 0.55 : 1, textDecoration: m.done ? 'line-through' : 'none',
-              }}
+              style={{ ...chip, background: st.bg, color: st.fg, border: m.tentative ? `1px dashed ${st.fg}` : '1px solid transparent', opacity: m.done ? 0.55 : 1, textDecoration: m.done ? 'line-through' : 'none' }}
             >{markerLabel(m)}</button>
-          )
-        })}
-        {list.length > max && (
-          <span onClick={e => { e.stopPropagation(); setView('day'); setAnchor(new Date(d)) }} title={list.map(markerLabel).join('\n')} style={{ fontSize: 10, color: 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700 }}>+{list.length - max}</span>
+          ),
+        }
+      }),
+    ]
+    return (
+      <div style={{ display: 'flex', flexDirection: mode === 'week' ? 'column' : 'row', gap: 2, minWidth: 0, flex: 1, alignItems: mode === 'week' ? 'stretch' : 'center' }}>
+        {items.slice(0, max).map(i => i.node)}
+        {items.length > max && (
+          <span onClick={e => { e.stopPropagation(); setView('day'); setAnchor(new Date(d)) }} title={items.map(i => i.label).join('\n')} style={{ fontSize: 10, color: 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700 }}>+{items.length - max}</span>
         )}
       </div>
     )
@@ -815,8 +851,9 @@ export default function CalendarPage() {
       .filter(e => e.startDate < dayEnd && e.endDate > anchor)
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.phaseIdx - b.phaseIdx)
     const dayMarkers = markersOn(anchor)
+    const dayVisits = visitsOn(anchor)
 
-    if (dayEvents.length === 0 && dayMarkers.length === 0) {
+    if (dayEvents.length === 0 && dayMarkers.length === 0 && dayVisits.length === 0) {
       return (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
           No phases scheduled for {fmtFull(anchor)}
@@ -826,6 +863,15 @@ export default function CalendarPage() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {dayVisits.map(v => (
+          <div key={'v-' + v.id} onClick={() => setOpenVisit(v)} className="card" style={{ padding: '12px 16px', cursor: 'pointer', background: VISIT_STYLE.bg, borderLeft: `4px solid ${VISIT_STYLE.fg}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 20 }}>🏠</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: VISIT_STYLE.fg }}>Site visit: {v.name}</div>
+              <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>{localParts(v.at)?.hm} · {durationWords(v.minutes)}{v.address ? ` · ${v.address}` : ''}</div>
+            </div>
+          </div>
+        ))}
         {dayMarkers.map(m => {
           const st = DELIVERY_STYLE[m.kind]
           const j = markerJob(m)
@@ -962,6 +1008,41 @@ export default function CalendarPage() {
             {canMarkDelivered && <button className="btn-sm btn-primary" disabled={deliveryBusy} onClick={() => mark('delivered')}>{deliveryBusy ? 'Saving…' : '✓ It has arrived'}</button>}
             {canMarkCollected && <button className="btn-sm btn-primary" disabled={deliveryBusy} onClick={() => mark('collected')}>{deliveryBusy ? 'Saving…' : '✓ It has been collected'}</button>}
             <button className="btn-sm btn-outline" onClick={() => router.push(`/jobs?orders=${encodeURIComponent(o.jobId)}`)}>Open this job&apos;s Orders</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Site visit detail ────────────────────────────────────────
+  function renderVisitDetail() {
+    if (!openVisit) return null
+    const v = openVisit
+    return (
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16, background: 'rgba(0,0,0,0.25)' }}
+        onClick={e => { if (e.target === e.currentTarget) setOpenVisit(null) }}
+      >
+        <div style={{ background: 'var(--cream)', borderRadius: 12, width: 'min(420px,100%)', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.3)', animation: 'slideUp 0.2s ease' }}>
+          <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ fontSize: 22, lineHeight: 1 }}>🏠</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Site visit: {v.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Booked from your Leads</div>
+            </div>
+            <button onClick={() => setOpenVisit(null)} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)' }}>×</button>
+          </div>
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <DetailRow label="When" value={visitWhenLong(v.at)} />
+            <DetailRow label="How long" value={durationWords(v.minutes)} />
+            {v.address && <DetailRow label="Where" value={v.address} />}
+            {v.phone && <DetailRow label="Phone" value={v.phone} />}
+            {v.note && <DetailRow label="Note to them" value={v.note} />}
+          </div>
+          <div style={{ padding: '0 18px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-sm btn-primary" onClick={() => router.push(`/quote-requests?lead=${encodeURIComponent(v.id)}`)}>Open the lead (change or cancel)</button>
+            {v.address && <a className="btn-sm btn-outline" style={{ textDecoration: 'none' }} href={mapsUrl(v.address, '')} target="_blank" rel="noreferrer">📍 Directions</a>}
+            {v.phone && <a className="btn-sm btn-outline" style={{ textDecoration: 'none' }} href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`}>📞 Call</a>}
           </div>
         </div>
       </div>
@@ -1254,6 +1335,8 @@ export default function CalendarPage() {
     : addDays(anchor, 1)
   const eventsInView = calEvents.filter(e => e.startDate < viewEnd && e.endDate > viewStart)
   const viewMarkers = markers.filter(m => m.date >= toISODate(viewStart) && m.date < toISODate(viewEnd))
+  const viewVisits = (personFilter ? [] : visits.filter(v => { const y = localParts(v.at)?.ymd || ''; return y >= toISODate(viewStart) && y < toISODate(viewEnd) })).sort((x, y) => x.at.localeCompare(y.at))
+  const hasCal = jobs.length > 0 || visits.length > 0   // site visits show even when the company has no jobs yet
 
   function jumpToFirst() {
     if (!firstEvent) return
@@ -1387,7 +1470,7 @@ export default function CalendarPage() {
       )}
 
       {/* Empty state — no jobs at all */}
-      {jobs.length === 0 && (
+      {!hasCal && (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No jobs yet</div>
@@ -1396,11 +1479,11 @@ export default function CalendarPage() {
       )}
 
       {/* Calendar body */}
-      {jobs.length > 0 && view === 'month' && <div className="cal-grid-wrap">{renderMonth()}</div>}
-      {jobs.length > 0 && view === 'week'  && <div className="cal-grid-wrap">{renderWeek()}</div>}
+      {hasCal && view === 'month' && <div className="cal-grid-wrap">{renderMonth()}</div>}
+      {hasCal && view === 'week'  && <div className="cal-grid-wrap">{renderWeek()}</div>}
 
       {/* Touch agenda: a tappable list of this month/week's phases (the grid is hidden on touch) */}
-      {jobs.length > 0 && view !== 'day' && (
+      {hasCal && view !== 'day' && (
         <div className="cal-agenda">
           {agendaEvents.length === 0 ? (
             <div className="cal-agenda-empty">No phases scheduled this {view}</div>
@@ -1422,7 +1505,20 @@ export default function CalendarPage() {
           })}
         </div>
       )}
-      {jobs.length > 0 && view !== 'day' && viewMarkers.length > 0 && (
+      {hasCal && view !== 'day' && viewVisits.length > 0 && (
+        <div className="cal-agenda" style={{ marginTop: 10 }}>
+          {viewVisits.map(v => (
+            <div key={'v-' + v.id} className="cal-ag-item" onClick={() => setOpenVisit(v)} style={{ '--job-color': VISIT_STYLE.fg } as React.CSSProperties}>
+              <div className="cal-ag-when"><b>{visitWhenShortDay(v.at)}</b><span>site visit</span></div>
+              <div className="cal-ag-main">
+                <div className="cal-ag-title">🏠 {localParts(v.at)?.hm} {v.name}</div>
+                <div className="cal-ag-sub">{durationWords(v.minutes)}{v.address ? ` · ${v.address}` : ''}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {hasCal && view !== 'day' && viewMarkers.length > 0 && (
         <div className="cal-agenda" style={{ marginTop: 10 }}>
           {viewMarkers.map(m => {
             const st = DELIVERY_STYLE[m.kind]
@@ -1439,7 +1535,7 @@ export default function CalendarPage() {
           })}
         </div>
       )}
-      {jobs.length > 0 && view === 'day'   && renderDay()}
+      {hasCal && view === 'day'   && renderDay()}
 
       {/* Job legend + highlight toggles — on-site jobs only. A planning/on-hold/complete
           job isn't currently being worked, so highlighting it on the calendar isn't
@@ -1489,6 +1585,7 @@ export default function CalendarPage() {
 
       {renderDetail()}
       {renderDeliveryDetail()}
+      {renderVisitDetail()}
       {renderNewTaskModal()}
     </div>
   )
