@@ -4,7 +4,7 @@
 // Each lead has a stage (New, Contacted, Site visit, Quoting, Won, Lost), where it came from, and a day to chase it; "Start a quote" hands the details to New Quote and the quote is linked back
 // when it is first saved (lib/leads-db.ts). The rules are in lib/leads.ts. The data is the quote_requests table, extended by supabase/leads.sql.
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { JOB_TEMPLATES } from '@/lib/utils'
@@ -17,6 +17,8 @@ import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import EnquiryFormSetup from '@/components/EnquiryFormSetup'
+import LeadVisitModal, { type VisitFields } from '@/components/LeadVisitModal'
+import { visitWhenShort, visitWhenLong, durationWords } from '@/lib/lead-visit'
 import { parsePastedMessage } from '@/lib/lead-from-message'
 import './touch.css'
 
@@ -42,6 +44,14 @@ interface Lead {
   chase_on?: string | null
   last_contact_at?: string | null
   lost_reason?: string
+  // added by supabase/lead-visits.sql (missing until it has been run)
+  visit_at?: string | null
+  visit_minutes?: number
+  visit_note?: string
+  visit_address?: string
+  visit_status?: string
+  visit_emailed_at?: string | null
+  visit_seq?: number
 }
 
 interface Phase {
@@ -86,6 +96,7 @@ export default function LeadsPage() {
   const [filter, setFilter] = useState<Filter>('open')
   const [adding, setAdding] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [visitMode, setVisitMode] = useState<'book' | 'reschedule' | 'cancel' | null>(null)
   const [lostPick, setLostPick] = useState(false)
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const today = todayUk()
@@ -99,6 +110,22 @@ export default function LeadsPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  // a link such as /quote-requests?lead=<id> (from a visit on the Calendar) opens that lead once the list is in
+  const deepLinkDone = useRef(false)
+  useEffect(() => {
+    if (deepLinkDone.current || loading || leads.length === 0) return
+    const id = new URLSearchParams(window.location.search).get('lead')
+    if (!id) { deepLinkDone.current = true; return }
+    const l = leads.find(x => x.id === id)
+    if (l) { deepLinkDone.current = true; openLead(l) }
+  }, [leads, loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** What a visit booking changed on a lead, put into the list and the open lead (the server has already saved it) */
+  function applyVisitFields(id: string, f: VisitFields) {
+    setLeads(prev => prev.map(l => (l.id === id ? { ...l, ...f } : l)))
+    setSelected(prev => (prev && prev.id === id ? { ...prev, ...f } : prev))
+  }
 
   const quoteOf = useCallback((l: Lead) => (l.quote_id ? quotes.find(q => q.id === l.quote_id) : undefined), [quotes])
 
@@ -265,7 +292,7 @@ export default function LeadsPage() {
                     {l.client_name}
                     <span style={{ fontWeight: 500, fontSize: 11, color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 10, padding: '1px 8px', marginLeft: 8 }}>{sourceOf(l)}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leadHeadline(l)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.visit_status === 'booked' && l.visit_at && <strong style={{ color: 'var(--moss)' }}>📅 {visitWhenShort(l.visit_at)} · </strong>}{leadHeadline(l)}</div>
                 </div>
                 <div className="qr-email" style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{l.client_phone || l.client_email}</div>
                 <div className="qr-chase" style={{ fontSize: 12, minWidth: 130, textAlign: 'right', whiteSpace: 'nowrap', color: isOverdue(l, today) ? '#c0392b' : due ? '#c0762a' : 'var(--muted)', fontWeight: due ? 700 : 400 }}>
@@ -281,6 +308,10 @@ export default function LeadsPage() {
 
       {/* ── Add a lead ───────────────────────────────────────────────── */}
       {setupOpen && <EnquiryFormSetup onClose={() => setSetupOpen(false)} />}
+
+      {visitMode && selected && (
+        <LeadVisitModal lead={{ ...selected, project_address: joinAddress(draft.address, draft.postcode) || selected.project_address }} mode={visitMode} today={today} onClose={() => setVisitMode(null)} onDone={f => applyVisitFields(selected.id, f)} />
+      )}
 
       {adding && (
         <AddLeadModal
@@ -355,6 +386,36 @@ export default function LeadsPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
                     {selected.chase_on ? `Chase ${chaseWords(selected.chase_on, today)}.` : 'No chase date set.'} {selected.last_contact_at ? `Last spoke to them ${shortDate(selected.last_contact_at)}.` : ''}
                   </div>
+                </div>
+              )}
+
+              {/* Site visit */}
+              {(isOpenLead(selected.status) || selected.visit_status === 'booked') && (
+                <div style={{ marginBottom: 18, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                  <span style={label}>Site visit</span>
+                  {selected.visit_status === 'booked' && selected.visit_at ? (
+                    <>
+                      <div style={{ fontSize: 15, fontWeight: 700 }}>📅 {visitWhenLong(selected.visit_at)}</div>
+                      <div style={{ fontSize: 12.5, color: 'var(--muted)', margin: '2px 0 8px', lineHeight: 1.5 }}>
+                        {durationWords(selected.visit_minutes || 60)} · {(selected.visit_address || selected.project_address || 'no address yet').replace(/\s*\n\s*/g, ', ')}
+                        {selected.visit_note ? <><br />Note to them: {selected.visit_note}</> : null}
+                        <br />{selected.visit_emailed_at ? `They were emailed ${shortDate(selected.visit_emailed_at)}.` : 'They have not been emailed about it.'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button className="btn-sm btn-outline" style={{ fontSize: 12 }} onClick={() => setVisitMode('reschedule')}>Change the time</button>
+                        <button className="btn-sm btn-outline" style={{ fontSize: 12, color: '#c0392b' }} onClick={() => setVisitMode('cancel')}>Cancel the visit</button>
+                        <a className="btn-sm btn-outline" style={{ fontSize: 12, textDecoration: 'none' }} target="_blank" rel="noreferrer" href={mapsUrl((selected.visit_address || selected.project_address || ''), '')}>📍 Directions</a>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button className="btn-sm btn-primary" style={{ fontSize: 12 }} onClick={() => setVisitMode('book')}>📅 Book a site visit</button>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {selected.visit_status === 'cancelled' && selected.visit_at ? `The visit on ${visitWhenShort(selected.visit_at)} was cancelled. ` : ''}
+                        The customer is emailed the date, time and address with a calendar file, and it goes on your Calendar.
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
