@@ -126,7 +126,10 @@ export default function EnquiryForm({ slug, src = '', embed = false }: { slug: s
     finally { setSending(false) }
   }
 
-  const page: React.CSSProperties = embed ? { padding: 0, background: 'transparent' } : { minHeight: '100vh', background: '#f1f5f9', padding: '28px 14px 40px' }
+  // The app's stylesheet makes the page itself unscrollable (body { height: 100vh; overflow: hidden }, because the app scrolls inside its own panels), so this page scrolls ITSELF, as the sign-in pages do.
+  // Without it the form could not be scrolled to its Send button on any screen shorter than the form (found 2026-10-30 on the first real test).
+  const scroller: React.CSSProperties = { height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', boxSizing: 'border-box' }
+  const page: React.CSSProperties = embed ? { ...scroller, padding: 0, background: 'transparent' } : { ...scroller, background: '#f1f5f9', padding: '28px 14px 40px' }
   const card: React.CSSProperties = { maxWidth: 640, margin: '0 auto', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 12, padding: '26px 24px', boxShadow: embed ? 'none' : '0 2px 14px rgba(0,0,0,0.06)', fontFamily: "'DM Sans', Helvetica, Arial, sans-serif", color: INK }
 
   if (load.state === 'loading') return <div style={page}><div ref={wrap} style={{ ...card, color: MUTED }}>Loading…</div></div>
