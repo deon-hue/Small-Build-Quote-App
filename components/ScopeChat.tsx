@@ -886,6 +886,8 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         {/* ── Input row ── */}
         <div style={{ padding: '10px 16px 14px', borderTop: attachments.length > 0 || processing ? 'none' : '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-end' }}>
 
+          {/* The two attach buttons share one column so the message box keeps its width */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
           {/* Attach button — overlay pattern so no programmatic .click() needed */}
           <div
             title={
@@ -893,7 +895,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                 ? `Max ${MAX_ATTACH} files per message`
                 : 'Attach building plans, drawings, or photos (PDF, JPG, PNG)'
             }
-            style={{ position: 'relative', width: 42, height: 42, flexShrink: 0 }}
+            style={{ position: 'relative', width: 42, height: 27, flexShrink: 0 }}
           >
             {/* Visual button face */}
             <div
@@ -938,10 +940,11 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
             aria-label="Pick from the customer's or lead's files"
             disabled={processing || attachments.length >= MAX_ATTACH}
             onClick={() => setPickerOpen(true)}
-            style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 8, border: 'none', fontSize: 20, background: '#f0f2ee', color: 'var(--ink)', cursor: (processing || attachments.length >= MAX_ATTACH) ? 'not-allowed' : 'pointer', opacity: (processing || attachments.length >= MAX_ATTACH) ? 0.4 : 1 }}
+            style={{ width: 42, height: 27, flexShrink: 0, borderRadius: 8, border: 'none', fontSize: 16, padding: 0, background: '#f0f2ee', color: 'var(--ink)', cursor: (processing || attachments.length >= MAX_ATTACH) ? 'not-allowed' : 'pointer', opacity: (processing || attachments.length >= MAX_ATTACH) ? 0.4 : 1 }}
           >
             📁
           </button>
+          </div>
           <QuoteFilePicker open={pickerOpen} onClose={() => setPickerOpen(false)} customer={customer} leadId={leadId} excludeQuoteId={fileKey} onPick={files => handleFiles(files)} />
 
           {/* Text input */}
@@ -960,7 +963,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
             rows={2}
             disabled={loading}
             style={{
-              flex: 1, resize: 'none', borderRadius: 8, padding: '8px 12px',
+              flex: 1, minWidth: 0, resize: 'none', borderRadius: 8, padding: '8px 12px',
               fontSize: 13, fontFamily: 'inherit', outline: 'none', lineHeight: 1.5,
               border: listening ? '2px solid #e74c3c' : '1px solid var(--border)',
               background: listening ? '#fff8f8' : '#fff',
