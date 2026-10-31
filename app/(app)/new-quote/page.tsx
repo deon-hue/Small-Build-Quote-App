@@ -1878,6 +1878,8 @@ export default function NewQuotePage() {
           initialJobType={jobType !== 'Rear Extension' ? jobType : undefined}
           quoteId={editingId || draftKey}
           onFilesChanged={mergeChatFiles}
+          customer={{ name: custName, email: custEmail, phone: custPhone }}
+          leadId={leadIdRef.current}
         />
         {/* Interview is now embedded in AIScopeWorkspace — no separate modal needed */}
       </>

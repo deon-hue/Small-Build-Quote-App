@@ -6,6 +6,7 @@ import QuoteFilePicker from '@/components/QuoteFilePicker'
 import { showUrlDocument } from '@/lib/open-document'
 import type { QuoteDocument } from '@/lib/types'
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import { useSpeechToText } from './useSpeechToText'
 import { useSpeechOut, SPEECH_RATES } from './useSpeechOut'
@@ -57,6 +58,10 @@ interface Props {
   building?: boolean
   /** Called with the quote's saved files whenever the chat adds one, so the page's own Attachments list stays in step */
   onFilesChanged?: (docs: QuoteDocument[]) => void
+  /** Embedded only: the writer is popped out of its column into a floating window the user can move, resize, collapse and make big */
+  floating?: boolean
+  /** Shows the pop out and dock buttons; called with the new state */
+  onFloatingChange?: (floating: boolean) => void
   /** who the quote is for, and the lead it came from: they start the 📁 "pick from their files" window next to the paperclip */
   customer?: { name?: string; email?: string; phone?: string }
   leadId?: string | null
@@ -187,7 +192,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false, onFilesChanged, customer, leadId }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false, onFilesChanged, customer, leadId, floating = false, onFloatingChange }: Props) {
   const supabase = createClient()
   // Files are saved against the quote (its real id, or a per-session draft key that is linked to the quote when it is saved). Never the shared literal 'draft'.
   const [localKey] = useState(() => 'draft-' + Math.random().toString(36).slice(2, 10))
@@ -234,6 +239,77 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
     setSize(clampSize(axes === 'h' ? sizeAtStart.current.w : sizeAtStart.current.w + pulledLeft, axes === 'w' ? sizeAtStart.current.h : sizeAtStart.current.h + pulledUp))
   const endResize = () => { setSize(s => { if (s) try { localStorage.setItem('buildos-scope-chat-size', JSON.stringify(s)) } catch { /* private mode */ } return s }) }
   const isBig = !!size && size.w >= 800
+
+  // ── Floating window: the writer popped out of its column (embedded only). Move it by its title bar, drag its bottom-right corner to resize,
+  // collapse it to its bar, make it big, or dock it back. Position and size are remembered on this device; collapsed and big are not. ──
+  const floatingNow = embedded && floating
+  const [fwBox, setFwBox] = useState<{ x?: number; y?: number; w?: number; h?: number }>({})
+  const [fwCollapsed, setFwCollapsed] = useState(false)
+  const [fwMaxed, setFwMaxed] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('buildos-scope-chat-float') || 'null')
+      const n = (z: unknown) => (typeof z === 'number' && isFinite(z) ? z : undefined)
+      if (v && typeof v === 'object') setFwBox({ x: n(v.x), y: n(v.y), w: n(v.w), h: n(v.h) })
+    } catch { /* private mode */ }
+  }, [])
+  const storeBox = (b: { x?: number; y?: number; w?: number; h?: number }) => { try { localStorage.setItem('buildos-scope-chat-float', JSON.stringify(b)) } catch { /* private mode */ } }
+  function floatRect() {
+    const vw = window.innerWidth, vh = window.innerHeight
+    if (fwMaxed) return { x: 16, y: 16, w: vw - 32, h: vh - 32 }
+    const w = Math.max(340, Math.min(fwBox.w ?? 440, vw - 16))
+    const h = fwCollapsed ? 56 : Math.max(300, Math.min(fwBox.h ?? 720, vh - 16))
+    const x = Math.max(0, Math.min(fwBox.x ?? vw - w - 16, vw - w))
+    const y = Math.max(0, Math.min(fwBox.y ?? vh - h - 16, vh - h))
+    return { x, y, w, h }
+  }
+  function startMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (fwMaxed) return
+    if ((e.target as HTMLElement).closest('button, select, input, textarea')) return
+    const el = wrapRef.current
+    if (!el) return
+    e.preventDefault()
+    const r = el.getBoundingClientRect()
+    const sx = e.clientX, sy = e.clientY
+    const move = (ev: PointerEvent) => {
+      el.style.left = Math.max(0, Math.min(r.left + ev.clientX - sx, window.innerWidth - r.width)) + 'px'
+      el.style.top = Math.max(0, Math.min(r.top + ev.clientY - sy, window.innerHeight - r.height)) + 'px'
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      const b = el.getBoundingClientRect()
+      const next = { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: fwCollapsed ? fwBox.h : Math.round(b.height) }
+      setFwBox(next); storeBox(next)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+  // remember a size set by dragging the window's bottom-right corner (saved a moment after the dragging stops)
+  useEffect(() => {
+    if (!floatingNow || fwCollapsed || fwMaxed) return
+    const el = wrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let t: ReturnType<typeof setTimeout> | undefined
+    const ro = new ResizeObserver(() => {
+      if (t) clearTimeout(t)
+      t = setTimeout(() => {
+        const b = el.getBoundingClientRect()
+        setFwBox(prev => {
+          if (Math.abs(b.width - (prev.w ?? 0)) < 3 && Math.abs(b.height - (prev.h ?? 0)) < 3) return prev
+          const next = { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) }
+          storeBox(next)
+          return next
+        })
+      }, 300)
+    })
+    ro.observe(el)
+    return () => { if (t) clearTimeout(t); ro.disconnect() }
+  }, [floatingNow, fwCollapsed, fwMaxed]) // eslint-disable-line react-hooks/exhaustive-deps
+  const hdrBtn: React.CSSProperties = { order: 2, background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, padding: 0, flexShrink: 0 }
   // The speaker would be heard by the microphone, so dictating stops any read-out
   useEffect(() => { if (listening) speechOut.stop() }, [listening]) // eslint-disable-line react-hooks/exhaustive-deps
   // Refocus the input once dictation stops — same behaviour the old inline version had.
@@ -560,25 +636,35 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           </>
         )}
         {/* ── Header ── */}
-        <div style={{ background: 'var(--moss)', color: '#fff', padding: embedded ? '10px 14px' : '14px 18px', borderRadius: embedded ? '10px 10px 0 0' : '14px 14px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div>
+        <div onPointerDown={floatingNow ? startMove : undefined} onDoubleClick={floatingNow ? () => { setFwMaxed(false); setFwCollapsed(c => !c) } : undefined} style={{ cursor: floatingNow && !fwMaxed ? 'move' : undefined, userSelect: floatingNow ? 'none' : undefined, flexWrap: 'wrap', gap: 6, background: 'var(--moss)', color: '#fff', padding: embedded ? '10px 14px' : '14px 18px', borderRadius: embedded ? '10px 10px 0 0' : '14px 14px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div style={embedded ? { flex: '1 1 0', minWidth: 0 } : undefined}>
             <div style={{ fontWeight: 700, fontSize: embedded ? 13 : 15 }}>✦ AI Scope Writer</div>
             <div style={{ fontSize: 11, opacity: 0.8, marginTop: 1 }}>
               {jobType}{address ? ` · ${address}` : ''}
-              <span style={{ opacity: 0.65 }}> · 🎤 voice · 📎 attach plans</span>
+              <span style={{ opacity: 0.65 }}>{floatingNow && fwCollapsed ? (loading ? ' · writing…' : ' · double-click to open') : ' · 🎤 voice · 📎 attach plans'}</span>
             </div>
           </div>
-          {speechOut.supported && (
+          {speechOut.supported && !(floatingNow && fwCollapsed) && (
             <select value={speechOut.rate} onChange={e => speechOut.setRate(Number(e.target.value))} title="How fast the voice reads (takes effect the next time you tap 🔊)"
-              style={{ marginLeft: 'auto', marginRight: 6, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+              style={{ order: embedded ? 3 : undefined, marginLeft: 'auto', marginRight: 6, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
               {SPEECH_RATES.map(r => <option key={r} value={r} style={{ color: '#000' }}>{r === 1 ? 'Normal speed' : `${r}× speed`}</option>)}
             </select>
           )}
-          {speechOut.supported && speechOut.voices.length > 1 && (
+          {speechOut.supported && speechOut.voices.length > 1 && !(floatingNow && fwCollapsed) && (
             <select value={speechOut.voiceURI} onChange={e => speechOut.setVoice(e.target.value)} title="The voice used when the AI's replies are read aloud (🔊)"
-              style={{ marginRight: embedded ? 0 : 8, maxWidth: 130, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+              style={{ order: embedded ? 3 : undefined, marginRight: embedded ? 0 : 8, maxWidth: 130, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
               {speechOut.voices.map(v => <option key={v.voiceURI} value={v.voiceURI} style={{ color: '#000' }}>{v.name.replace(/^(Microsoft|Google)\s+/, '').slice(0, 28)} ({v.lang})</option>)}
             </select>
+          )}
+          {embedded && onFloatingChange && !floatingNow && (
+            <button onClick={() => { setFwCollapsed(false); setFwMaxed(false); onFloatingChange(true) }} title="Pop this out into a window you can move, resize and collapse" aria-label="Pop out" style={hdrBtn}>⧉</button>
+          )}
+          {floatingNow && (
+            <>
+              <button onClick={() => { setFwMaxed(false); setFwCollapsed(c => !c) }} title={fwCollapsed ? 'Open it again' : 'Collapse to its title bar (double-click the bar does the same)'} aria-label={fwCollapsed ? 'Open' : 'Collapse'} style={{ ...hdrBtn, marginRight: 4 }}>{fwCollapsed ? '▢' : '—'}</button>
+              {!fwCollapsed && <button onClick={() => setFwMaxed(m => !m)} title={fwMaxed ? 'Back to the size it was' : 'Make it big'} aria-label={fwMaxed ? 'Normal size' : 'Make bigger'} style={{ ...hdrBtn, marginRight: 4 }}>{fwMaxed ? '⤡' : '⤢'}</button>}
+              {onFloatingChange && <button onClick={() => { setFwMaxed(false); setFwCollapsed(false); onFloatingChange(false) }} title="Put it back in its column" aria-label="Dock" style={hdrBtn}>⇲</button>}
+            </>
           )}
           {!embedded && (
             <button
@@ -1023,6 +1109,32 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       }
     `}</style>
   )
+
+  // Popped out: a floating window over the page (the writer keeps all its state, only where it is drawn changes)
+  if (embedded && floating && typeof document !== 'undefined') {
+    const r = floatRect()
+    return (
+      <>
+        {createPortal(
+          <div
+            ref={wrapRef}
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+            style={{
+              position: 'fixed', left: r.x, top: r.y, width: r.w, height: r.h, zIndex: 9000,
+              minWidth: 340, minHeight: fwCollapsed ? 0 : 300, maxWidth: '100vw', maxHeight: '100vh',
+              borderRadius: 12, boxShadow: '0 18px 50px rgba(0,0,0,0.35)', overflow: 'hidden',
+              resize: fwCollapsed || fwMaxed ? 'none' : 'both',
+            }}
+          >
+            {chatPanel}
+          </div>,
+          document.body,
+        )}
+        {styles}
+      </>
+    )
+  }
 
   // Embedded: render inline without modal overlay
   if (embedded) {

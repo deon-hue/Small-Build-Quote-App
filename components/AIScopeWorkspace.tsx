@@ -187,11 +187,14 @@ interface Props {
   initialJobType?:  string
   /** The quote's real id, or the page's per-session draft key: the chat saves the plans you attach against it */
   quoteId?:         string
+  /** Who the quote is for and the lead it came from: they start the chat's 'pick from the customer's or lead's files' window */
+  customer?:        { name?: string; email?: string; phone?: string }
+  leadId?:          string | null
   onFilesChanged?:  (docs: import('@/lib/types').QuoteDocument[]) => void
 }
 
 export default function AIScopeWorkspace({
-  onBuildEstimate, onScopeChange, onJobTypeChange, onBack, generating, initialJobType, quoteId, onFilesChanged,
+  onBuildEstimate, onScopeChange, onJobTypeChange, onBack, generating, initialJobType, quoteId, onFilesChanged, customer, leadId,
 }: Props) {
 
   // Phase 1: job selection  Phase 2: scope editor
@@ -215,6 +218,11 @@ export default function AIScopeWorkspace({
     return () => window.removeEventListener('resize', check)
   }, [])
   const [tab, setTab] = useState<'scope' | 'chat'>('scope')
+  // The AI writer popped out into a floating window (moved, resized, collapsed or made big by the user); remembered on this device. Not on a phone, where the two panels take turns.
+  const [chatFloat, setChatFloat] = useState(false)
+  useEffect(() => { try { if (localStorage.getItem('buildos-ai-chat-floating') === '1') setChatFloat(true) } catch { /* private mode */ } }, [])
+  const saveChatFloat = (v: boolean) => { setChatFloat(v); try { localStorage.setItem('buildos-ai-chat-floating', v ? '1' : '0') } catch { /* private mode */ } }
+  const floatNow = chatFloat && !narrow
   const [scopeText,  setScopeText]  = useState(config.defaultDescription)
   const [scopeFocus, setScopeFocus] = useState(false)
 
@@ -354,7 +362,7 @@ export default function AIScopeWorkspace({
       {/* 3-column layout */}
       <div style={narrow
         ? { display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, minWidth: 0 }
-        : { display: 'grid', gridTemplateColumns: `220px minmax(240px, 1fr) ${chatW}px`, gap: 16, flex: 1, minHeight: 0 }}>
+        : { display: 'grid', gridTemplateColumns: floatNow ? '220px minmax(240px, 1fr)' : `220px minmax(240px, 1fr) ${chatW}px`, gap: 16, flex: 1, minHeight: 0 }}>
 
         {narrow && (
           <div style={{ display: 'flex', gap: 0, border: `1px solid ${COLORS.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
@@ -402,13 +410,17 @@ export default function AIScopeWorkspace({
         </div>
 
         {/* ── RIGHT: embedded AI chat with mic + file attach ── */}
-        <div style={{ display: narrow && tab !== 'chat' ? 'none' : 'flex', flexDirection: 'column', minHeight: narrow ? 680 : 0, height: narrow ? 'max(680px, calc(100vh - 140px))' : undefined, minWidth: 0, position: 'relative' }}>
+        <div style={{ display: (narrow && tab !== 'chat') || floatNow ? 'none' : 'flex', flexDirection: 'column', minHeight: narrow ? 680 : 0, height: narrow ? 'max(680px, calc(100vh - 140px))' : undefined, minWidth: 0, position: 'relative' }}>
           {!narrow && <DragHandle cursor="ew-resize" title="Drag to make the AI writer wider or narrower" onStart={() => { chatWAtStart.current = chatW }}
             onMove={pulled => setChatW(Math.max(280, Math.min(900, chatWAtStart.current + pulled)))}
             onEnd={() => { try { localStorage.setItem('buildos-ai-chat-width', String(chatW)) } catch { /* private mode */ } }}
             style={{ left: -12, top: 0, bottom: 0, width: 10 }} />}
           <ScopeChat
             embedded
+            floating={floatNow}
+            onFloatingChange={narrow ? undefined : saveChatFloat}
+            customer={customer}
+            leadId={leadId}
             quoteId={quoteId ?? null}
             onFilesChanged={onFilesChanged}
             jobType={config.label}
