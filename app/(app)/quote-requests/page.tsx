@@ -20,9 +20,12 @@ import EnquiryFormSetup from '@/components/EnquiryFormSetup'
 import LeadVisitModal, { type VisitFields } from '@/components/LeadVisitModal'
 import { visitWhenShort, visitWhenLong, durationWords } from '@/lib/lead-visit'
 import { parsePastedMessage } from '@/lib/lead-from-message'
+import LeadFilesBox, { type FileTile } from '@/components/LeadFilesBox'
+import { cleanLeadFiles, addLeadFiles, removeLeadFile, nameForPasted, leadFileProblem, LEAD_FILES_MAX, type LeadFile } from '@/lib/lead-files'
+import { uploadLeadFile, signLeadFiles, removeLeadFiles } from '@/lib/lead-files-upload'
 import './touch.css'
 
-interface ClientFile { name: string; url: string; isImage: boolean }
+type ClientFile = LeadFile
 
 interface Lead {
   id: string
@@ -169,21 +172,83 @@ export default function LeadsPage() {
   }
   async function deleteLead(id: string) {
     if (!confirm('Delete this lead? This cannot be undone.')) return
+    const gone = leads.find(l => l.id === id)
     const { error: e } = await sb.from('quote_requests').delete().eq('id', id)
     if (e) { setError(failText(e)); return }
+    if (gone) removeLeadFiles(sb, cleanLeadFiles(gone.client_files))   // the files you added go with it (best effort)
     setLeads(prev => prev.filter(l => l.id !== id))
     setSelected(null)
   }
 
+  // ── Files on a lead: the ones that arrived with it, and the ones you add (chosen, photographed, pasted or dragged in) ──
+  const [fileBusy, setFileBusy] = useState(false)
+  const [fileNote, setFileNote] = useState<{ text: string; bad: boolean } | null>(null)
+  const [signed, setSigned] = useState<Record<string, string>>({})
+  const selFiles = useMemo(() => cleanLeadFiles(selected?.client_files), [selected?.client_files])
+
+  // the files you added are private: each needs a link signed for a while before it can be shown
+  useEffect(() => {
+    const need = selFiles.filter(f => f.path && !signed[f.path])
+    if (!need.length) return
+    let live = true
+    signLeadFiles(sb, need).then(m => { if (live && Object.keys(m).length) setSigned(prev => ({ ...prev, ...m })) })
+    return () => { live = false }
+  }, [selFiles]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setFileNote(null) }, [selected?.id])
+
+  const fileTiles: FileTile[] = selFiles.map((f, i) => ({ key: `${f.path || f.url}#${i}`, name: f.name, url: f.path ? (signed[f.path] || '') : f.url, isImage: f.isImage }))
+
+  async function addFiles(l: Lead, picked: File[]) {
+    if (!picked.length || fileBusy) return
+    setFileBusy(true); setFileNote(null)
+    const have = cleanLeadFiles(l.client_files)
+    const added: LeadFile[] = []
+    const problems: string[] = []
+    let n = 0
+    for (const raw of picked) {
+      if (have.length + added.length >= LEAD_FILES_MAX) { problems.push(`A lead can hold ${LEAD_FILES_MAX} files: ${raw.name || 'a file'} was not added.`); continue }
+      n++
+      const file = new File([raw], nameForPasted(raw.name, raw.type, n), { type: raw.type })
+      const r = await uploadLeadFile(sb, file, l.id)
+      if ('error' in r) problems.push(r.error); else added.push(r.file)
+    }
+    if (added.length) {
+      const next = addLeadFiles(have, added).files
+      const ok = await patch(l.id, { client_files: next })
+      if (!ok) { await removeLeadFiles(sb, added); setFileBusy(false); return }   // patch() has said why; nothing is left behind in storage
+    }
+    setFileNote({
+      text: [added.length ? `${added.length} file${added.length === 1 ? '' : 's'} added.` : '', ...problems].filter(Boolean).join('\n'),
+      bad: problems.length > 0,
+    })
+    setFileBusy(false)
+  }
+
+  async function removeFile(l: Lead, index: number) {
+    const have = cleanLeadFiles(l.client_files)
+    const target = have[index]
+    if (!target) return
+    if (!confirm(`Remove ${target.name} from this lead?`)) return
+    const { files, removed } = removeLeadFile(have, index)
+    setFileBusy(true); setFileNote(null)
+    const ok = await patch(l.id, { client_files: files })
+    if (ok && removed) await removeLeadFiles(sb, [removed])
+    setFileBusy(false)
+  }
+
   /** Hands the lead to New Quote. One that already has the website's AI estimate carries its phases and files (as it always did); any other starts the quote from scratch with the customer filled in. */
-  function startQuote(l: Lead) {
+  async function startQuote(l: Lead) {
     const hasAi = (l.ai_phases?.length ?? 0) > 0
+    // files you added are private: New Quote gets links that work for a day
+    const have = cleanLeadFiles(l.client_files)
+    const links = await signLeadFiles(sb, have, 24 * 3600)
+    const handOver = have.map(f => ({ name: f.name, isImage: f.isImage, url: f.path ? (links[f.path] || '') : f.url })).filter(f => f.url)
     if (hasAi) {
-      if (l.client_files?.length) sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(l.client_files))
+      if (handOver.length) sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(handOver))
       sessionStorage.setItem('sbc_quote_request_scope', l.scope_text || '')
       sessionStorage.setItem('sbc_quote_request_phases', JSON.stringify(l.ai_phases))
-    } else if (l.client_files?.length) {
-      sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(l.client_files))
+    } else if (handOver.length) {
+      sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(handOver))
     }
     const p = new URLSearchParams({
       lead: l.id,
@@ -487,25 +552,7 @@ export default function LeadsPage() {
               )}
 
               {/* Client files */}
-              {selected.client_files?.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', marginBottom: 8 }}>Client Plans &amp; Photos ({selected.client_files.length})</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {selected.client_files.map((f, i) => (
-                      f.isImage ? (
-                        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.name} style={{ display: 'block', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
-                          <img src={f.url} alt={f.name} style={{ width: 90, height: 90, objectFit: 'cover', display: 'block' }} />
-                        </a>
-                      ) : (
-                        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 90, height: 90, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--warm)', gap: 4, textDecoration: 'none', color: 'var(--ink)', flexShrink: 0 }}>
-                          <span style={{ fontSize: 24 }}>📄</span>
-                          <span style={{ fontSize: 9, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80, whiteSpace: 'nowrap', color: 'var(--muted)' }}>{f.name}</span>
-                        </a>
-                      )
-                    ))}
-                  </div>
-                </div>
-              )}
+              <LeadFilesBox tiles={fileTiles} onFiles={files => addFiles(selected, files)} onRemove={i => removeFile(selected, i)} busy={fileBusy || saving} note={fileNote?.text} noteIsError={fileNote?.bad} />
 
               {/* Notes */}
               <div style={{ marginBottom: 8 }}>
@@ -548,6 +595,32 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
   const [err, setErr] = useState('')
   const [paste, setPaste] = useState('')
   const [pasteNote, setPasteNote] = useState('')
+  // pictures and plans picked for a lead that is not saved yet: kept in the browser until Add lead is pressed
+  const [pending, setPending] = useState<{ key: string; file: File; url: string }[]>([])
+  const [fileNote, setFileNote] = useState<{ text: string; bad: boolean } | null>(null)
+  const pendingRef = useRef(pending)
+  pendingRef.current = pending
+  useEffect(() => () => { for (const p of pendingRef.current) URL.revokeObjectURL(p.url) }, [])
+
+  function pickFiles(picked: File[]) {
+    const problems: string[] = []
+    const keep: { key: string; file: File; url: string }[] = []
+    let n = 0
+    for (const raw of picked) {
+      if (pending.length + keep.length >= LEAD_FILES_MAX) { problems.push(`A lead can hold ${LEAD_FILES_MAX} files: ${raw.name || 'a file'} was not added.`); continue }
+      n++
+      const file = new File([raw], nameForPasted(raw.name, raw.type, pending.length + n), { type: raw.type })
+      const p = leadFileProblem(file.name, file.type, file.size)
+      if (p) { problems.push(p); continue }
+      keep.push({ key: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, file, url: URL.createObjectURL(file) })
+    }
+    if (keep.length) setPending(cur => [...cur, ...keep])
+    setFileNote(problems.length ? { text: problems.join('\n'), bad: true } : null)
+  }
+  function dropPending(i: number) {
+    setPending(cur => { const gone = cur[i]; if (gone) URL.revokeObjectURL(gone.url); return cur.filter((_, k) => k !== i) })
+  }
+  const pendingTiles: FileTile[] = pending.map(p => ({ key: p.key, name: p.file.name, url: p.url, isImage: /^image\/(jpe?g|png|webp|gif)$/i.test(p.file.type) }))
 
   /** Reads a pasted email or message and fills in what it finds: nothing already typed is overwritten */
   function fillFromPaste() {
@@ -576,12 +649,21 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
     setBusy(true); setErr('')
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setErr('You are not signed in: please refresh and try again.'); setBusy(false); return }
+    // the files go up first (into a folder of their own), so the lead is saved with them in one step
+    const folder = `new-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const stored: LeadFile[] = []
+    const failed: string[] = []
+    for (const p of pending) {
+      const r = await uploadLeadFile(sb, p.file, folder)
+      if ('error' in r) failed.push(r.error); else stored.push(r.file)
+    }
+    if (failed.length) { await removeLeadFiles(sb, stored); setErr(`The lead was not added, because:\n${failed.join('\n')}`); setBusy(false); return }
     const { data, error } = await sb.from('quote_requests').insert({
       user_id: user.id, client_name: f.name.trim(), client_phone: f.phone.trim(), client_email: f.email.trim().toLowerCase(), project_address: joinAddress(f.address, f.postcode),
-      project_type: f.type.trim(), scope_text: f.want.trim(), source: f.source, status: 'pending', chase_on: chase,
+      project_type: f.type.trim(), scope_text: f.want.trim(), source: f.source, status: 'pending', chase_on: chase, ...(stored.length ? { client_files: stored } : {}),
     }).select('*').single()
     setBusy(false)
-    if (error || !data) { setErr(failText(error)); return }
+    if (error || !data) { await removeLeadFiles(sb, stored); setErr(failText(error)); return }
     onSaved(data as Lead)
   }
 
@@ -599,7 +681,7 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
           </div>
         </div>
         <div className="form-modal-bd" style={{ overflowY: 'auto', flex: 1, display: 'grid', gap: 12 }}>
-          {err && <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', color: '#a93226', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>{err}</div>}
+          {err && <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', color: '#a93226', borderRadius: 6, padding: '8px 12px', fontSize: 13, whiteSpace: 'pre-line' }}>{err}</div>}
           <details style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', background: '#fff' }}>
             <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📋 Paste an email or a message</summary>
             <div style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0' }}>Paste an email (with its From and Subject lines), a WhatsApp or Messenger message, or your own note. It fills in the name, phone, email and what they want where it can.</div>
@@ -631,6 +713,9 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
             <div><span style={label}>Kind of job</span><input list="lead-job-types-add" value={f.type} onChange={e => setF({ ...f, type: e.target.value })} style={input} /></div>
           </div>
           <datalist id="lead-job-types-add">{Object.keys(JOB_TEMPLATES).map(t => <option key={t} value={t} />)}</datalist>
+          <div style={{ marginBottom: -8 }}>
+            <LeadFilesBox tiles={pendingTiles} onFiles={pickFiles} onRemove={dropPending} busy={busy} note={fileNote?.text} noteIsError={fileNote?.bad} />
+          </div>
           <div>
             <span style={label}>Where did it come from?</span>
             <select value={f.source} onChange={e => setF({ ...f, source: e.target.value })} style={input}>{LEAD_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}</select>

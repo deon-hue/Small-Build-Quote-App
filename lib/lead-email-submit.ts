@@ -4,6 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ENQUIRIES_PER_HOUR, isMissingSchema } from './enquiry-submit'
 import { ENQUIRY_MAX_FILES, type EnquiryFile } from './enquiry'
+import { LEAD_FILES_MAX } from './lead-files'
 import { todayUk, isOpenLead } from './leads'
 import type { ParsedLead } from './lead-from-message'
 
@@ -59,7 +60,9 @@ export async function saveLeadFromEmail(
     if (found.error || !open) continue
     const add = `— Another email, ${ukDate(nowMs)}${subject ? `: ${subject}` : ''}\n${body.slice(0, 1200)}${p.note ? `\n(Your note: ${p.note.slice(0, 300)})` : ''}`
     const notes = `${(open.admin_notes || '').trim()}${open.admin_notes ? '\n\n' : ''}${add}`.slice(-NOTE_MAX)
-    const merged = [...(Array.isArray(open.client_files) ? open.client_files : []), ...files].slice(0, ENQUIRY_MAX_FILES)
+    // never drops a file already on the lead (including ones the builder added by hand): only the new ones are held back when the lead is full
+    const already = Array.isArray(open.client_files) ? open.client_files : []
+    const merged = [...already, ...files.slice(0, Math.max(0, LEAD_FILES_MAX - already.length))]
     const patch: Record<string, unknown> = { admin_notes: notes, ...(files.length ? { client_files: merged } : {}), chase_on: todayUk(new Date(nowMs)) }
     let upd = await sb.from('quote_requests').update(patch).eq('id', open.id)
     if (upd.error && isMissingSchema(upd.error)) { const { chase_on: _c, ...plain } = patch; upd = await sb.from('quote_requests').update(plain).eq('id', open.id) }
