@@ -16,6 +16,7 @@ import { drainagePromptGuide } from '@/lib/drainage-ai'
 import { demolitionPromptGuide } from '@/lib/demolition-ai'
 import { plasterPromptGuide } from '@/lib/plaster-ai'
 import { tilingPromptGuide } from '@/lib/tiling-ai'
+import { decorationPromptGuide } from '@/lib/decoration-ai'
 import { solidBrickPromptGuide } from '@/lib/solid-brick-ai'
 import { floorRoofPromptGuide } from '@/lib/floor-roof-ai'
 import { joineryPromptGuide } from '@/lib/joinery-ai'
@@ -29,6 +30,7 @@ const CALC_OBJECT_ASK_IDS = new Set([
   'demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc', 'demo-outbuildings-calc', 'demo-external-works-calc', 'demo-render-hackoff-calc',
   'plaster-rooms', 'plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall',
   'tile-floor-rooms', 'tile-wall-rooms', 'tile-prep-rooms', 'tile-ufh-electric',
+  'deco-internal-walls',
   'ew-solid-brick-victorian',
   'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-insulated-concrete', 'fs-block-beam', 'fs-suspended-timber',
   'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
@@ -325,6 +327,7 @@ Rules:
   - ${demolitionPromptGuide()}
   - ${plasterPromptGuide()}
   - ${tilingPromptGuide()}
+  - ${decorationPromptGuide()}
   - ${solidBrickPromptGuide()}
   - ${floorRoofPromptGuide()}
   - ${joineryPromptGuide()}
