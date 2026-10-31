@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
 - Finishes and material specifications on drawings
 - Engineer's annotations, keynotes, revision notes
 
+ROOMS: list EVERY room shown on the plans (every floor shown) with its name and its size. Use the dimensions printed on the plan; if none are printed but a scale is given, work the size out and say "(measured from the plan, approximate)". Never invent a size or a room: if a room's size cannot be read, name the room and say its size is not shown. Note each room's doors and windows if the plan shows them.
+
 Use what you extract from the plans together with the client's description.
 Flag any assumptions: "(Assumed from plans: ...)". If plans are unclear, note it.
 `
@@ -165,6 +167,7 @@ SCOPE REQUIREMENTS:
 - Use clear phase headings (e.g. "**External Walls**") to break up sections when there is more than one
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"
 - State every size you were given as a number with its unit, so it can be priced (for example "20m of strip foundation, 1.0m deep", "6 pad foundations, 900 x 900mm", "raft 9m x 7m", "8m long x 2.4m high cavity wall"). Never make a size vaguer than it was told to you, and never invent one: if a size was not given, say so rather than guessing a number.
+- Write decorating (and plastering, flooring and skirting) room by room too. When the work covers the whole house or several rooms (for example "redecorate the whole house"), put a room list under that heading: every room's name with its size as you were given it or read it from the plans (for example "Bedroom 1: 4.2m x 3.6m, ceiling 2.4m, 1 door, 2 windows"), say what is painted (walls, ceilings, woodwork, doors, window frames) and what condition the surfaces are in if you know (new plaster, painted before, wallpaper to strip). Name EVERY room on the plans that is included. Never invent a size or a room: if a room's size is not shown, name the room and say its size is not shown.
 - Write electrical work room by room with the numbers you were given (for example "Kitchen: 8 double sockets, 10 downlights, breakfast bar pendants (client-supplied fitting)"). Name each room that is to be wired. If the client did not say how many points, just name the room: do not invent counts.
 - Specific enough for a QS to identify every trade and allocate quantities
 - Do NOT include prices, rates, or programme durations
