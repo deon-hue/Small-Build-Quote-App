@@ -2,6 +2,7 @@
 
 import { parseMessage, scopeFromReply } from '@/lib/scope-parse'
 import { uploadQuoteDocument, fetchQuoteDocuments, signedQuoteDocumentUrl } from '@/lib/quote-documents'
+import QuoteFilePicker from '@/components/QuoteFilePicker'
 import { showUrlDocument } from '@/lib/open-document'
 import type { QuoteDocument } from '@/lib/types'
 import { useState, useRef, useEffect } from 'react'
@@ -56,6 +57,9 @@ interface Props {
   building?: boolean
   /** Called with the quote's saved files whenever the chat adds one, so the page's own Attachments list stays in step */
   onFilesChanged?: (docs: QuoteDocument[]) => void
+  /** who the quote is for, and the lead it came from: they start the 📁 "pick from their files" window next to the paperclip */
+  customer?: { name?: string; email?: string; phone?: string }
+  leadId?: string | null
 }
 
 // ── Job-type opening questions ────────────────────────────────────────────────
@@ -183,7 +187,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false, onFilesChanged }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false, onFilesChanged, customer, leadId }: Props) {
   const supabase = createClient()
   // Files are saved against the quote (its real id, or a per-session draft key that is linked to the quote when it is saved). Never the shared literal 'draft'.
   const [localKey] = useState(() => 'draft-' + Math.random().toString(36).slice(2, 10))
@@ -285,7 +289,8 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   }, [latestScope]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── File attachment ─────────────────────────────────────────
-  async function handleFiles(fileList: FileList) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  async function handleFiles(fileList: ArrayLike<File>) {
     const files = Array.from(fileList)
     if (attachments.length + files.length > MAX_ATTACH) {
       alert(`Max ${MAX_ATTACH} files per message. Remove some first.`)
@@ -925,6 +930,19 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
               }}
             />
           </div>
+
+          {/* Pick from the customer's or lead's files (the paperclip above is the computer) */}
+          <button
+            type="button"
+            title="Pick plans or photos already filed for the customer or the lead"
+            aria-label="Pick from the customer's or lead's files"
+            disabled={processing || attachments.length >= MAX_ATTACH}
+            onClick={() => setPickerOpen(true)}
+            style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 8, border: 'none', fontSize: 20, background: '#f0f2ee', color: 'var(--ink)', cursor: (processing || attachments.length >= MAX_ATTACH) ? 'not-allowed' : 'pointer', opacity: (processing || attachments.length >= MAX_ATTACH) ? 0.4 : 1 }}
+          >
+            📁
+          </button>
+          <QuoteFilePicker open={pickerOpen} onClose={() => setPickerOpen(false)} customer={customer} leadId={leadId} excludeQuoteId={fileKey} onPick={files => handleFiles(files)} />
 
           {/* Text input */}
           <textarea
