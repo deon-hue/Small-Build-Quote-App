@@ -2240,7 +2240,7 @@ export default function NewQuotePage() {
           <div className="card">
             <div className="card-hd">Attachments</div>
             <div style={{ padding: '14px 16px' }}>
-              <QuoteAttachments quoteId={editingId || draftKey} attachments={attachments} onAttachmentsChange={setAttachments} />
+              <QuoteAttachments quoteId={editingId || draftKey} attachments={attachments} onAttachmentsChange={setAttachments} customer={{ name: custName, email: custEmail, phone: custPhone }} leadId={leadIdRef.current} />
             </div>
           </div>
 
@@ -2443,6 +2443,8 @@ export default function NewQuotePage() {
         <ScopeChat
           quoteId={editingId || draftKey}
           onFilesChanged={mergeChatFiles}
+          customer={{ name: custName, email: custEmail, phone: custPhone }}
+          leadId={leadIdRef.current}
           jobType={jobType}
           address={custAddr}
           phases={phases.map(p => p.phase)}

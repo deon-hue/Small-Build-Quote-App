@@ -422,7 +422,7 @@ export default function QuickQuotePage() {
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', marginBottom: 14 }}>
           Attachments
         </div>
-        <QuoteAttachments quoteId={draftKey} attachments={attachments} onAttachmentsChange={setAttachments} />
+        <QuoteAttachments quoteId={draftKey} attachments={attachments} onAttachmentsChange={setAttachments} customer={{ name: custName, email: custEmail, phone: custPhone }} />
       </div>
 
       {/* ── Section 4: Pricing ── */}
@@ -496,6 +496,7 @@ export default function QuickQuotePage() {
       {showChat && (
         <ScopeChat
           quoteId={draftKey}
+          customer={{ name: custName, email: custEmail, phone: custPhone }}
           onFilesChanged={docs => setAttachments(prev => { const have = new Set(prev.map(a => a.id)); const add = docs.filter(d => !have.has(d.id)); return add.length ? [...prev, ...add] : prev })}
           jobType={jobType}
           address={custAddr}

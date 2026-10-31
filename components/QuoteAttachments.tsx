@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { uploadQuoteDocument, deleteQuoteDocument, fetchQuoteDocuments, signedQuoteDocumentUrl } from '@/lib/quote-documents'
 import type { QuoteDocument, AttachmentCategory } from '@/lib/types'
+import QuoteFilePicker from '@/components/QuoteFilePicker'
 
 type QuoteCategory = Exclude<AttachmentCategory, 'contract'>
 
@@ -27,9 +28,12 @@ interface Props {
   quoteId: string
   attachments: QuoteDocument[]
   onAttachmentsChange: (docs: QuoteDocument[]) => void
+  /** who the quote is for, and the lead it came from: they start the "pick from their files" window */
+  customer?: { name?: string; email?: string; phone?: string }
+  leadId?: string | null
 }
 
-export default function QuoteAttachments({ quoteId, attachments, onAttachmentsChange }: Props) {
+export default function QuoteAttachments({ quoteId, attachments, onAttachmentsChange, customer, leadId }: Props) {
   const sb = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -38,6 +42,7 @@ export default function QuoteAttachments({ quoteId, attachments, onAttachmentsCh
   const [dragging, setDragging] = useState(false)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const loadedRef = useRef(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // Load any files already attached (editing an existing saved quote, or files attached
   // earlier in this session before the quote had a real id yet — same 'draft' bucket).
@@ -47,7 +52,7 @@ export default function QuoteAttachments({ quoteId, attachments, onAttachmentsCh
     fetchQuoteDocuments(sb, quoteId).then(onAttachmentsChange)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleFiles(files: FileList | null) {
+  async function handleFiles(files: ArrayLike<File> | null) {
     if (!files || files.length === 0) return
     setUploadErr('')
     setUploading(true)
@@ -88,6 +93,10 @@ export default function QuoteAttachments({ quoteId, attachments, onAttachmentsCh
 
   return (
     <div>
+      <button type="button" className="btn-sm btn-outline" style={{ fontSize: 12, marginBottom: 8, width: '100%' }} onClick={() => setPickerOpen(true)} disabled={uploading}>
+        📁 Pick from the customer's or lead's files
+      </button>
+      <QuoteFilePicker open={pickerOpen} onClose={() => setPickerOpen(false)} customer={customer} leadId={leadId} excludeQuoteId={quoteId} onPick={files => handleFiles(files)} />
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
