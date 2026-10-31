@@ -24,7 +24,7 @@ export function fitSize(w: number, h: number, max = ITEM_IMAGE_MAX_SIDE): { w: n
 }
 
 /** Shrinks a picture to a JPEG in the browser (a phone photo is several MB; a screenshot may be a PNG with a clear background, which is made white). */
-async function toJpeg(file: File): Promise<Blob> {
+export async function toJpeg(file: File, maxSide = ITEM_IMAGE_MAX_SIDE): Promise<Blob> {
   const url = URL.createObjectURL(file)
   try {
     const img = await new Promise<HTMLImageElement>((res, rej) => {
@@ -33,7 +33,7 @@ async function toJpeg(file: File): Promise<Blob> {
       el.onerror = () => rej(new Error('That file could not be read as a picture.'))
       el.src = url
     })
-    const { w, h } = fitSize(img.naturalWidth, img.naturalHeight)
+    const { w, h } = fitSize(img.naturalWidth, img.naturalHeight, maxSide)
     if (!w) throw new Error('That picture has no size.')
     const canvas = document.createElement('canvas')
     canvas.width = w; canvas.height = h
