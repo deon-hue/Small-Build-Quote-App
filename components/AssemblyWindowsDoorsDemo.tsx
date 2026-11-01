@@ -22,6 +22,7 @@ import { describeWd, describeWdShort, type WdDescriptionInput } from '@/lib/wd-d
 import { suggestWindowsDoorsLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
+import LocationInput from '@/components/LocationInput'
 import TilingCalcFrame, { TilingNumInput, TilingAutoInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 
 interface Props {
@@ -196,7 +197,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                 <div key={o.id} style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                     <input value={o.ref} onChange={e => update(o.id, { ref: e.target.value })} title="Reference on the schedule" style={{ fontWeight: 700, fontSize: 13, width: 52, border: '1px solid transparent', borderBottom: '1px solid #e2e8f0', outline: 'none', background: 'transparent' }} />
-                    <input value={o.location} onChange={e => update(o.id, { location: e.target.value })} placeholder="Room / wall" style={{ fontSize: 12, width: 130, border: '1px solid #e2e8f0', borderRadius: 4, padding: '3px 6px' }} />
+                    <LocationInput value={o.location} onChange={v => update(o.id, { location: v })} placeholder="Room / wall" title="Which room this door or window is in: pick from the list or type it" style={{ fontSize: 12, width: 150, border: '1px solid #e2e8f0', borderRadius: 4, padding: '3px 6px' }} />
                     <select value={o.kind} onChange={e => changeKind(o, e.target.value as OpeningKind)} style={{ ...tilingSmall, minWidth: 170 }}>
                       {groups.map(g => (
                         <optgroup key={g} label={groupLabel(g)}>
