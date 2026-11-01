@@ -80,7 +80,7 @@ export default function OpeningsPanel(p: Props) {
     <div style={{ padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-textb)', marginBottom: 2 }}>🪟 Windows &amp; doors</div>
       <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 10, lineHeight: 1.45 }}>
-        Pick a kind of window or door, then click a wall on the plan to put it in. The wall is cut for it and a door shows which way it swings. They are listed here and feed the Windows &amp; Doors calculator below.
+        Pick a kind of window or door, then click a wall on the plan to put it in. The wall is cut for it and a door shows which way it swings. They are listed here and feed the Windows and Doors calculators below: windows (and bi-fold and sliding patio doors) are priced in the Windows card, every other door in the Doors card.
       </div>
 
       <button type="button" onClick={() => p.onPlacing(!p.placing)}
