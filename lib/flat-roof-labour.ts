@@ -20,7 +20,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
   renderer:   'Plasterer / renderer',
   plumber:    'Plumber / gutter fitter',
   labourer:   'Labourer',
-  fitter:     'Window / rooflight fitter',
+  fitter:     'Window and door fitter',
   painter:    'Painter and decorator',
   tiler:      'Tiler',
 }
@@ -186,21 +186,25 @@ export function suggestFlatRoofLabour(i: FlatRoofLabourInput, scope: LabourScope
 
 // ── Matching a trade to Back Office's own list ─────────────────────────────────
 
-const TRADE_PATTERN: Record<LabourTradeKind, RegExp> = {
+// A kind of work can list several patterns, most specific first: the first pattern that matches any trade in Back Office wins, so a "Window & Door Fitter" is found before a "Kitchen Fitter" or a "Gutter Fitter"
+// whatever order the trades are listed in (a plain /fitter/ used to take whichever fitter came first).
+const TRADE_PATTERN: Record<LabourTradeKind, RegExp | RegExp[]> = {
   carpenter:  /carpent|joiner/i,
   roofer:     /roof/i,
   bricklayer: /brick|mason|block ?lay/i,
   renderer:   /plaster|render/i,
   plumber:    /plumb|gutter|drain/i,
   labourer:   /labourer|general operative|site labour|^labour/i,
-  fitter:     /glaz|window|fitter|rooflight/i,
+  fitter:     [/(window|door).*(window|door|fitter)|glaz/i, /window|rooflight/i, /^(?!.*(kitchen|gutter|bathroom)).*fitter/i],
   painter:    /paint|decorat/i,
   tiler:      /tiler|tiling|tile/i,
 }
 
 /** The Back Office trade that suits a kind of work, judged by its name; undefined when none does. */
 export function matchTrade<T extends { id: string; name: string }>(kind: LabourTradeKind, trades: T[]): T | undefined {
-  return trades.find(t => TRADE_PATTERN[kind].test(t.name))
+  const p = TRADE_PATTERN[kind]
+  for (const re of Array.isArray(p) ? p : [p]) { const hit = trades.find(t => re.test(t.name)); if (hit) return hit }
+  return undefined
 }
 
 export interface SuggestedLabourLine { id: string; tradeId: string; task: string; hours: number }
