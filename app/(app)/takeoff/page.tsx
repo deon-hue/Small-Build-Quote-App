@@ -2571,6 +2571,13 @@ export default function TakeoffPage() {
   const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
   // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
   const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))
+  // The Windows and Doors items (the older combined one, the Windows one and the Doors one) are made the first time an opening is placed and hold what is on the plan: once every opening is deleted and nothing was priced,
+  // there is nothing to list in the schedule or send to the quote (a priced one stays, so its price is not lost without the estimator seeing it).
+  const wdItemEmpty = (it: TakeoffItem): boolean => {
+    if ((!it.wdSummary && !it.wdScopeSummary) || it.assemblyResult) return false
+    const scope = it.wdScopeSummary
+    return (scope ? livePlaced.filter(o => kindInScope(o.kind, scope)) : livePlaced).length === 0
+  }
 
   // ── Rooms made from the walls ─────────────────────────────────────────────
   // Every wall (joined where they meet, at real thickness) and the gap of every door and window is filled in on a fine grid; the enclosed empty space is a room (lib/rooms-from-walls.ts). Names are kept on the sheet.
@@ -4382,13 +4389,13 @@ export default function TakeoffPage() {
   }
   const phaseGroups = livePhaseNames.map(ph => ({
     phase: ph,
-    items: project.items.filter(it => it.phase === ph && (scheduleSheetFilter === 'all' || itemSheetId(it, project) === scheduleSheetFilter) && onScheduledLevel(it)),
+    items: project.items.filter(it => it.phase === ph && (scheduleSheetFilter === 'all' || itemSheetId(it, project) === scheduleSheetFilter) && onScheduledLevel(it) && !wdItemEmpty(it)),
   })).filter(g => g.items.length > 0)
 
   // ── Export for quote import ────────────────────────────────────────────────
   function exportForQuote() {
     const { planImageUrl: _, ...rest } = project
-    const data = { version: 1, ...rest, items: project.items.filter(it => !it.notEstimated) }
+    const data = { version: 1, ...rest, items: project.items.filter(it => !it.notEstimated && !wdItemEmpty(it)) }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -4404,7 +4411,7 @@ export default function TakeoffPage() {
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
-    const sendItems = project.items.filter(it => !it.notEstimated && !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult) || (it.drainSummary && !it.assemblyResult && !it.drainPoints?.length)))
+    const sendItems = project.items.filter(it => !it.notEstimated && !wdItemEmpty(it) && !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult) || (it.drainSummary && !it.assemblyResult && !it.drainPoints?.length)))
     const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
     if (unpriced.length > 0 && !window.confirm(
       `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
@@ -8200,8 +8207,8 @@ export default function TakeoffPage() {
           </span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-text)' }}>
             {activeLevelId && !scheduleAllLevels
-              ? `${project.items.filter(onScheduledLevel).length} of ${project.items.length} items`
-              : `${project.items.length} item${project.items.length !== 1 ? 's' : ''}`}
+              ? `${project.items.filter(it => onScheduledLevel(it) && !wdItemEmpty(it)).length} of ${project.items.filter(it => !wdItemEmpty(it)).length} items`
+              : `${project.items.filter(it => !wdItemEmpty(it)).length} item${project.items.filter(it => !wdItemEmpty(it)).length !== 1 ? 's' : ''}`}
           </span>
         </div>
 
@@ -9493,7 +9500,7 @@ export default function TakeoffPage() {
                   fontFamily: 'inherit', fontWeight: panelMode === m ? 700 : 400,
                 }}
               >
-                {m === 'schedule' ? `📋 Schedule (${project.items.length})` : '✏️ Properties'}
+                {m === 'schedule' ? `📋 Schedule (${project.items.filter(it => !wdItemEmpty(it)).length})` : '✏️ Properties'}
               </button>
             ))}
           </div>
