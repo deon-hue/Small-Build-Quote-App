@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
+import LocationInput from '@/components/LocationInput'
 import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, type OpeningKind, type WdSwing } from '@/lib/wd-units'
 import { hasSwing, type PlacedOpening } from '@/lib/wall-openings'
 import type { CostedLine } from '@/lib/assembly-calc'
@@ -193,7 +194,7 @@ export default function OpeningsPanel(p: Props) {
             </select>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <div><div style={tiny}>Reference</div><input value={selected.ref} onChange={e => p.onUpdate(selected.id, { ref: e.target.value })} style={input} /></div>
-              <div><div style={tiny}>Room / wall</div><input value={selected.location ?? ''} onChange={e => p.onUpdate(selected.id, { location: e.target.value })} placeholder="e.g. Kitchen" style={input} /></div>
+              <div><div style={tiny}>Room / wall</div><LocationInput value={selected.location ?? ''} onChange={v => p.onUpdate(selected.id, { location: v })} placeholder="e.g. Kitchen" style={input} /></div>
               <div><div style={tiny}>Width</div><Num value={selected.widthMm} onChange={n => p.onUpdate(selected.id, { widthMm: n })} suffix="mm" /></div>
               <div><div style={tiny}>Height</div><Num value={selected.heightMm} onChange={n => p.onUpdate(selected.id, { heightMm: n })} suffix="mm" /></div>
             </div>
