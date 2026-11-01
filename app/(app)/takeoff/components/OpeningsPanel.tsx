@@ -17,7 +17,7 @@ const GROUPS = ['Windows', 'External doors', 'Internal doors'] as const
 const GROUP_COLOUR: Record<(typeof GROUPS)[number], string> = { Windows: '#2b6cb0', 'External doors': '#7c3aed', 'Internal doors': '#b45309' }
 const SWINGS = Object.keys(SWING_LABEL) as WdSwing[]
 
-/** The panel works on one calculator at a time: Windows (windows, and the bi-fold and sliding patio door systems a window fitter installs) or Doors (every other door) */
+/** The panel works on one calculator at a time: Windows or Doors (every door, bi-fold and sliding patio doors included) */
 type Mode = 'windows' | 'doors'
 const modeOf = (k: OpeningKind): Mode => (kindInScope(k, 'windows') ? 'windows' : 'doors')
 const MODE_LABEL: Record<Mode, string> = { windows: 'Windows', doors: 'Doors' }
@@ -95,10 +95,9 @@ export default function OpeningsPanel(p: Props) {
   const otherCount = p.openings.length - mine.length
   const counts = GROUPS.map(g => [g, mine.filter(o => KIND_BY_ID[o.kind]?.group === g).length] as const)
   const countWord = (g: (typeof GROUPS)[number], n: number) => {
-    const one = g === 'Windows' ? 'window' : g === 'Internal doors' ? 'internal door' : mode === 'windows' ? 'patio door' : 'external door'
+    const one = g === 'Windows' ? 'window' : g === 'Internal doors' ? 'internal door' : 'external door'
     return n === 1 ? one : one + 's'
   }
-  const groupTitle = (g: (typeof GROUPS)[number]) => (g === 'External doors' && mode === 'windows' ? 'Patio doors (priced with the windows)' : g)
 
   return (
     <div style={{ padding: 12 }}>
@@ -115,8 +114,8 @@ export default function OpeningsPanel(p: Props) {
         </select>
         <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>
           {mode === 'windows'
-            ? 'Bi-fold and sliding patio door systems are here too: a window fitter installs them, so they are priced in the Windows calculator.'
-            : 'Front, back, composite, security, French, garage and internal doors. Bi-fold and sliding patio doors are under Windows.'}
+            ? 'Casement, tilt-and-turn, fixed, sash and bay windows.'
+            : 'Front, back, composite, security, French, bi-fold, sliding patio, garage and internal doors.'}
         </div>
       </div>
 
@@ -130,7 +129,7 @@ export default function OpeningsPanel(p: Props) {
         <div style={label}>Next {mode === 'windows' ? 'window' : 'door'} to place</div>
         {GROUPS.filter(g => KINDS.some(k => k.group === g && kindInScope(k.id, mode))).map(g => (
           <div key={g} style={{ marginBottom: 6 }}>
-            <div style={{ fontSize: 10, color: GROUP_COLOUR[g], fontWeight: 700, marginBottom: 3 }}>{groupTitle(g)}</div>
+            <div style={{ fontSize: 10, color: GROUP_COLOUR[g], fontWeight: 700, marginBottom: 3 }}>{g}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {KINDS.filter(k => k.group === g && kindInScope(k.id, mode)).map(k => {
                 const on = p.kind === k.id

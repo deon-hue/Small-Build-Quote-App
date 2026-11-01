@@ -28,7 +28,7 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** the doors and windows placed on the Take-off drawing: they are added here, and follow the drawing until typed over */
   planOpenings?: PlanOpening[]
-  /** which calculator it is: the windows one (windows and the bi-fold and sliding door systems), the doors one (every other door), or the older one with both, kept for quotes already saved */
+  /** which calculator it is: the windows one (windows only), the doors one (every door), or the older one with both, kept for quotes already saved */
   scope?: WdScope
 }
 
@@ -51,10 +51,10 @@ function nextRef(openings: WdOpening[], kind: OpeningKind): string {
 
 export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [], planOpenings: allPlanOpenings, scope = 'all' }: Props) {
   const ID = SCOPE_ID[scope]
-  // only the openings that belong to this calculator are fed to it from the plan: a window or bi-fold to the windows one, any other door to the doors one
+  // only the openings that belong to this calculator are fed to it from the plan: a window to the windows one, any door (bi-fold included) to the doors one
   const planOpenings = allPlanOpenings ? allPlanOpenings.filter(p => kindInScope(p.kind, scope)) : undefined
   const scopeKinds = KINDS.filter(k => kindInScope(k.id, scope))
-  const groupLabel = (g: (typeof GROUPS)[number]) => (scope === 'windows' && g === 'External doors' ? 'Bi-fold and sliding doors' : g)
+  const groupLabel = (g: (typeof GROUPS)[number]) => g
   const groups = GROUPS.filter(g => scopeKinds.some(k => k.group === g))
   // The job starts with no openings: you add the ones the job has
   const [openings, setOpenings] = useCalcState<WdOpening[]>(ID, 'openings', [])

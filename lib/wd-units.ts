@@ -55,9 +55,9 @@ export const KIND_BY_ID: Record<string, KindInfo> = Object.fromEntries(KINDS.map
 export const isInternalDoor = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Internal doors'
 export const isWindow = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Windows'
 
-/** The two calculators the schedule is split into (the older one with both stays for saved quotes): WINDOWS take the windows and the big glazed bi-fold and sliding door systems a window fitter installs; DOORS take every other door */
+/** The two calculators the schedule is split into (the older one with both stays for saved quotes): WINDOWS take the windows only; DOORS take every door, bi-fold and sliding patio doors included (they sat under Windows until 2026-11-01) */
 export type WdScope = 'all' | 'windows' | 'doors'
-export const WINDOWS_SCOPE_KINDS: OpeningKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay', 'door-bifold', 'door-sliding']
+export const WINDOWS_SCOPE_KINDS: OpeningKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay']
 export const kindInScope = (kind: OpeningKind, scope: WdScope): boolean => scope === 'all' || WINDOWS_SCOPE_KINDS.includes(kind) === (scope === 'windows')
 
 export const MATERIAL_LABEL: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'Aluminium', timber: 'Timber', composite: 'Composite', steel: 'Steel' }
