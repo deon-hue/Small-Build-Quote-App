@@ -8,6 +8,7 @@
  */
 
 import React, { useMemo, useEffect } from 'react'
+import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -155,7 +156,7 @@ export default function AssemblyFloorOverlayDemo({ onClose, onSave, labourTrades
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <input value={name} onChange={e => setName(e.target.value)} style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', flex: 1, border: 'none', outline: 'none', background: 'transparent' }} />
-        <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Room / location" title="Which room or location this is — becomes the quote's room grouping when saved"
+        <LocationInput value={location} onChange={setLocation} placeholder="Room / location" title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0369a1', width: 140, padding: '4px 8px', border: '1px solid #bae6fd', borderRadius: 5, background: '#f5fbff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
         <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
