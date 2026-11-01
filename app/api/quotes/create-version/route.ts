@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
     const newQuote = {
       user_id: user.id,
       ref: `${rawQuote.ref}-v${nextVersion}`,
-      saved_date: new Date().toISOString(),
-      last_edited: new Date().toISOString(),
+      saved_date: new Date().toLocaleDateString('en-GB', { timeZone: 'Europe/London' }),   // the same dd/mm/yyyy the quote list shows, not a raw timestamp
+      last_edited: new Date().toLocaleDateString('en-GB', { timeZone: 'Europe/London' }),
       status: 'draft',
       job_type: rawQuote.job_type,
       markup: rawQuote.markup,
