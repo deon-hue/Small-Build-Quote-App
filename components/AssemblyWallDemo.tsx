@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
+import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
@@ -317,7 +318,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <input value={name} onChange={e => setName(e.target.value)}
           style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', flex: 1, border: 'none', outline: 'none', background: 'transparent' }} />
-        <input value={location} onChange={e => setLocation(e.target.value)}
+        <LocationInput value={location} onChange={setLocation}
           placeholder="Room / location"
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#7c3aed', width: 140, padding: '4px 8px', border: '1px solid #e9d5ff', borderRadius: 5, background: '#fdfaff' }} />
