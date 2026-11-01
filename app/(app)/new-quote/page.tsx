@@ -1555,7 +1555,7 @@ export default function NewQuotePage() {
 
   /**
    * The take-off's sub-phases go INTO the saved quote `q`: what is in the quote stays, the take-off ones are added beside it (a sub-phase sent before is refreshed in place), and where the quote already has a sub-phase
-   * of the same kind (one priced by hand, say) the estimator chooses to keep both or replace the quote's, each time. The quote is backed up first.
+   * of the same kind (one priced by hand, say) the estimator chooses to keep both or replace the quote's, each time. A copy of the quote is saved as a version ONLY when the estimator chose to replace one of the quote's own sub-phases; adding and refreshing take nothing away, so they never make a version (they used to, which left a stray v2 after every send).
    */
   async function mergeIntoQuote(incoming: QuotePhase[], q: Quote, scopeDraft = '') {
     const existing = (JSON.parse(JSON.stringify(q.phases)) as QuotePhase[]).map(p => ({ ...p, id: ++phaseCounter, items: toTypedItems(p.items).map((i: Omit<QuoteItem, 'id'>) => ({ ...i, id: ++itemCounter })) }))
@@ -1563,7 +1563,8 @@ export default function NewQuotePage() {
     const conflicts = plan.conflicts.map(c => ({ key: c.existing, name: existing[c.existing].phase, count: c.incoming.length }))
     const picked = await askMerge(q.ref, plan.fresh.length, plan.refresh.length, conflicts)
     if (!picked) return   // cancelled: the quote is as it was
-    if (editingId || q.id) await backupQuoteBeforeReplace(q.id)
+    const replacing = conflicts.some(c => picked[c.key] === 'replace')
+    if (replacing && (editingId || q.id)) await backupQuoteBeforeReplace(q.id)
     const merged = applyTakeoffMerge(existing, incoming, plan, picked)
     if (merged.length < existing.length - conflicts.filter(c => picked[c.key] === 'replace').length) { alert('Something went wrong merging the take-off: the quote was not changed.'); return }
     setPhases(merged)
@@ -1575,7 +1576,7 @@ export default function NewQuotePage() {
       else scopeNote = ' Your own scope of works was left as it is.'
     }
     const replaced = conflicts.filter(c => picked[c.key] === 'replace').length
-    alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}. A copy of the quote as it was is saved in its version history.${scopeNote}`)
+    alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}.${replaced ? ' A copy of the quote as it was is saved in its version history.' : ''}${scopeNote}`)
   }
 
   /** What this quote tells Take-off about itself: its id and reference, its job name, and its customer's name and address (they fill the blanks of the take-off it is linked to). */
