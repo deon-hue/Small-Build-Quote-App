@@ -81,7 +81,7 @@ import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, calculatorOverridesMakeup, studWallSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
-import { sidesOf, splitOpenings } from '@/lib/wall-split'
+import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
@@ -2172,6 +2172,53 @@ export default function TakeoffPage() {
     })
     setSelectedId(els[0].id); setEditingElement(els[0]); setEditingItem(items[0])
     showToast(`Split into ${els.length} separate walls. Each starts from the wall type again, so open its calculator and Save & Price it.`)
+  }
+
+  /** The walls whose end meets an end of this wall (within 5 cm), of the same kind, each with its item: the ones that can be made one wall with it */
+  function wallsMeeting(el: DrawnElement): { el: DrawnElement; item: TakeoffItem }[] {
+    if (el.type !== 'line' || (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions')) return []
+    const tol = Math.max(3, 0.05 / (project.calibration.mpp || DEFAULT_MPP))
+    return wallsOnSheet().flatMap(o => {
+      if (o.id === el.id || o.type !== 'line' || o.phase !== el.phase) return []
+      const item = project.items.find(it => it.elementId === o.id)
+      return item && planWallMerge(el.points, o.points, tol).ok ? [{ el: o, item }] : []
+    })
+  }
+
+  /** Makes two walls that meet end to end ONE wall (one run of several sides, one item, one calculator): the first keeps its type, height and direction, the second's doors and windows move onto it, and its saved price starts again because the length has changed */
+  function mergeWalls(aId: string, bId: string) {
+    const A = project.elements.find(e => e.id === aId), B = project.elements.find(e => e.id === bId)
+    const ia = project.items.find(it => it.elementId === aId), ib = project.items.find(it => it.elementId === bId)
+    if (!A || !B || !ia || !ib) { setJoinPair(null); return }
+    if (A.type !== 'line' || B.type !== 'line') { showToast('A rectangle or polygon wall cannot be joined as one: split it into separate walls first'); setJoinPair(null); return }
+    if (A.phase !== B.phase) { showToast('One is an outside wall and the other an inside wall, so they cannot be one wall'); setJoinPair(null); return }
+    const mpp = project.calibration.mpp || DEFAULT_MPP
+    const plan = planWallMerge(A.points, B.points, Math.max(3, 0.05 / mpp))
+    if (!plan.ok) { showToast(plan.reason === 'apart' ? 'Those walls do not meet at an end yet: press Join (meet at the corner) first, then make them one wall' : 'A wall needs two points'); setJoinPair(null); return }
+    const lenA = polyLen(A.points), lenB = polyLen(B.points)
+    const label = (labelOf(A) || A.label).replace(/\s\d+\/\d+$/, '')
+    const merged: DrawnElement = { ...A, points: plan.points, label, tagDx: undefined, tagDy: undefined }
+    const hadPrice = !!(ia.assemblyResult || ib.assemblyResult)
+    const differs = (ia.wallHeight ?? 0) !== (ib.wallHeight ?? 0) || (!!ia.floorMakeupId && !!ib.floorMakeupId && ia.floorMakeupId !== ib.floorMakeupId) || (!!ia.taskSubphaseId && !!ib.taskSubphaseId && ia.taskSubphaseId !== ib.taskSubphaseId)
+    setProject(p => {
+      const elements = p.elements.filter(e => e.id !== bId).map(e => (e.id === aId ? merged : e))
+      const mergedItem: TakeoffItem = {
+        ...ia, name: ia.name.replace(/\s*\(side \d+ of \d+\)$/, ''), assemblyResult: undefined, assemblyCalcState: undefined, drawnOpenings: undefined,
+        openings: [...(ia.openings ?? []), ...(ib.openings ?? [])].length ? [...(ia.openings ?? []), ...(ib.openings ?? [])] : undefined,
+        area: undefined, perimeter: undefined, volume: undefined,
+      }
+      let items = p.items.filter(it => it.elementId !== bId).map(it => (it.elementId === aId ? mergedItem : it))
+      const wd = p.items.find(it => it.wdSummary)
+      if (wd?.placedOpenings?.length) {
+        const placed = mergeOpenings(wd.placedOpenings, aId, bId, lenA, lenB, plan)
+        items = items.map(it => (it.wdSummary ? { ...it, placedOpenings: placed } : it))
+        items = withDrawnOpenings(items, placed.filter(o => elements.some(e => e.id === o.wallId)))
+      }
+      return { ...p, elements, items: recalcItemsForMpp(items, elements, p.calibration.mpp, activeSheetElementIds(p)) }
+    })
+    setJoinFirst(null); setJoinPair(null)
+    setSelectedId(aId); setEditingElement(merged); setEditingItem({ ...ia, assemblyResult: undefined, assemblyCalcState: undefined })
+    showToast(`Now one wall of ${((lenA + lenB) * mpp).toFixed(2)} m.${hadPrice ? ' Open its calculator and Save & Price it again.' : ''}${differs ? ' It took the first wall\'s type and height.' : ''} Ctrl+Z undoes it.`)
   }
 
   /** A room edge: a line that closes a room where there is no wall (or splits an open space). Not a wall: nothing is painted or priced for it. */
@@ -6824,6 +6871,28 @@ export default function TakeoffPage() {
           </div>
         )}
 
+        {/* ── Walls that meet this one end to end can be made one wall (shown for every wall, with or without a calculator) ── */}
+        {showWallLine && !item.notEstimated && (
+          <div style={{ padding: '10px 14px 0' }}>
+          {(() => {
+            // walls that meet this one end to end can be made ONE wall (one item, one calculator for the whole length)
+            const _me = project.elements.find(e => e.id === item.elementId)
+            if (!_me) return null
+            const _meet = wallsMeeting(_me)
+            if (_meet.length === 0) return null
+            const _mm = project.calibration.mpp || DEFAULT_MPP
+            return (
+              <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 6, border: '1px dashed var(--to-border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--to-text)', lineHeight: 1.5, marginBottom: 6 }}>{_meet.length === 1 ? 'Another wall meets this one at its end.' : `${_meet.length} walls meet this one at its ends.`} Make them <strong>one wall</strong> to price the whole length with one calculator (this wall's type and height are kept; the other wall's doors and windows move across).</div>
+                {_meet.map(m => (
+                  <button key={m.el.id} style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', marginRight: 6, marginBottom: 4 }} onClick={() => mergeWalls(_me.id, m.el.id)}>⛓ Make one wall with {labelOf(m.el)} ({(polyLen(m.el.points) * _mm).toFixed(2)} m)</button>
+                ))}
+              </div>
+            )
+          })()}
+          </div>
+        )}
+
         {/* ── Top metrics card (wall phases) ── */}
         {showWallLine && !hideForBuiltAssembly && (
           <div style={{ padding: '10px 14px 0' }}>
@@ -9004,8 +9073,9 @@ export default function TakeoffPage() {
           {/* Two walls picked with Shift-click: join them at the corner */}
           {joinPair && tool === 'select' && (
             <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 7, background: 'var(--to-panel)', border: '1px solid #f97316', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-              <span>Two walls picked (shown in orange): meet them at the corner?</span>
+              <span>Two walls picked (shown in orange): meet them at the corner, or make them one wall?</span>
               <button type="button" onClick={() => { const A = project.elements.find(e => e.id === joinPair.aId), B = project.elements.find(e => e.id === joinPair.bId); if (A && B) joinWalls(A, joinPair.aIdx, B, joinPair.bIdx); else setJoinPair(null) }} style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 700, fontSize: 12, padding: '4px 14px', cursor: 'pointer' }}>Join</button>
+              <button type="button" onClick={() => mergeWalls(joinPair.aId, joinPair.bId)} title="Make the two walls one wall, priced by one calculator (they must already meet at an end: press Join first if they do not)" style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 700, fontSize: 12, padding: '4px 14px', cursor: 'pointer' }}>⛓ Make one wall</button>
               <button type="button" onClick={() => setJoinPair(null)} style={{ background: 'transparent', color: 'var(--to-sub)', border: '1px solid var(--to-border)', borderRadius: 5, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>Cancel</button>
             </div>
           )}
