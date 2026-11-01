@@ -41,3 +41,53 @@ export function splitOpenings(placed: PlacedOpening[], wallId: string, sides: Pt
     return o
   })
 }
+
+// ── Making two walls one: the opposite of splitting ───────────────────────────────────────────────────────────────────────────────────────────
+
+/** The length of a polyline (plan pixels) */
+export function polyLen(pts: Pt[]): number {
+  let t = 0
+  for (let i = 1; i < pts.length; i++) t += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+  return t
+}
+
+export type WallMergePlan =
+  | { ok: true; points: Pt[]; aShift: number; bShift: number; bFlip: boolean; gap: number }
+  | { ok: false; reason: 'apart' | 'short'; gap: number }
+
+/**
+ * Where two walls (each a line of points) meet end to end, and the one run they make together. The first wall keeps its direction; the second is turned round if it was drawn the other way, so the run goes
+ * a ... joint ... b. The ends that are nearest are used; they must be within `tolPx` of each other (the walls must already meet: Join Corner makes them meet exactly). `aShift` and `bShift` say how far along the new
+ * run each wall's own start now is, and `bFlip` that the second wall runs the other way along the run, which is what its doors and windows need to follow (see `mergeOpenings`).
+ */
+export function planWallMerge(a: Pt[], b: Pt[], tolPx: number): WallMergePlan {
+  if (a.length < 2 || b.length < 2) return { ok: false, reason: 'short', gap: Infinity }
+  const aF = a[0], aL = a[a.length - 1], bF = b[0], bL = b[b.length - 1]
+  const d = (p: Pt, q: Pt) => Math.hypot(p.x - q.x, p.y - q.y)
+  const options = [
+    { gap: d(aL, bF), kind: 1 }, // a then b
+    { gap: d(aL, bL), kind: 2 }, // a then b reversed
+    { gap: d(aF, bF), kind: 3 }, // b reversed then a
+    { gap: d(aF, bL), kind: 4 }, // b then a
+  ].sort((x, y) => x.gap - y.gap)
+  const best = options[0]
+  if (best.gap > tolPx) return { ok: false, reason: 'apart', gap: best.gap }
+  const lenA = polyLen(a), lenB = polyLen(b)
+  const clone = (p: Pt[]) => p.map(q => ({ x: q.x, y: q.y }))
+  const rev = (p: Pt[]) => clone(p).reverse()
+  switch (best.kind) {
+    case 1: return { ok: true, points: [...clone(a), ...clone(b).slice(1)], aShift: 0, bShift: lenA, bFlip: false, gap: best.gap }
+    case 2: return { ok: true, points: [...clone(a), ...rev(b).slice(1)], aShift: 0, bShift: lenA, bFlip: true, gap: best.gap }
+    case 3: return { ok: true, points: [...rev(b), ...clone(a).slice(1)], aShift: lenB, bShift: 0, bFlip: true, gap: best.gap }
+    default: return { ok: true, points: [...clone(b), ...clone(a).slice(1)], aShift: lenB, bShift: 0, bFlip: false, gap: best.gap }
+  }
+}
+
+/** The doors and windows placed on either wall, moved onto the merged wall `newId`: each keeps its place along the run (the second wall's distances count from the other end when it was turned round). */
+export function mergeOpenings(placed: PlacedOpening[], aId: string, bId: string, lenA: number, lenB: number, plan: Extract<WallMergePlan, { ok: true }>): PlacedOpening[] {
+  return placed.map(o => {
+    if (o.wallId === aId) return { ...o, wallId: aId, distPx: o.distPx + plan.aShift }
+    if (o.wallId === bId) return { ...o, wallId: aId, distPx: (plan.bFlip ? lenB - o.distPx : o.distPx) + plan.bShift }
+    return o
+  })
+}
