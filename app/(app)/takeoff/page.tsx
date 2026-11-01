@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo, ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -84,7 +85,7 @@ import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, 
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
-import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
+import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
@@ -815,6 +816,10 @@ export default function TakeoffPage() {
   const [openingKind, setOpeningKind] = useState<OpeningKind>('win-casement')
   const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(null)
+  // the little information pop-up when the mouse rests on a name tag (quick reference): which tag, and where the mouse was
+  const [tagTip, setTagTip] = useState<{ id: string; x: number; y: number } | null>(null)
+  const tagTipTimer = useRef<number | null>(null)
+  const tagTipPos = useRef({ x: 0, y: 0 })
   const [rawMouse, setRawMouse] = useState<TakeoffPoint | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
   // Send to Quote asks where it goes when the take-off is not linked to a saved quote: a new quote, or one of the saved quotes (it is then linked to it)
@@ -5536,6 +5541,94 @@ export default function TakeoffPage() {
     return <polygon key={'halo-' + el.id} points={pts} {...common} strokeWidth={base + extra} />
   }
 
+  // ── Hovering a name tag: a small pop-up with what it is, its size, its type, its room and level and its price ──
+  function tipEnter(id: string, e: React.MouseEvent) {
+    tagTipPos.current = { x: e.clientX, y: e.clientY }
+    if (tagTipTimer.current) window.clearTimeout(tagTipTimer.current)
+    tagTipTimer.current = window.setTimeout(() => { if (!tagDragRef.current) setTagTip({ id, x: tagTipPos.current.x, y: tagTipPos.current.y }) }, 300)
+  }
+  function tipLeave() {
+    if (tagTipTimer.current) { window.clearTimeout(tagTipTimer.current); tagTipTimer.current = null }
+    setTagTip(null)
+  }
+  /** What the pop-up says about a tag (a drawing's, or a placed door or window's, id 'op:...'): a title, labelled rows and an optional note */
+  function tagInfo(id: string): { title: string; color: string; rows: [string, string][]; note?: string } | null {
+    const mpp = project.calibration.mpp
+    const money = (n: number) => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const sum = (it?: TakeoffItem) => (it?.assemblyResult ? it.assemblyResult.lines.reduce((s, l) => s + l.cost, 0) : null)
+    const levelOf = (lid?: string) => {
+      const lv = project.levels ?? []
+      return lv.length > 1 ? (lv.find(l => l.id === lid) ?? lv[0])?.name : undefined
+    }
+    const rows: [string, string][] = []
+    if (id.startsWith('op:')) {
+      const o = allPlaced.find(q => 'op:' + q.id === id)
+      if (!o) return null
+      const k = WD_KIND_BY_ID[o.kind]
+      const wallEl = project.elements.find(e => e.id === o.wallId)
+      rows.push(['Size', `${o.widthMm} × ${o.heightMm} mm`])
+      if (hasSwing(o.kind)) rows.push(['Opens', WD_SWING_LABEL[o.swing] ?? o.swing])
+      if (o.location?.trim()) rows.push(['Room', o.location.trim()])
+      if (wallEl) rows.push(['In wall', labelOf(wallEl)])
+      const lv = levelOf(wallEl?.levelId); if (lv) rows.push(['Level', lv])
+      let note: string | undefined
+      if (o.notEstimated) note = 'Drawing only: not priced and not sent to the quote.'
+      else {
+        const scope = kindInScope(o.kind, 'windows') ? 'windows' : 'doors'
+        const card = project.items.find(i => i.wdScopeSummary === scope)
+        const t = sum(card)
+        rows.push(['Priced in', `The ${scope === 'windows' ? 'Windows' : 'Doors'} calculator${t !== null ? ' (card total ' + money(t) + ')' : ': not priced yet'}`])
+      }
+      return { title: `${o.ref} · ${k?.label ?? 'Opening'}`, color: o.notEstimated ? NOT_ESTIMATED_FILL : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext, rows, note }
+    }
+    const el = project.elements.find(e => e.id === id)
+    if (!el) return null
+    const it = project.items.find(i => i.elementId === id)
+    const ws = wallSpecFor(el)
+    rows.push(['Phase', it?.subPhase ? `${it.phase} › ${it.subPhase}` : (it?.phase ?? el.phase)])
+    if (ws) rows.push(['Made of', ws.spec.label])
+    const meas = el.type === 'line' ? `${fmtM(polylineLength(el.points, mpp))} long${it?.wallHeight && el.phase !== 'Foundations' ? ` × ${it.wallHeight} m high` : ''}`
+      : `${fmt2(el.type === 'rect' ? rectArea(el.points, mpp) : polygonArea(el.points, mpp))} m²`
+    rows.push(['Size', meas])
+    if (it && it.unit === 'm²' && it.qty && el.type === 'line') rows.push(['Wall area', `${fmt2(it.area)} m² gross, ${fmt2(it.qty)} m² net of openings`])
+    const nOpen = (it?.drawnOpenings?.length ?? 0) + (it?.openings?.length ?? 0)
+    if (nOpen > 0) rows.push(['Openings', `${nOpen} in this wall`])
+    const room = it?.roomName || it?.assemblyResult?.location
+    if (room) rows.push(['Room', room])
+    const lv = levelOf(el.levelId); if (lv) rows.push(['Level', lv])
+    let note: string | undefined
+    if (it?.notEstimated) note = 'Drawing only: not priced and not sent to the quote.'
+    else if (it) {
+      const t = sum(it)
+      if (t !== null) { rows.push(['Priced', `${money(t)} (from its calculator)`]); if (it.assemblyResult?.description) note = it.assemblyResult.description.length > 220 ? it.assemblyResult.description.slice(0, 217) + '…' : it.assemblyResult.description }
+      else if (resolveBuiltAssembly(it)) rows.push(['Priced', 'Not yet: open its calculator and Save & Price'])
+      if (it.spec?.trim() && !note) note = it.spec.trim().length > 160 ? it.spec.trim().slice(0, 157) + '…' : it.spec.trim()
+    }
+    return { title: labelOf(el) || it?.name || 'Drawing', color: it?.notEstimated ? NOT_ESTIMATED_FILL : el.phase === 'External Walls' ? WALL_LINE_COLOR : el.color, rows, note }
+  }
+  function renderTagTip() {
+    if (!tagTip) return null
+    const info = tagInfo(tagTip.id)
+    if (!info || typeof document === 'undefined') return null
+    const W = 290
+    const left = Math.max(8, Math.min(tagTip.x + 14, window.innerWidth - W - 8))
+    const below = window.innerHeight - tagTip.y > 220
+    return createPortal(
+      <div style={{ position: 'fixed', left, ...(below ? { top: tagTip.y + 16 } : { bottom: window.innerHeight - tagTip.y + 12 }), width: W, zIndex: 99998, pointerEvents: 'none', background: '#1f2937', color: '#f3f4f6', borderRadius: 8, boxShadow: '0 6px 22px rgba(0,0,0,0.4)', border: `1px solid ${info.color}`, borderLeft: `5px solid ${info.color}`, padding: '8px 11px', fontSize: 12, lineHeight: 1.45 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{info.title}</div>
+        {info.rows.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', gap: 8 }}>
+            <span style={{ color: '#9ca3af', minWidth: 62, flexShrink: 0 }}>{k}</span>
+            <span style={{ fontWeight: k === 'Priced' || k === 'Priced in' ? 700 : 400 }}>{v}</span>
+          </div>
+        ))}
+        {info.note && <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid #374151', color: '#d1d5db', fontSize: 11.5 }}>{info.note}</div>}
+        <div style={{ marginTop: 5, fontSize: 10, color: '#6b7280' }}>Click to pick it, drag to move the tag</div>
+      </div>,
+      document.body,
+    )
+  }
+
   // ── A name tag on each drawing: the name and its measurement, the same size on screen at any zoom, movable ──
   function renderTags(els: DrawnElement[]) {
     const mpp = project.calibration.mpp
@@ -5559,7 +5652,7 @@ export default function TakeoffPage() {
       return [{ id: 'op:' + o.id, text: tagText(`${o.ref} · ${WD_KIND_BY_ID[o.kind]?.label ?? 'Opening'}`, size + (o.notEstimated ? ' · drawing only' : ''), 30), ax: at.x, ay: at.y, dx: o.tagDx, dy: o.tagDy }]
     })
     const boxes = layoutTags([...inputs, ...openingInputs], zoom)
-    return boxes.map(t => {
+    const tagNodes = boxes.map(t => {
       if (t.id.startsWith('op:')) {
         // a door's or window's tag: its kind's colour, click to pick the opening, drag to move the tag out of the way
         const o = allPlaced.find(q => 'op:' + q.id === t.id)!
@@ -5570,10 +5663,12 @@ export default function TakeoffPage() {
         const pickOpening = () => { setSelectedOpeningId(o.id); setSelectedId(null); setEditingElement(null); setPanelMode('properties'); setEditingItem(wdItem ?? null) }
         return (
           <g key={'tag-' + t.id} style={{ pointerEvents: interactive ? undefined : 'none', cursor: interactive ? (tagDragRef.current?.id === t.id ? 'grabbing' : 'grab') : 'default' }}
+            onMouseEnter={e => tipEnter(t.id, e)} onMouseMove={e => { tagTipPos.current = { x: e.clientX, y: e.clientY } }} onMouseLeave={tipLeave}
             onClick={e => { e.stopPropagation(); if (interactive) pickOpening() }}
             onMouseDown={e => {
               if (!interactive) return
               e.stopPropagation()
+              tipLeave()
               pickOpening()
               const p = svgCoords(e)
               tagDragRef.current = { id: t.id, sx: p.x, sy: p.y, dx0: o.tagDx ?? 0, dy0: o.tagDy ?? 0 }
@@ -5596,10 +5691,12 @@ export default function TakeoffPage() {
       const fromY = t.y + t.h / 2 < t.ay ? t.y + t.h : t.y
       return (
         <g key={'tag-' + el.id} style={{ pointerEvents: interactive ? undefined : 'none', cursor: interactive ? (tagDragRef.current?.id === el.id ? 'grabbing' : 'grab') : 'default' }}
+          onMouseEnter={e => tipEnter(el.id, e)} onMouseMove={e => { tagTipPos.current = { x: e.clientX, y: e.clientY } }} onMouseLeave={tipLeave}
           onClick={e => { e.stopPropagation(); selectElement(el) }}
           onMouseDown={e => {
             if (!interactive) return
             e.stopPropagation()
+            tipLeave()
             selectElement(el)
             const p = svgCoords(e)
             tagDragRef.current = { id: el.id, sx: p.x, sy: p.y, dx0: el.tagDx ?? 0, dy0: el.tagDy ?? 0 }
@@ -5611,6 +5708,7 @@ export default function TakeoffPage() {
         </g>
       )
     })
+    return <>{tagNodes}{renderTagTip()}</>
   }
 
   // ── Render: in-progress drawing ghost ─────────────────────────────────────
