@@ -3416,7 +3416,7 @@ export default function TakeoffPage() {
       const sKey = sPlan.map(planOpeningSig).join(';') + '#' + sPlan.map(o => o.id).join(',')
       const drawingOnly = livePlaced.filter(o => o.notEstimated && kindInScope(o.kind, scope)).length
       return {
-        key: sid, name: scope === 'windows' ? 'Windows' : 'Doors',
+        key: sid, scope, name: scope === 'windows' ? 'Windows' : 'Doors',
         measureText: `${sPlan.length}${drawingOnly > 0 ? ` (and ${drawingOnly} drawing only)` : ''}`,
         saved: sit?.assemblyResult,
         stale: !!sit?.assemblyResult && sit.wdPricedKey !== undefined && sit.wdPricedKey !== sKey,
