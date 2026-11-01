@@ -9,13 +9,18 @@
 
 import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
-import { KINDS, KIND_BY_ID, SWING_LABEL, type OpeningKind, type WdSwing } from '@/lib/wd-units'
+import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, type OpeningKind, type WdSwing } from '@/lib/wd-units'
 import { hasSwing, type PlacedOpening } from '@/lib/wall-openings'
 import type { CostedLine } from '@/lib/assembly-calc'
 
 const GROUPS = ['Windows', 'External doors', 'Internal doors'] as const
 const GROUP_COLOUR: Record<(typeof GROUPS)[number], string> = { Windows: '#2b6cb0', 'External doors': '#7c3aed', 'Internal doors': '#b45309' }
 const SWINGS = Object.keys(SWING_LABEL) as WdSwing[]
+
+/** The panel works on one calculator at a time: Windows (windows, and the bi-fold and sliding patio door systems a window fitter installs) or Doors (every other door) */
+type Mode = 'windows' | 'doors'
+const modeOf = (k: OpeningKind): Mode => (kindInScope(k, 'windows') ? 'windows' : 'doors')
+const MODE_LABEL: Record<Mode, string> = { windows: 'Windows', doors: 'Doors' }
 
 interface Props {
   openings: PlacedOpening[]
@@ -43,6 +48,8 @@ interface Props {
 }
 export interface OpeningsCard {
   key: string
+  /** which choice at the top of the panel shows this card (the older card with both has none and is always shown) */
+  scope?: Mode
   name: string
   /** what the card says it measures: how many openings are on the plan for it */
   measureText: string
@@ -74,28 +81,58 @@ function Num({ value, onChange, suffix }: { value: number; onChange: (n: number)
 
 export default function OpeningsPanel(p: Props) {
   const selected = p.openings.find(o => o.id === p.selectedId) ?? null
-  const counts = GROUPS.map(g => [g, p.openings.filter(o => KIND_BY_ID[o.kind]?.group === g).length] as const)
+  const [mode, setMode] = useState<Mode>(modeOf(p.kind))
+  // the choice follows the kind being placed and the opening picked on the plan, so the panel never shows the wrong calculator
+  useEffect(() => { setMode(modeOf(p.kind)) }, [p.kind])
+  useEffect(() => { if (selected) setMode(modeOf(selected.kind)) }, [selected?.id, selected?.kind])
+  const chooseMode = (m: Mode) => {
+    setMode(m)
+    if (modeOf(p.kind) !== m) { const first = KINDS.find(k => kindInScope(k.id, m)); if (first) p.onKind(first.id) }
+    if (selected && modeOf(selected.kind) !== m) p.onSelect(null)
+  }
+  const mine = p.openings.filter(o => modeOf(o.kind) === mode)
+  const otherMode: Mode = mode === 'windows' ? 'doors' : 'windows'
+  const otherCount = p.openings.length - mine.length
+  const counts = GROUPS.map(g => [g, mine.filter(o => KIND_BY_ID[o.kind]?.group === g).length] as const)
+  const countWord = (g: (typeof GROUPS)[number], n: number) => {
+    const one = g === 'Windows' ? 'window' : g === 'Internal doors' ? 'internal door' : mode === 'windows' ? 'patio door' : 'external door'
+    return n === 1 ? one : one + 's'
+  }
+  const groupTitle = (g: (typeof GROUPS)[number]) => (g === 'External doors' && mode === 'windows' ? 'Patio doors (priced with the windows)' : g)
 
   return (
     <div style={{ padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-textb)', marginBottom: 2 }}>🪟 Windows &amp; doors</div>
       <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 10, lineHeight: 1.45 }}>
-        Pick a kind of window or door, then click a wall on the plan to put it in. The wall is cut for it and a door shows which way it swings. They are listed here and feed the Windows and Doors calculators below: windows (and bi-fold and sliding patio doors) are priced in the Windows card, every other door in the Doors card.
+        Choose Windows or Doors, pick a kind, then click a wall on the plan to put it in. The wall is cut for it and a door shows which way it swings. Each choice has its own list and its own calculator below.
+      </div>
+
+      <div style={{ ...box, paddingBottom: 8 }}>
+        <div style={label}>I am putting in</div>
+        <select value={mode} onChange={e => chooseMode(e.target.value as Mode)} style={{ ...input, fontWeight: 700, fontSize: 13 }}>
+          <option value="windows">Windows</option>
+          <option value="doors">Doors</option>
+        </select>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>
+          {mode === 'windows'
+            ? 'Bi-fold and sliding patio door systems are here too: a window fitter installs them, so they are priced in the Windows calculator.'
+            : 'Front, back, composite, security, French, garage and internal doors. Bi-fold and sliding patio doors are under Windows.'}
+        </div>
       </div>
 
       <button type="button" onClick={() => p.onPlacing(!p.placing)}
         style={{ width: '100%', padding: '8px 10px', marginBottom: 10, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
           border: `1px solid ${p.placing ? '#16a34a' : 'var(--to-border)'}`, background: p.placing ? '#16a34a' : 'var(--to-alt)', color: p.placing ? '#fff' : 'var(--to-text)' }}>
-        {p.placing ? '● Placing — click a wall (press again to stop)' : '🪟 Start placing windows and doors'}
+        {p.placing ? '● Placing — click a wall (press again to stop)' : `🪟 Start placing ${mode}`}
       </button>
 
       <div style={box}>
-        <div style={label}>Next one to place</div>
-        {GROUPS.map(g => (
+        <div style={label}>Next {mode === 'windows' ? 'window' : 'door'} to place</div>
+        {GROUPS.filter(g => KINDS.some(k => k.group === g && kindInScope(k.id, mode))).map(g => (
           <div key={g} style={{ marginBottom: 6 }}>
-            <div style={{ fontSize: 10, color: GROUP_COLOUR[g], fontWeight: 700, marginBottom: 3 }}>{g}</div>
+            <div style={{ fontSize: 10, color: GROUP_COLOUR[g], fontWeight: 700, marginBottom: 3 }}>{groupTitle(g)}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {KINDS.filter(k => k.group === g).map(k => {
+              {KINDS.filter(k => k.group === g && kindInScope(k.id, mode)).map(k => {
                 const on = p.kind === k.id
                 return (
                   <button key={k.id} type="button" onClick={() => { p.onKind(k.id); p.onPlacing(true) }} title={`${k.label}, ${k.stdW} x ${k.stdH}`}
@@ -126,12 +163,17 @@ export default function OpeningsPanel(p: Props) {
       </div>
 
       <div style={box}>
-        <div style={label}>On the plan — {p.openings.length} opening{p.openings.length === 1 ? '' : 's'}</div>
-        {p.openings.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--to-muted)' }}>None yet. Draw the walls first (External Walls, Internal Walls &amp; Partitions), then click one.</div>}
-        {p.openings.length > 0 && (
-          <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginBottom: 4 }}>{counts.filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g.toLowerCase()}`).join(', ')}</div>
+        <div style={label}>{MODE_LABEL[mode]} on the plan — {mine.length}</div>
+        {mine.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--to-muted)' }}>None yet. Draw the walls first (External Walls, Internal Walls &amp; Partitions), then click one.</div>}
+        {otherCount > 0 && (
+          <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginBottom: 4 }}>
+            And {otherCount} on the {MODE_LABEL[otherMode]} list. <button type="button" onClick={() => chooseMode(otherMode)} style={{ background: 'none', border: 'none', padding: 0, color: '#2b6cb0', cursor: 'pointer', fontSize: 10.5, fontFamily: 'inherit', textDecoration: 'underline' }}>Show {MODE_LABEL[otherMode].toLowerCase()}</button>
+          </div>
         )}
-        {p.openings.map(o => {
+        {mine.length > 0 && (
+          <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginBottom: 4 }}>{counts.filter(([, n]) => n > 0).map(([g, n]) => `${n} ${countWord(g, n)}`).join(', ')}</div>
+        )}
+        {mine.map(o => {
           const on = o.id === p.selectedId
           return (
             <div key={o.id} onClick={() => p.onSelect(on ? null : o.id)}
@@ -184,7 +226,7 @@ export default function OpeningsPanel(p: Props) {
         </div>
       )}
 
-      {p.cards.map(c => (
+      {p.cards.filter(c => !c.scope || c.scope === mode).map(c => (
         <div key={c.key}>
           {c.saved && c.stale && (
             <div style={{ fontSize: 11.5, color: '#d97706', background: 'rgba(217,119,6,0.12)', border: '1px solid #d97706', borderRadius: 6, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>
