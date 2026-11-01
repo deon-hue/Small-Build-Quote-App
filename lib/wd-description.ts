@@ -16,6 +16,9 @@ export interface WdDescriptionInput {
   anyClientSupplied: boolean
   /** which calculator it is: the windows one, the doors one, or the older one with both (the default) */
   scope?: 'all' | 'windows' | 'doors'
+  /** some openings are formed in a new wall or cut in an existing one here (with what goes over them), and whether every opening is */
+  anyOpeningWork?: boolean
+  allOpeningWork?: boolean
 }
 const scopeName = (i: WdDescriptionInput) => (i.scope === 'windows' ? 'Windows' : i.scope === 'doors' ? 'Doors' : 'Windows and doors')
 
@@ -35,6 +38,8 @@ export function describeWd(i: WdDescriptionInput): string {
   if (i.anyProvisional) lines.push('Where a unit is a provisional sum, the price is an allowance: the final price follows the unit chosen.')
   if (i.anyClientSupplied) lines.push('Where the client supplies the unit, we fit it only: the size and delivery are to be confirmed before the opening is closed up.')
   if (i.windows > 0 || i.externalDoors > 0) lines.push(i.scope === 'doors' ? 'Replacement external doors need FENSA or Building Control approval: the certificate is issued after fitting.' : i.scope === 'windows' ? 'Replacement windows and doors need FENSA or Building Control approval: the certificate is issued after fitting.' : 'Replacement windows and external doors need FENSA or Building Control approval: the certificate is issued after fitting.')
-  lines.push('Not included: the lintels, cavity closers and reveals of the openings (priced with the walls), painting and decorating, making good plaster, or any structural work.')
+  if (i.allOpeningWork) lines.push('Not included: plastering the reveals, painting and decorating, making good plaster, or any structural design beyond the lintels and beams listed (the structural engineer\'s calculations only where stated).')
+  else if (i.anyOpeningWork) lines.push('Where an opening is formed or cut in the wall it is described above, with what goes over it; the lintels, cavity closers and reveals of the other openings are priced with their walls. Not included: plastering the reveals, painting and decorating, making good plaster, or any structural design beyond the lintels and beams listed.')
+  else lines.push('Not included: the lintels, cavity closers and reveals of the openings (priced with the walls), painting and decorating, making good plaster, or any structural work.')
   return lines.join('\n')
 }

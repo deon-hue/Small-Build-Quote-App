@@ -14,6 +14,8 @@ import type { CostedLine } from '@/lib/assembly-calc'
 import {
   calculateWindowsDoors, newOpening, unitPrice, mergePlanOpenings, planOpeningSig, KINDS, KIND_BY_ID, isInternalDoor, isWindow, kindInScope, DEFAULT_WD_SITUATIONS,
   MATERIAL_LABEL, GLAZING_LABEL, SUPPLY_LABEL, SWING_LABEL, CILL_LABEL,
+  WALL_LABEL, FORMED_LABEL, LINTEL_LABEL, LINTELS_FOR, BEAM_SIZES, DEFAULT_BEAM, defaultWork, defaultLintel,
+  type OpeningWork, type OpeningFormed, type WdWall, type LintelKind,
   type WdOpening, type PlanOpening, type WdResult, type WdScope, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
 } from '@/lib/wd-units'
 import { describeWd, describeWdShort, type WdDescriptionInput } from '@/lib/wd-description'
@@ -49,6 +51,73 @@ function nextRef(openings: WdOpening[], kind: OpeningKind): string {
   return `${prefix}${used + 1}`
 }
 
+/** The opening in the wall for one opening: not priced here (the wall calculator, or it is already there), formed as a new wall is built, or cut in an existing wall; and what goes over the top. */
+function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: Partial<WdOpening>) => void }) {
+  const w = o.work
+  const setWork = (patch: Partial<OpeningWork>) => w && update(o.id, { work: { ...w, ...patch } })
+  const chooseFormed = (v: string) => {
+    if (v === 'none') { update(o.id, { work: undefined }); return }
+    const formed = v as OpeningFormed
+    update(o.id, { work: w ? { ...w, formed, loadBearing: formed === 'cut-existing' && w.wall !== 'stud', engineer: formed === 'cut-existing' && w.wall !== 'stud' } : defaultWork(o.kind, o.widthMm, formed) })
+  }
+  const chooseWall = (wall: WdWall) => {
+    if (!w) return
+    const lintels = LINTELS_FOR[wall]
+    const lintel: LintelKind = lintels.includes(w.lintel) ? w.lintel : defaultLintel(wall, o.widthMm)
+    const cut = w.formed === 'cut-existing'
+    setWork({ wall, lintel, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, closers: wall === 'cavity', loadBearing: cut && wall !== 'stud', engineer: cut && wall !== 'stud' })
+  }
+  const masonry = !!w && w.wall !== 'stud'
+  return (
+    <div style={{ marginTop: 8, borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+        <PropRow label="The opening in the wall">
+          <select value={w ? w.formed : 'none'} onChange={e => chooseFormed(e.target.value)} style={propInput}>
+            <option value="none">Not priced here (the wall calculator, or already there)</option>
+            {(Object.keys(FORMED_LABEL) as OpeningFormed[]).map(f => <option key={f} value={f}>{FORMED_LABEL[f]}</option>)}
+          </select>
+        </PropRow>
+        {w && (
+          <PropRow label="What kind of wall">
+            <select value={w.wall} onChange={e => chooseWall(e.target.value as WdWall)} style={propInput}>
+              {(Object.keys(WALL_LABEL) as WdWall[]).map(k => <option key={k} value={k}>{WALL_LABEL[k]}</option>)}
+            </select>
+          </PropRow>
+        )}
+        {w && (w.wall === 'solid' || w.wall === 'block') && (
+          <PropRow label="Wall thickness (mm)"><TilingNumInput v={w.thicknessMm} set={n => setWork({ thicknessMm: Math.max(1, n) })} step={5} /></PropRow>
+        )}
+        {w && (
+          <PropRow label="What goes over the top">
+            <select value={w.lintel} onChange={e => setWork({ lintel: e.target.value as LintelKind })} style={propInput}>
+              {LINTELS_FOR[w.wall].map(l => <option key={l} value={l}>{LINTEL_LABEL[l]}</option>)}
+            </select>
+          </PropRow>
+        )}
+        {w && w.lintel === 'steel-beam' && (
+          <PropRow label="Beam section (the designer's)">
+            <select value={w.beamSize || DEFAULT_BEAM} onChange={e => setWork({ beamSize: e.target.value })} style={propInput}>
+              {BEAM_SIZES.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </PropRow>
+        )}
+      </div>
+      {w && (
+        <div style={{ marginTop: 4 }}>
+          {w.wall === 'cavity' && <TilingCheck label="Cavity closers down both jambs (and a tray over a separate lintel)" on={w.closers} set={b => setWork({ closers: b })} />}
+          {w.formed === 'cut-existing' && masonry && <TilingCheck label="It is a load-bearing wall (needles and props)" on={w.loadBearing} set={b => setWork({ loadBearing: b, engineer: b })} />}
+          {w.formed === 'cut-existing' && masonry && w.loadBearing && <TilingCheck label="Include the structural engineer's calculations" on={w.engineer} set={b => setWork({ engineer: b })} />}
+          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>
+            {w.formed === 'new-wall'
+              ? 'Priced here whether we supply the unit or only fit it: the lintel or beam, cavity closers and tray, and the bricklayer\'s time to form the opening. If the wall has its own calculator it prices these too: count them in one place only.'
+              : 'Priced here: cutting the opening, the lintel or beam and its padstones, needles and props, rubble away, the jambs made good and the engineer. Plastering and decorating the reveals are not.'}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [], planOpenings: allPlanOpenings, scope = 'all' }: Props) {
   const ID = SCOPE_ID[scope]
   // only the openings that belong to this calculator are fed to it from the plan: a window to the windows one, any door (bi-fold included) to the doors one
@@ -74,7 +143,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   /** a different kind of opening: its standard size, material and trims (what was typed in the old one's fields is dropped, but the reference, room and number stay) */
   function changeKind(o: WdOpening, kind: OpeningKind) {
     const fresh = newOpening(o.id, nextRef(openings.filter(x => x.id !== o.id), kind), kind, o.location)
-    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan, ...(isInternalDoor(kind) && kind !== 'door-int-pocket' && o.existingFrame ? { existingFrame: true, lining: false } : {}) } : x)))
+    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan, ...(o.work ? { work: o.work } : {}), ...(isInternalDoor(kind) && kind !== 'door-int-pocket' && o.existingFrame ? { existingFrame: true, lining: false } : {}) } : x)))
   }
 
   const result = useMemo((): { ok: true; r: WdResult } | { ok: false; error: string } => {
@@ -88,6 +157,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
     openings: openings.map(o => ({ ref: o.ref, location: o.location, parts: r.openings.find(x => x.openingId === o.id)?.parts ?? [] })).filter(o => o.parts.length > 0),
     windows: count('Windows'), externalDoors: count('External doors'), internalDoors: count('Internal doors'),
     anyProvisional: openings.some(o => o.supply === 'pc'), anyClientSupplied: openings.some(o => o.supply === 'client'), scope,
+    anyOpeningWork: openings.some(o => !!o.work), allOpeningWork: openings.length > 0 && openings.every(o => !!o.work),
   } : null
 
   return (
@@ -178,6 +248,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                       </PropRow>
                     )}
                   </div>
+                  <WorkSection o={o} update={update} />
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     {!internal && <TilingCheck label="Coloured (not white)" on={o.coloured} set={b => update(o.id, { coloured: b })} />}
                     {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Fit to a frame already in the wall (the door is trimmed to fit it)" on={!!o.existingFrame} set={b => update(o.id, { existingFrame: b, lining: !b })} />}
@@ -211,7 +282,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                 {DEFAULT_WD_SITUATIONS.map(s => <option key={s.id} value={s.id}>{s.label}{s.upliftPct ? ` +${s.upliftPct}%` : ''}</option>)}
               </select>
             </PropRow>
-            <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>The extra is added to the fitting hours. The lintels, cavity closers and reveals of each opening are priced with the wall, not here.</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>The extra is added to the fitting hours. Unless an opening says it is formed or cut here, its lintel, cavity closers and reveals are priced with the wall, not here.</div>
           </CollapsibleSection>
         ),
       })}
