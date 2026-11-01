@@ -12,7 +12,7 @@ import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFro
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
 import type { WallRef } from '@/lib/wall-drawing'
 import { guideFromPoints, horizontalGuide, verticalGuide, clipToBox, guideSegments, guideCrossings, signedOffset, nearestGuide, moveGuideThrough, offsetLine, nearestLine, guideName, type Guide, type Box as GuideBox, type PickLine } from '@/lib/guides'
-import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
+import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX, type TagInput } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
@@ -1787,7 +1787,12 @@ export default function TakeoffPage() {
       const pt = svgCoords(e)
       const d = tagDragRef.current
       const dx = d.dx0 + (pt.x - d.sx), dy = d.dy0 + (pt.y - d.sy)
-      setProject(p => ({ ...p, elements: p.elements.map(el => (el.id === d.id ? { ...el, tagDx: dx, tagDy: dy } : el)) }))
+      if (d.id.startsWith('op:')) {
+        const oid = d.id.slice(3)
+        setProject(p => ({ ...p, items: p.items.map(it => (it.wdSummary ? { ...it, placedOpenings: (it.placedOpenings ?? []).map(o => (o.id === oid ? { ...o, tagDx: dx, tagDy: dy } : o)) } : it)) }))
+      } else {
+        setProject(p => ({ ...p, elements: p.elements.map(el => (el.id === d.id ? { ...el, tagDx: dx, tagDy: dy } : el)) }))
+      }
       return
     }
     // a guide being dragged sideways (it snaps to corners and other guides, not to itself)
@@ -5496,8 +5501,43 @@ export default function TakeoffPage() {
       const wsTag = wallSpecFor(el)
       return { id: el.id, text: tagText(labelOf(el) || linked?.name || '', (wsTag ? measure + ' · ' + wsTag.spec.label : measure) + (linked?.notEstimated ? ' · drawing only' : '')), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
     })
-    const boxes = layoutTags(inputs, zoom)
+    // each placed door and window gets a tag too (its reference, kind and size), laid out with the others so they do not sit on each other
+    const wallEls = elementsOnActiveSheet(project)
+    const openingInputs: TagInput[] = hiddenPhases.has('Windows & Doors') || !(mpp > 0) ? [] : allPlaced.flatMap(o => {
+      const wallEl = wallEls.find(e => e.id === o.wallId)
+      const g = wallEl && wallGeometry(wallEl)
+      const at = g && pointAtDist(g.path, g.closed, clampDist(g.path, g.closed, o.distPx, o.widthMm / (mpp * 1000) / 2))
+      if (!at) return []
+      const size = `${(o.widthMm / 1000).toFixed(1)} × ${(o.heightMm / 1000).toFixed(1)}m`
+      return [{ id: 'op:' + o.id, text: tagText(`${o.ref} · ${WD_KIND_BY_ID[o.kind]?.label ?? 'Opening'}`, size + (o.notEstimated ? ' · drawing only' : ''), 30), ax: at.x, ay: at.y, dx: o.tagDx, dy: o.tagDy }]
+    })
+    const boxes = layoutTags([...inputs, ...openingInputs], zoom)
     return boxes.map(t => {
+      if (t.id.startsWith('op:')) {
+        // a door's or window's tag: its kind's colour, click to pick the opening, drag to move the tag out of the way
+        const o = allPlaced.find(q => 'op:' + q.id === t.id)!
+        const sel = selectedOpeningId === o.id
+        const fillC = o.notEstimated ? NOT_ESTIMATED_FILL : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext
+        const interactive = tool === 'select'
+        const fromYo = t.y + t.h / 2 < t.ay ? t.y + t.h : t.y
+        const pickOpening = () => { setSelectedOpeningId(o.id); setSelectedId(null); setEditingElement(null); setPanelMode('properties'); setEditingItem(wdItem ?? null) }
+        return (
+          <g key={'tag-' + t.id} style={{ pointerEvents: interactive ? undefined : 'none', cursor: interactive ? (tagDragRef.current?.id === t.id ? 'grabbing' : 'grab') : 'default' }}
+            onClick={e => { e.stopPropagation(); if (interactive) pickOpening() }}
+            onMouseDown={e => {
+              if (!interactive) return
+              e.stopPropagation()
+              pickOpening()
+              const p = svgCoords(e)
+              tagDragRef.current = { id: t.id, sx: p.x, sy: p.y, dx0: o.tagDx ?? 0, dy0: o.tagDy ?? 0 }
+            }}>
+            <line x1={t.x + t.w / 2} y1={fromYo} x2={t.ax} y2={t.ay} stroke={fillC} strokeWidth={1.5 / zoom} style={{ pointerEvents: 'none' }} />
+            <circle cx={t.ax} cy={t.ay} r={2.5 / zoom} fill={fillC} stroke="#ffffff" strokeWidth={1 / zoom} style={{ pointerEvents: 'none' }} />
+            <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={4 / zoom} fill={fillC} stroke={sel ? '#ffffff' : '#00000055'} strokeWidth={(sel ? 2 : 1) / zoom} />
+            <text x={t.x + t.w / 2} y={t.y + t.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={12 / zoom} fontWeight={600} fill={textColorFor(fillC)} fontFamily="monospace" style={{ pointerEvents: 'none' }}>{t.text}</text>
+          </g>
+        )
+      }
       const el = els.find(e => e.id === t.id)!
       const sel = selectedId === el.id
       const off = project.items.some(it => it.notEstimated && it.elementId === el.id)

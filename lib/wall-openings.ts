@@ -28,6 +28,9 @@ export interface PlacedOpening {
   flipped?: boolean
   /** a drawing only: shown in the wall (the hole stays in it) but not estimated: not given to the Windows & Doors calculator, so not priced */
   notEstimated?: boolean
+  /** where the user dragged its name tag to, as a distance from where the tag sits by itself (plan pixels) */
+  tagDx?: number
+  tagDy?: number
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
