@@ -27,6 +27,9 @@ import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-docu
 import type { QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import ScopeEditor from '@/components/ScopeEditor'
 import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
+import { useLeadOptions } from '@/components/useLeadOptions'
+import LeadPickRows from '@/components/LeadPickRows'
+import { filterLeadOptions, type LeadOption } from '@/lib/lead-options'
 import type { Client } from '@/lib/types'
 
 let itemId = 1000
@@ -45,6 +48,7 @@ export default function QuickQuotePage() {
   const [custEmail, setCustEmail] = useState('')
   const [custPhone, setCustPhone] = useState('')
   const [clientSearch, setClientSearch] = useState('')
+  const leadOpts = useLeadOptions(clients)   // the leads, offered below the clients
   const [clientDrop,   setClientDrop]   = useState(false)
   const [newClientOpen, setNewClientOpen] = useState(false)   // the 'Add a new client' pop-up
   const [contactSaved, setContactSaved] = useState(false)
@@ -86,6 +90,11 @@ export default function QuickQuotePage() {
       })
     : customers
 
+  const filteredLeads = filterLeadOptions(leadOpts, clientSearch)
+  function selectLead(l: LeadOption) {
+    setCustName(l.name); setCustEmail(l.email); setCustPhone(l.phone); setCustAddr(l.address)
+    setClientDrop(false); setClientSearch('')
+  }
   function selectClient(cid: string) {
     const c = clients.find(x => x.id === cid)
     if (!c) return
@@ -246,6 +255,7 @@ export default function QuickQuotePage() {
                   {c.email && <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 12 }}>{c.email}</span>}
                 </div>
               ))}
+              <LeadPickRows leads={filteredLeads} onPick={selectLead} />
               <div
                 onClick={() => { setClientDrop(false); setNewClientOpen(true) }}
                 style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', cursor: 'pointer', borderTop: '1px solid #bbf7d0' }}
