@@ -1451,6 +1451,19 @@ const externalWallsSubphases: PhaseSubphase[] = [
     ],
   },
   {
+    id: 'ew-single-skin-brick-piers',
+    phase: 'External Walls',
+    name: 'Single Skin Brick Wall with Piers (garage / outbuilding)',
+    markupPct: 20,
+    ukWarning: 'A single skin (half-brick) wall is not insulated and not weathertight enough for a heated or lived-in room: it suits a garage, store or outbuilding or a garden wall. The designer must confirm the pier size and spacing, the lintel or beam over a wide door and the ties to the roof, and the foundation is priced separately.',
+    tasks: [
+      t('ew-ssp-labour',      'Bricklaying labour',                    'm²', 20, 0, 0, 0, 0, 0, 'Labour – build single skin half-brick wall with piers, including lintels'),
+      t('ew-ssp-bricks',      'Bricks for the wall',                   'm²', 20, 0, 0, 0, 0, 0, 'Facing or common bricks, one skin (102.5mm) in stretcher bond'),
+      t('ew-ssp-piers',       'Brick piers',                           'nr', 20, 0, 0, 0, 0, 0, 'Brick piers built up with the wall at the ends, along the wall and beside wide openings'),
+      t('ew-ssp-dpc',         'DPC to base of wall and piers',         'lm', 20, 0, 0, 0, 0, 0, 'DPC under the wall and under each pier'),
+    ],
+  },
+  {
     id: 'ew-garden-room-timber',
     phase: 'External Walls',
     name: 'Timber Garden Room Wall',

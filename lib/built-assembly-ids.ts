@@ -10,6 +10,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'ew-blockwork-100',
   'ew-blockwork-215',
   'ew-solid-brick-victorian',
+  'ew-single-skin-brick-piers',
   'ew-garden-room-timber',
   'ew-dwarf-wall',
   'ew-sleeper-wall',

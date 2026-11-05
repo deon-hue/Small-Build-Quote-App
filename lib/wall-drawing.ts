@@ -106,6 +106,15 @@ export function solidBrickSpec(v: Record<string, unknown>): WallSpec | null {
   return make(layers)
 }
 
+/** A single skin brick wall (a garage or outbuilding wall, half a brick thick) from its saved calculator: 102.5mm of brick, rendered outside and plastered inside if the calculator says so. The piers are not drawn. */
+export function singleSkinBrickSpec(v: Record<string, unknown>): WallSpec | null {
+  const layers: WallLayer[] = []
+  if (v.externalFinish && v.externalFinish !== 'none') layers.push({ kind: 'render', mm: 15 })
+  layers.push({ kind: 'brick', mm: 102.5 })
+  if (v.internalFinish && v.internalFinish !== 'none') layers.push({ kind: 'board', mm: 12.5 })
+  return make(layers)
+}
+
 /** A wall from its build-up type's layers (the Back Office wall type): every layer with a thickness, in the order listed. A partial-fill layer with no air gap listed gets the 25mm gap a real partial-fill cavity has. */
 export function specFromMakeupLayers(layers: { name: string; thickness: number }[]): WallSpec | null {
   const out: WallLayer[] = []
@@ -147,6 +156,7 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
     case 'ew-blockwork-215': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 215 }])
     // (a Victorian solid brick wall with nothing saved is drawn the way the calculator starts: one and a half bricks)
     case 'ew-solid-brick-victorian': return solidBrickSpec({})
+    case 'ew-single-skin-brick-piers': return singleSkinBrickSpec({})
     // (a stud partition with nothing saved is drawn the way the calculator starts: boarded both sides, 50mm of acoustic mineral wool between the studs)
     case 'iw-stud-partition': return studWallSpec({}, 'timber')
     case 'iw-metal-stud': return studWallSpec({}, 'metal')
