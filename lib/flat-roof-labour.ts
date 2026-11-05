@@ -43,6 +43,10 @@ export const LABOUR_RATES = {
 
 export interface FlatRoofLabourInput {
   buildUp: 'warm' | 'cold'
+  /** False for an uninsulated roof (a garage): no insulation to lay. True when not given. */
+  insulated?: boolean
+  /** The insulation is laid with the structure (a garage roof priced as its structure), so its hours belong to the structure's trades, not the covering's. */
+  insulationWithStructure?: boolean
   covering: 'epdm' | 'grp' | 'tpo'
   joistSystem: 'c24' | 'c16' | 'posi'
   netAreaM2: number
@@ -129,7 +133,7 @@ export function suggestFlatRoofLabour(i: FlatRoofLabourInput, scope: LabourScope
   out.push(line('carp-fascia', 'carpenter', 'Fix the fascia board', [{ qty: i.fasciaLm, unit: 'lm', what: 'fascia', rate: c.fasciaLm }]))
 
   // Roofer
-  out.push(line('roof-insulation', 'roofer', i.buildUp === 'warm' ? 'Lay the vapour control layer and the insulation' : 'Fit the insulation and vapour control layer',
+  if (i.insulated !== false) out.push(line('roof-insulation', 'roofer', i.buildUp === 'warm' ? 'Lay the vapour control layer and the insulation' : 'Fit the insulation and vapour control layer',
     [{ qty: i.netAreaM2, unit: 'm²', what: '', rate: r.insulationM2 }]))
   out.push(line('roof-covering', 'roofer', COVERING_TASK[i.covering],
     [{ qty: i.membraneAreaM2, unit: 'm²', what: 'covering, upstands and kerbs', rate: r.coveringM2[i.covering] }]))
@@ -181,7 +185,9 @@ export function suggestFlatRoofLabour(i: FlatRoofLabourInput, scope: LabourScope
   out.push(line('fit-rooflights', 'fitter', 'Fit the rooflights (supplied separately)',
     kinds.map(k => ({ qty: i.openings.filter(o => o.kind === k).length, unit: k === 'roof-window' ? 'roof windows' : `${k}s`, what: '', rate: f[k] })), true))
 
-  return out.filter((x): x is LabourSuggestion => x !== null && (scope === 'complete' || SCOPE_OF_KEY[x.key] === scope))
+  // (the insulation of a garage roof priced as its structure is the structure's, not the covering's)
+  const scopeOf = (key: string) => (key === 'roof-insulation' && i.insulationWithStructure ? 'structure' : SCOPE_OF_KEY[key])
+  return out.filter((x): x is LabourSuggestion => x !== null && (scope === 'complete' || scopeOf(x.key) === scope))
 }
 
 // ── Matching a trade to Back Office's own list ─────────────────────────────────

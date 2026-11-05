@@ -22,7 +22,7 @@ import { propInput } from '@/components/assembly-ui'
 export type RoofStructureType = 'flat' | 'mono' | 'gable' | 'hip'
 
 const ROOF_TYPES: { id: RoofStructureType; label: string; built: boolean }[] = [
-  { id: 'flat',  label: 'Flat roof', built: true },
+  { id: 'flat',  label: 'Flat roof (a house, an extension or a garage)', built: true },
   { id: 'mono',  label: 'Mono-pitch / lean-to roof', built: true },
   { id: 'gable', label: 'Pitched roof — gable ends', built: true },
   { id: 'hip',   label: 'Pitched roof — hipped', built: true },
