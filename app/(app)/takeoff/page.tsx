@@ -24,6 +24,11 @@ import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-offi
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
+import TakeoffPrintDialog, { DEFAULT_PRINT_OPTIONS, type PrintOptions, type PrintBuilt } from './components/TakeoffPrintDialog'
+import { drawingsBox, readView, rasterise, type PrintRegion } from '@/lib/takeoff-print-capture'
+import { buildTakeoffPdf } from '@/lib/takeoff-print-pdf'
+import { printLayout, printFileName, printDate, rasterLongSide, stripPrices } from '@/lib/takeoff-print'
+import { buildTakeoffScope } from '@/lib/takeoff-scope'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
 import OpeningsPanel, { type OpeningsCard } from './components/OpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
@@ -823,7 +828,12 @@ export default function TakeoffPage() {
   const [rawMouse, setRawMouse] = useState<TakeoffPoint | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
   // Send to Quote asks where it goes when the take-off is not linked to a saved quote: a new quote, or one of the saved quotes (it is then linked to it)
-  const { quotes: savedQuotes } = useApp()
+  const { quotes: savedQuotes, settings: appSettings } = useApp()
+  // Print the drawing as a PDF (the options are kept per browser)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printOpts, setPrintOpts] = useState<PrintOptions>(DEFAULT_PRINT_OPTIONS)
+  useEffect(() => { try { const s = localStorage.getItem('sbc_takeoff_print'); if (s) setPrintOpts({ ...DEFAULT_PRINT_OPTIONS, ...JSON.parse(s) }) } catch { /* the options start as usual */ } }, [])
+  const changePrintOpts = (o: PrintOptions) => { setPrintOpts(o); try { localStorage.setItem('sbc_takeoff_print', JSON.stringify(o)) } catch { /* not kept */ } }
   const [sendChooser, setSendChooser] = useState(false)
   // a request from the quote page to open one of its take-offs (or a fresh one), acted on once the cloud sync has settled
   const [pendingQuoteOpen, setPendingQuoteOpen] = useState<OpenForQuote | null>(null)
@@ -4459,6 +4469,87 @@ export default function TakeoffPage() {
     a.download = `takeoff-${project.name.replace(/\s+/g, '-')}.json`
     a.click()
     alert('Take-off exported. Use "📐 Import Take-off" in the New Quote page to import it.')
+  }
+
+  // ── Print the drawing (PDF) ───────────────────────────────────────────────
+  /** waits until the screen shows the zoom and pan asked for (the picture is taken from what is drawn) */
+  async function waitForView(z: number, x: number, y: number) {
+    for (let i = 0; i < 60; i++) {
+      const v = svgRef.current ? readView(svgRef.current) : null
+      if (v && Math.abs(v.z - z) < 1e-9 * Math.max(1, z) && Math.abs(v.x - x) < 0.01 && Math.abs(v.y - y) < 0.01) { await new Promise(r => setTimeout(r, 80)); return }
+      await new Promise(r => setTimeout(r, 50))
+    }
+  }
+
+  /** The PDF of the drawing: the view is moved so the part to print fills the canvas, copied to a picture, and put on the page with the key, the title block and the description of the works; then the screen is put back. No prices. */
+  async function buildPrintPdf(o: PrintOptions): Promise<PrintBuilt> {
+    const svg = svgRef.current
+    if (!svg) throw new Error('The drawing is not showing.')
+    const saved = { zoom, pan: panOffset, grid: showGrid, tool, sel: selectedId }
+    const imgSize = canvasImgSize
+    const iw = imgSize?.w ?? svgSize.w, ih = imgSize?.h ?? svgSize.h
+    try {
+      clearViewState(); setTool('select'); setShowGrid(true)   // (the grid is on so the wall hatching patterns exist; the grid itself is not printed)
+      let region: PrintRegion
+      if (o.part === 'view') {
+        region = { x: -panOffset.x / zoom, y: -panOffset.y / zoom, w: svgSize.w / zoom, h: svgSize.h / zoom }
+        await waitForView(zoom, panOffset.x, panOffset.y)
+      } else {
+        const z0 = Math.min(svgSize.w / iw, svgSize.h / ih) * 0.95
+        const p0 = { x: (svgSize.w - iw * z0) / 2, y: (svgSize.h - ih * z0) / 2 }
+        setZoom(z0); setPanOffset(p0)
+        await waitForView(z0, p0.x, p0.y)
+        if (o.part === 'sheet') region = { x: 0, y: 0, w: iw, h: ih }
+        else {
+          const box = drawingsBox(svg, imgSize)
+          if (!box) throw new Error('There is nothing drawn on this sheet to print.')
+          const pad = Math.max(40, Math.max(box.w, box.h) * 0.04)
+          region = { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad }
+          const z1 = Math.min(svgSize.w / region.w, svgSize.h / region.h) * 0.96
+          const p1 = { x: (svgSize.w - region.w * z1) / 2 - region.x * z1, y: (svgSize.h - region.h * z1) / 2 - region.y * z1 }
+          setZoom(z1); setPanOffset(p1)
+          await waitForView(z1, p1.x, p1.y)
+        }
+      }
+      const pic = await rasterise({ svg, planImage, imgSize, region, fade: viewFade, longSide: rasterLongSide(o.paper), withPlan: o.withPlan })
+
+      // what the colours are: the phases drawn on this sheet and level that are showing
+      const shown = elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase))
+      const key = TAKEOFF_PHASES.filter(ph => shown.some(e => e.phase === ph)).map(ph => ({ label: ph as string, color: PHASE_COLORS[ph] }))
+      const shownIds = new Set(shown.map(e => e.id))
+      if (project.items.some(it => it.notEstimated && it.elementId && shownIds.has(it.elementId))) key.push({ label: 'Drawing only (not part of the works)', color: '#9ca3af' })
+
+      // the description of the works, in words, from the take-off (no prices)
+      let description = ''
+      if (o.description) {
+        const lid = activeLevelId
+        const items = project.items.filter(it => {
+          if (it.notEstimated || wdItemEmpty(it)) return false
+          if (o.descriptionOf === 'all') return true
+          const sid = itemSheetId(it, project)
+          if (sid && sid !== activeSheetId) return false
+          const il = itemLevelId(it, project)
+          return !lid || !it.elementId || !il || il === lid
+        })
+        const address = project.siteAddress || project.address || project.client?.address || ''
+        description = stripPrices(buildTakeoffScope({ items, jobType: project.jobType, address, makeupName: id => allWallMakeups.find(m => m.id === id)?.name }))   // a printout carries no prices, whatever a calculator's words say
+      }
+
+      const sheet = activeSheetId ? sheetName(project, activeSheetId) : ''
+      const level = activeLevelId ? levelName(project, activeLevelId) : ''
+      const scaleSet = project.sheets?.find(s => s.id === activeSheetId)?.scaleSet !== false
+      const title = project.projectName || project.name || project.takeoffRef || ''
+      const layout = { paper: o.paper, region: { w: region.w, h: region.h }, mpp: scaleSet ? project.calibration.mpp : 0, scale: o.scale, titleBlock: o.titleBlock, keyRow: o.keyRow }
+      const L = printLayout(layout)
+      const bytes = await buildTakeoffPdf({
+        layout, jpeg: pic.jpeg, company: appSettings?.name || '', title,
+        client: project.client?.name, address: project.siteAddress || project.address || project.client?.address || '',
+        sheet, level, dateText: printDate(new Date()), key, description,
+      })
+      return { bytes, fileName: printFileName(title, sheet, level), note: L.note, scaleText: L.scaleText }
+    } finally {
+      setZoom(saved.zoom); setPanOffset(saved.pan); setShowGrid(saved.grid); setTool(saved.tool); setSelectedId(saved.sel)
+    }
   }
 
   // ── Send directly to New Quote (no file download) ─────────────────────────
@@ -8904,6 +8995,7 @@ export default function TakeoffPage() {
                   <button style={menuItem} onClick={() => { setOpenMenu(null); importJsonRef.current?.click() }}>📂 Open a backup file (JSON)</button>
                   <button style={menuItem} onClick={() => { setOpenMenu(null); exportJSON(project) }}>💾 Download a backup (JSON)</button>
                   <button style={menuItem} onClick={() => { setOpenMenu(null); exportCSV(project) }}>📊 Download the schedule (CSV)</button>
+                  <button style={menuItem} onClick={() => { setOpenMenu(null); setPrintOpen(true) }} title="A plan printout with a key and a description of the works (no prices): download it, keep it with the take-off or attach it to a quote">🖨 Print the drawing (PDF)…</button>
                 </div>
               )}
             </div>
@@ -9416,15 +9508,14 @@ export default function TakeoffPage() {
               {/* the level underneath, faint and grey, as a guide to draw over (it cannot be clicked, snapped to or worked on) */}
               {viewGhost && (() => {
                 const below = elementsOnGhostLevel(project).filter(el => !hiddenPhases.has(el.phase))
-                return below.length > 0 ? <g style={{ pointerEvents: 'none', filter: 'grayscale(1)' }} opacity={0.28}>{below.map(renderElement)}{renderWallVisuals(below)}</g> : null
+                return below.length > 0 ? <g data-print-hide="1" style={{ pointerEvents: 'none', filter: 'grayscale(1)' }} opacity={0.28}>{below.map(renderElement)}{renderWallVisuals(below)}</g> : null
               })()}
               {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
               {renderOpenings()}
               {renderDimensions()}
-              {renderRoomEditors()}
-              {renderJoinPick()}
+              <g data-print-hide="1">{renderRoomEditors()}{renderJoinPick()}</g>
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
@@ -9619,21 +9710,15 @@ export default function TakeoffPage() {
                 ))
               })()}
 
-              {/* Construction guides, and the one about to be placed */}
-              {renderGuides()}
-              {renderGuideGhost()}
-
-              {/* In-progress ghost */}
-              {renderGhost()}
-
-              {/* Calibration ghost */}
-              {renderCalibGhost()}
-
-              {/* Measure tool */}
-              {renderMeasure()}
-
-              {/* Snap marker */}
-              {renderSnapMarker()}
+              {/* Construction guides, the shape being drawn, the calibration and measure tools and the snap marker: on-screen helpers, never printed (data-print-hide) */}
+              <g data-print-hide="1">
+                {renderGuides()}
+                {renderGuideGhost()}
+                {renderGhost()}
+                {renderCalibGhost()}
+                {renderMeasure()}
+                {renderSnapMarker()}
+              </g>
 
             </g>
 
@@ -10096,6 +10181,17 @@ export default function TakeoffPage() {
       })()}
 
       {/* ── Adding a plan: from this computer or from a customer's files ───── */}
+      {printOpen && (
+        <TakeoffPrintDialog
+          options={printOpts} onOptions={changePrintOpts}
+          hasScale={project.sheets?.find(s => s.id === activeSheetId)?.scaleSet !== false}
+          hasLevels={(project.levels?.length ?? 0) > 0} hasPlan={!!canvasImgSize}
+          userId={userId} projectId={project.id}
+          quotes={savedQuotes.filter(q => q.status !== 'deleted' && q.status !== 'archived' && q.quoteSource !== 'quick').sort((a, b) => (a.id === project.quoteId ? -1 : b.id === project.quoteId ? 1 : String(b.lastEdited).localeCompare(String(a.lastEdited)))).map(q => ({ id: q.id, label: [q.ref, q.title || q.customer?.name].filter(Boolean).join(' · ') }))}
+          linkedQuoteId={project.quoteId}
+          buildPdf={buildPrintPdf} onClose={() => setPrintOpen(false)}
+        />
+      )}
       {sendChooser && (() => {
         // only quotes that can take a take-off: not deleted, filed or accepted (locked), and not a Quick Quote (one lump sum)
         const term = sendQuoteSearch.trim().toLowerCase()
