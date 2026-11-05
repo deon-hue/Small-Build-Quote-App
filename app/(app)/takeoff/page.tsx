@@ -38,7 +38,7 @@ import { newDrainPoint, placedDrainOf, drainPricedKey, nearestDrainPoint, runEnd
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { electricSymbol } from '@/lib/electric-symbols'
-import { roofLookFromState, type RoofLook } from '@/lib/roof-look'
+import { roofLookFromState, roofCoveringLookFromState, type RoofLook, type CoveringLook } from '@/lib/roof-look'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { floorLookOf, ufhLoopPaths, blockBeamLook, boxOf, type FloorLook } from '@/lib/floor-look'
 import { ufhLoopCount, MAX_LOOP_M, PIPE_WASTE } from '@/lib/ufh-units'
@@ -5233,6 +5233,65 @@ export default function TakeoffPage() {
       </g>
     )
   }
+  /** What the surface of a roof drawn with the Roof Coverings calculator looks like on the plan: the material chosen (GRP, EPDM, TPO, concrete or clay tiles, natural or fibre cement slate), not the members under it; null for any other drawing */
+  function roofCoveringLookOf2(el: DrawnElement): CoveringLook | null {
+    if (el.phase !== 'Roof' || el.type === 'line') return null
+    const item = project.items.find(it => it.elementId === el.id)
+    const mpp = project.calibration.mpp
+    if (!item || item.notEstimated || !(mpp > 0)) return null
+    const b = boxOf(el.type === 'rect' ? cornersOf(el) : el.points)
+    if (!(b.w > 0 && b.h > 0)) return null
+    const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
+    return roofCoveringLookFromState(sub?.canonical_id ?? undefined, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: Math.max(b.w, b.h) * mpp * 1000, spanMm: Math.min(b.w, b.h) * mpp * 1000 })
+  }
+  /** The covering painted inside the roof's outline: its colour, and the pattern of the material (a glass mat, welded seams, rows of tiles or slates at their gauge, to the plan's scale, never finer than a few screen pixels), with the ridge and hips of a pitched roof and its name */
+  function coveringLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: CoveringLook): React.ReactNode {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || poly.length < 3) return null
+    const b = boxOf(poly)
+    const horizontal = b.w >= b.h
+    const L = look.lengthMm, S = look.spanMm
+    const P = (x: number, y: number) => (horizontal ? { x: b.minX + (x / L) * b.w, y: b.minY + (y / S) * b.h } : { x: b.minX + (y / S) * b.w, y: b.minY + (x / L) * b.h })
+    const px = (mm: number) => mm / (mpp * 1000)
+    const st = look.style
+    const clipId = 'cv-clip-' + el.id, patId = 'cv-pat-' + el.id
+    const rot = horizontal ? undefined : 'rotate(90)'
+    let pattern: React.ReactNode = null
+    let patterned = false
+    if (st.pattern === 'mat') {
+      const c = 5 / zoom
+      pattern = <pattern id={patId} patternUnits="userSpaceOnUse" width={c} height={c}><path d={`M0 ${c}L${c} 0M0 0L${c} ${c}`} stroke={st.line} strokeOpacity={0.35} strokeWidth={0.6} vectorEffect="non-scaling-stroke" /></pattern>
+      patterned = true
+    } else if (st.pattern === 'seams' && px(1000) * zoom >= 14) {
+      const w = px(1000)
+      pattern = <pattern id={patId} patternUnits="userSpaceOnUse" width={w} height={w} patternTransform={rot}><path d={`M0 0L0 ${w}`} stroke={st.line} strokeOpacity={0.6} strokeWidth={0.9} strokeDasharray="4 2" vectorEffect="non-scaling-stroke" /></pattern>
+      patterned = true
+    } else if (st.pattern === 'courses' && px(look.gaugeMm || st.gaugeMm || 300) * zoom >= 3.5) {
+      const g = px(look.gaugeMm || st.gaugeMm || 300), w = px(st.unitWidthMm ?? 300)
+      // rows run along the eaves (the roof's length); each row's joints sit half a unit along from the row above
+      pattern = (
+        <pattern id={patId} patternUnits="userSpaceOnUse" width={w} height={2 * g} patternTransform={rot}>
+          <path d={`M0 0L${w} 0M0 ${g}L${w} ${g}M0 0L0 ${g}M${w / 2} ${g}L${w / 2} ${2 * g}`} stroke={st.line} strokeOpacity={0.75} strokeWidth={0.7} fill="none" vectorEffect="non-scaling-stroke" />
+        </pattern>
+      )
+      patterned = true
+    }
+    const roles: Record<string, { c: string; w: number }> = { ridge: { c: '#0f766e', w: 2.6 }, hip: { c: '#b45309', w: 2.2 } }
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <defs>
+          <clipPath id={clipId}><polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} /></clipPath>
+          {pattern}
+        </defs>
+        <g clipPath={`url(#${clipId})`}>
+          <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill={st.fill} fillOpacity={0.8} />
+          {patterned && <rect x={b.minX} y={b.minY} width={b.w} height={b.h} fill={`url(#${patId})`} />}
+          {look.lines.map((l, i) => { const a = P(l.x1, l.y1), c = P(l.x2, l.y2); const r = roles[l.role]; return <line key={i} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={r.c} strokeWidth={r.w} vectorEffect="non-scaling-stroke" strokeLinecap="round" /> })}
+        </g>
+        <text x={b.minX + 4 / zoom} y={b.minY + 12 / zoom} fontSize={10 / zoom} fontWeight={700} fontFamily="monospace" fill="#111827" stroke="#fff" strokeWidth={2.5 / zoom} paintOrder="stroke">{look.label}</text>
+      </g>
+    )
+  }
   function floorLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: FloorLook): React.ReactNode {
     const mpp = project.calibration.mpp
     if (!(mpp > 0) || poly.length < 3) return null
@@ -5474,11 +5533,13 @@ export default function TakeoffPage() {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
       const look = floorLookOf2(el)
       const rlook = roofLookOf2(el)
+      const clook = roofCoveringLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <rect x={x} y={y} width={w} height={h} fill={look || rlook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} />
+          <rect x={x} y={y} width={w} height={h} fill={look || rlook || clook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} />
           {look && floorLookLayer(el, cornersOf(el), look)}
           {rlook && roofLookLayer(el, cornersOf(el), rlook)}
+          {clook && coveringLookLayer(el, cornersOf(el), clook)}
           <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {labelOf(el)}
           </text>
@@ -5494,11 +5555,13 @@ export default function TakeoffPage() {
       const mid = centroid(el.points)
       const look = floorLookOf2(el)
       const rlook = roofLookOf2(el)
+      const clook = roofCoveringLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <polygon points={pts} fill={look || rlook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+          <polygon points={pts} fill={look || rlook || clook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
           {look && floorLookLayer(el, el.points, look)}
           {rlook && roofLookLayer(el, el.points, rlook)}
+          {clook && coveringLookLayer(el, el.points, clook)}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {labelOf(el)}
           </text>
