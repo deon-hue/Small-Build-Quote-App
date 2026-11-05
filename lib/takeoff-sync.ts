@@ -252,3 +252,11 @@ export function makeDebouncedSave(debounceMs = 2000) {
     }, debounceMs)
   }
 }
+
+/** The take-offs whose printed drawings a quote can pick up: the ones linked to this quote, and the ones for the same customer (by name, ignoring case), most recently changed first. */
+export function takeoffsForPicker(all: TakeoffSummary[], who: { quoteId?: string; names?: (string | undefined)[] }): TakeoffSummary[] {
+  const names = new Set((who.names ?? []).map(n => (n || '').trim().toLowerCase()).filter(Boolean))
+  return all
+    .filter(t => (!!who.quoteId && t.quoteId === who.quoteId) || (!!t.clientName && names.has(t.clientName.trim().toLowerCase())))
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+}

@@ -12,6 +12,8 @@ import { quotesForClient, jobsForClient } from '@/lib/client-match'
 import { fetchClientFileGroups, isPlanFile } from '@/lib/client-file-groups'
 import { cleanLeadFiles } from '@/lib/lead-files'
 import { findSamePerson } from '@/lib/leads'
+import { listTakeoffSummaries, takeoffsForPicker } from '@/lib/takeoff-sync'
+import { listDrawingPdfs } from '@/lib/takeoff-sheet-cloud'
 import { quoteDisplayTitle, jobDisplayTitle } from '@/lib/utils'
 
 interface PickItem { key: string; name: string; mime: string; size: number; label: string; from: { bucket: string; path: string } | { url: string } }
@@ -92,6 +94,18 @@ export default function QuoteFilePicker({ open, onClose, customer, leadId, exclu
     const run = async () => {
       const out: PickGroup[] = []
       let readError = ''
+      // the printed drawings (PDF) saved with a take-off for this quote or this customer (Print the drawing in Take-off > Save with this take-off)
+      try {
+        const { data: u } = await sb.auth.getUser()
+        const uid = u.user?.id
+        if (uid) {
+          const mine = takeoffsForPicker(await listTakeoffSummaries(sb, uid), { quoteId: excludeQuoteId, names: [client?.name, customer?.name] })
+          for (const t of mine.slice(0, 8)) {
+            const ds = await listDrawingPdfs(sb, uid, t.id)
+            if (ds.length) out.push({ id: 'to-' + t.id, icon: '🖨', title: `Take-off drawings: ${t.name}`, files: ds.map((d): PickItem => ({ key: 'td-' + d.path, name: d.name, mime: 'application/pdf', size: d.size ?? 0, label: 'Printed from the take-off', from: { bucket: 'quote-documents', path: d.path } })) })
+          }
+        }
+      } catch { /* no take-off drawings listed */ }
       if (lead) {
         const files = cleanLeadFiles(lead.client_files).map((f, i): PickItem => ({
           key: `l-${lead.id}-${i}`, name: f.name, mime: mimeOfName(f.name) || (f.isImage ? 'image/jpeg' : ''), size: 0, label: '',
@@ -111,7 +125,7 @@ export default function QuoteFilePicker({ open, onClose, customer, leadId, exclu
     }
     run()
     return () => { cancelled = true }
-  }, [open, client?.id, quoteKey, jobKey, lead?.id, sb]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, client?.id, quoteKey, jobKey, lead?.id, sb, excludeQuoteId, customer?.name]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggle(f: PickItem) {
     setChosen(cur => { const n = { ...cur }; if (n[f.key]) delete n[f.key]; else n[f.key] = f; return n })
@@ -168,7 +182,7 @@ export default function QuoteFilePicker({ open, onClose, customer, leadId, exclu
             </div>
           </div>
           {note && <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, padding: '5px 9px', marginBottom: 8 }}>{note}</div>}
-          {!client && !lead ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>Choose the customer, or the lead, whose files you want to pick from.</div>
+          {!client && !lead && total === 0 && !loading ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>Choose the customer, or the lead, whose files you want to pick from.</div>
             : loading ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>Loading files…</div>
             : total === 0 ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>No pictures or PDFs are filed for {[client?.name, lead ? `the lead ${lead.client_name}` : ''].filter(Boolean).join(' or ')} yet.</div>
             : groups.map(g => (

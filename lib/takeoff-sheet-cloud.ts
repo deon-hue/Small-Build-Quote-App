@@ -106,9 +106,62 @@ export async function deleteProjectPictures(sb: SupabaseClient, userId: string, 
     const folder = folderOf(userId, projectId)
     const { data, error } = await sb.storage.from(BUCKET).list(folder, { limit: 1000 })
     if (error) return false
-    const paths = (data ?? []).map((f: { name: string }) => `${folder}/${f.name}`)
+    const paths = (data ?? []).filter((f: { name: string }) => f.name !== 'drawings').map((f: { name: string }) => `${folder}/${f.name}`)
+    // the printed drawings (PDFs) kept with the take-off are in a folder of their own
+    const { data: pdfs } = await sb.storage.from(BUCKET).list(`${folder}/drawings`, { limit: 1000 })
+    for (const f of pdfs ?? []) paths.push(`${folder}/drawings/${f.name}`)
     if (paths.length === 0) return true
     const { error: rmErr } = await sb.storage.from(BUCKET).remove(paths)
     return !rmErr
   } catch { return false }
+}
+
+// ── Printed drawings (PDF) kept with the take-off ───────────────────────────────────────────────────────────────────────────────
+// A drawing printed from Take-off can be saved with the take-off, so the quote can pick it from there. Same private bucket, a 'drawings' folder inside the take-off's own folder; the file name has a time stamp in front so
+// a second print never replaces the first.
+
+export interface SavedDrawing { path: string; name: string; at: number; size?: number }
+
+const drawingsFolder = (userId: string, projectId: string) => `${folderOf(userId, projectId)}/drawings`
+/** 'k3j2h1-Smith - Plan 1 - drawing.pdf' becomes the stamp 'k3j2h1' and the name 'Smith - Plan 1 - drawing.pdf' */
+export function splitDrawingName(stored: string): { name: string; at: number } {
+  const i = stored.indexOf('-')
+  const stamp = i > 0 ? stored.slice(0, i) : ''
+  const at = stamp && /^[0-9a-z]+$/.test(stamp) ? parseInt(stamp, 36) : 0
+  return i > 0 && at > 1e12 ? { name: stored.slice(i + 1), at } : { name: stored, at: 0 }
+}
+
+/** Saves a printed drawing with the take-off. Never throws. */
+export async function saveDrawingPdf(sb: SupabaseClient, userId: string, projectId: string, fileName: string, bytes: Uint8Array | Blob): Promise<{ path: string } | { error: string }> {
+  try {
+    const safe = fileName.replace(/[^a-zA-Z0-9._ -]/g, '_')
+    const path = `${drawingsFolder(userId, projectId)}/${Date.now().toString(36)}-${safe}`
+    const blob = bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: 'application/pdf' })
+    const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf' })
+    return error ? { error: error.message || 'The drawing could not be saved' } : { path }
+  } catch (e) { return { error: (e as Error)?.message || 'The drawing could not be saved' } }
+}
+
+/** The drawings saved with a take-off, newest first (empty if none or the list could not be read). */
+export async function listDrawingPdfs(sb: SupabaseClient, userId: string, projectId: string): Promise<SavedDrawing[]> {
+  try {
+    const folder = drawingsFolder(userId, projectId)
+    const { data, error } = await sb.storage.from(BUCKET).list(folder, { limit: 200 })
+    if (error || !data) return []
+    return data.filter((f: { name: string }) => /.pdf$/i.test(f.name)).map((f: { name: string; metadata?: { size?: number } | null }) => {
+      const s = splitDrawingName(f.name)
+      return { path: `${folder}/${f.name}`, name: s.name, at: s.at, size: f.metadata?.size }
+    }).sort((a: SavedDrawing, b: SavedDrawing) => b.at - a.at)
+  } catch { return [] }
+}
+
+export async function downloadDrawingPdf(sb: SupabaseClient, path: string): Promise<Blob | null> {
+  try {
+    const { data, error } = await sb.storage.from(BUCKET).download(path)
+    return error || !data ? null : data
+  } catch { return null }
+}
+
+export async function deleteDrawingPdf(sb: SupabaseClient, path: string): Promise<boolean> {
+  try { const { error } = await sb.storage.from(BUCKET).remove([path]); return !error } catch { return false }
 }
