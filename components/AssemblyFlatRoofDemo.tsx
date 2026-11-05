@@ -141,10 +141,12 @@ function lineToLayer(l: { id: string; name: string; product: { unit: 'length' | 
 
 // The layers that are the roof's structure; the gutters' are the drainage lines and the fascia; the rest is the covering.
 const STRUCTURE_LAYER_IDS = new Set(['joists', 'trimmers', 'wall_plate', 'ledger', 'ledger_bolts', 'hangers', 'straps', 'strutting', 'firrings', 'deck', 'eaves_vents', 'kerb_timber', 'kerb_cladding'])
-function layersForPart(layers: AssemblyLayerDef[], part: FlatRoofPart): AssemblyLayerDef[] {
+// A garage roof priced as its structure carries its own insulation (when it has any): the insulation, its adhesive and fixings and the vapour control layer.
+const INSULATION_LAYER_IDS = new Set(['insulation', 'insulation_fix', 'vcl'])
+function layersForPart(layers: AssemblyLayerDef[], part: FlatRoofPart, insulationInStructure = false): AssemblyLayerDef[] {
   if (part === 'complete') return layers
   const isGutter = (id: string) => id.startsWith('drain_') || id === 'fascia'
-  return layers.filter(l => part === 'structure' ? STRUCTURE_LAYER_IDS.has(l.id) : part === 'gutters' ? isGutter(l.id) : !STRUCTURE_LAYER_IDS.has(l.id) && !isGutter(l.id))
+  return layers.filter(l => part === 'structure' ? (STRUCTURE_LAYER_IDS.has(l.id) || (insulationInStructure && INSULATION_LAYER_IDS.has(l.id))) : part === 'gutters' ? isGutter(l.id) : !STRUCTURE_LAYER_IDS.has(l.id) && !isGutter(l.id))
 }
 
 interface LayerOpts {
@@ -153,6 +155,8 @@ interface LayerOpts {
   joistSystem: JoistSystem
   joistDepth: number
   insulationMm: number
+  /** False for an uninsulated roof (a garage): none of the insulation, vapour control layer or ventilation lines. */
+  insulated: boolean
   deck: DeckType
   covering: CoveringType
   fascia: boolean
@@ -195,8 +199,8 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
   layers.push({ id: 'firrings', name: `Tapered firrings for the fall (up to ${Math.round(g.fallMm)}mm)`, category: 'materials', source: 'firringLm', unit: 'lm', unitCost: 3.40, wastePct: 5 })
   layers.push({ id: 'deck', name: `Deck ${DECK[o.deck].label}`, category: 'materials', source: 'netAreaM2', unit: 'sheet', unitCost: DECK[o.deck].perSheet, wastePct: w, coveragePerUnit: SHEET_M2, roundToWhole: true })
 
-  // Insulation
-  if (o.buildUp === 'warm') {
+  // Insulation (none at all for an uninsulated roof)
+  if (!o.insulated) { /* no insulation, vapour control layer or ventilation */ } else if (o.buildUp === 'warm') {
     layers.push({ id: 'vcl', name: 'Vapour control layer', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 0.95, wastePct: w })
     if (o.insulationMm > 0) layers.push({ id: 'insulation', name: `PIR insulation ${o.insulationMm}mm`, category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: +(PIR_PER_M2_PER_MM * o.insulationMm).toFixed(2), wastePct: w })
     layers.push({ id: 'insulation_fix', name: 'Insulation adhesive and fixings', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 1.60 })
@@ -375,6 +379,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
   const [insulationMm, setInsulationMm] = useCalcState('AssemblyFlatRoofDemo', 'insulationMm', buildUpDefault === 'cold' ? 125 : 120)
   const [deck, setDeck] = useCalcState<DeckType>('AssemblyFlatRoofDemo', 'deck', 'ply')
+  // An uninsulated roof (a garage) has no insulation, vapour control layer or ventilation. A GARAGE roof (structure) is a simple flat roof over a garage: it starts uninsulated, and when it is given insulation that is priced with the structure.
+  const [insulated, setInsulated] = useCalcState('AssemblyFlatRoofDemo', 'insulated', true)
+  const [garageRoof, setGarageRoof] = useCalcState('AssemblyFlatRoofDemo', 'garageRoof', false)
+  const insulationInStructure = part === 'structure' && garageRoof && insulated
   const [covering, setCovering] = useCalcState<CoveringType>('AssemblyFlatRoofDemo', 'covering', 'grp')   // most of the roofs are Cure It GRP
   const [fascia, setFascia] = useCalcState('AssemblyFlatRoofDemo', 'fascia', false)
   // The trims chosen for each place, and any added by hand. Picks are per covering: changing the covering starts them afresh.
@@ -512,7 +520,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   // The parapet's masonry runs from the top of the wall the roof sits on to the top of the parapet: the
   // roof's own build-up above the wall head, plus the parapet's height above the finished roof.
-  const roofBuildUpMm = joistDepth + DECK_MM + (buildUp === 'warm' ? insulationMm : 0) + COVERING_MM
+  const roofBuildUpMm = joistDepth + DECK_MM + (buildUp === 'warm' && insulated ? insulationMm : 0) + COVERING_MM
   const parapetMasonryHeightMm = roofBuildUpMm + parapetHeightMm
 
   const input: FlatRoofInput = {
@@ -575,7 +583,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const qtyOfLines = (lines: { product: { slot?: string; unit: string; code: string }; id: string; qty: number }[], test: (l: { product: { slot?: string; unit: string; code: string }; id: string; qty: number }) => boolean) =>
     lines.filter(test).reduce((sum, l) => sum + l.qty, 0)
   const labourSuggestions: LabourSuggestion[] = g ? suggestFlatRoofLabour({
-    buildUp, covering, joistSystem,
+    buildUp, covering, joistSystem, insulated, insulationWithStructure: insulationInStructure,
     netAreaM2: g.netAreaM2, membraneAreaM2: g.membraneAreaM2, joistCount: g.joistCount, ledgerLm: g.ledgerLm, wallPlateLm: g.wallPlateLm,
     strutCount: g.strutCount, firringLm: g.firringLm, trimmerLm: g.trimLm, kerbLm: g.kerbLm,
     openings: openings.map(o => ({ kind: o.kind })),
@@ -604,7 +612,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const descriptionInput: FlatRoofDescriptionInput | null = g ? {
     buildUp, lengthMm, widthMm, fallRatio, joistSystem, joistDepth, centresMm,
     deckLabel: DECK[deck].label, strutting: joistSystem !== 'posi' && g.strutCount > 0,
-    insulationMm, covering, fascia, downpipes, edges,
+    insulationMm, covering, fascia, downpipes, edges, insulated, insulationWithStructure: insulationInStructure, garage: part === 'structure' && garageRoof,
     brand: covering === 'grp' ? 'Cure It' : undefined,
     gutterLabel: DRAIN_SYSTEM_DESCRIPTION[drainSystem],
     wallFlashing: trims.picks.abutment_flashing === NONE ? 'none'
@@ -631,11 +639,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const base = buildFlatRoofLayers({
-      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, includeParapet: showParapetBuild, trimLines: trims.lines, drainLines: drain.lines, g: geometryResult.geometry,
+      wastePct, buildUp, joistSystem, joistDepth, insulationMm, insulated, deck, covering, fascia, downpipes, parapetType, includeParapet: showParapetBuild, trimLines: trims.lines, drainLines: drain.lines, g: geometryResult.geometry,
     })
-    return layersForPart(base, part).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+    return layersForPart(base, part, insulationInStructure).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimKey, drainKey, rateOverrides])
+  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, insulated, insulationInStructure, deck, covering, fascia, downpipes, parapetType, trimKey, drainKey, rateOverrides])
 
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
@@ -837,9 +845,41 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 <option value="cold">Cold roof — insulation between the joists</option>
               </select>
             </PropRow>
+            {part === 'structure' && (
+              <div style={{ marginTop: 6, padding: '6px 8px', border: '1px dashed #bae6fd', borderRadius: 6, background: '#f8fcff' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#0c4a6e', fontWeight: 600, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={garageRoof} onChange={e => { setGarageRoof(e.target.checked); setInsulated(!e.target.checked); setLabourOverride(null) }} />
+                  This is a garage roof (a simple flat roof over a garage)
+                </label>
+                {garageRoof && (
+                  <>
+                    <div style={{ marginTop: 6 }}>
+                      <PropRow label="Insulation">
+                        <select value={insulated ? buildUp : 'none'} onChange={e => { const v = e.target.value; setLabourOverride(null); if (v === 'none') setInsulated(false); else { setInsulated(true); if (v !== buildUp) changeBuildUp(v as FlatRoofBuildUp) } }} style={propInput}>
+                          <option value="none">None: an uninsulated garage roof</option>
+                          <option value="cold">Cold roof: wool between the joists, ventilated</option>
+                          <option value="warm">Warm roof: PIR above the deck</option>
+                        </select>
+                      </PropRow>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                      {insulated
+                        ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
+                        : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {part !== 'structure' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569', marginTop: 6, cursor: 'pointer' }} title="Untick for an uninsulated roof, such as a garage: no insulation, vapour control layer or ventilation is priced">
+                <input type="checkbox" checked={insulated} onChange={e => { setInsulated(e.target.checked); setLabourOverride(null) }} />
+                Insulated roof (untick for an uninsulated one, e.g. a garage)
+              </label>
+            )}
             {(showCovering || showStructure) && (
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                {showCovering && <div style={{ flex: 1 }}><PropRow label={buildUp === 'warm' ? 'PIR (mm)' : 'Wool (mm)'}>{numInput(insulationMm, setInsulationMm)}</PropRow></div>}
+                {((showCovering && insulated) || insulationInStructure) && <div style={{ flex: 1 }}><PropRow label={buildUp === 'warm' ? 'PIR (mm)' : 'Wool (mm)'}>{numInput(insulationMm, setInsulationMm)}</PropRow></div>}
                 {showStructure && (
                   <div style={{ flex: 1 }}>
                     <PropRow label="Fall">

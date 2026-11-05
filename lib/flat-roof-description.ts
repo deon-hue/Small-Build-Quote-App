@@ -37,6 +37,12 @@ export interface FlatRoofDescriptionInput {
   gutterLabel?: string
   /** What covers the top of the upstand at an existing wall; 'lead' when not given. */
   wallFlashing?: 'lead' | 'simulated' | 'cover' | 'none'
+  /** False for an uninsulated roof (a garage): no insulation, vapour control layer or ventilation. True when not given. */
+  insulated?: boolean
+  /** A garage flat roof priced with its structure: its insulation (if it has any) is part of the structure's line. */
+  insulationWithStructure?: boolean
+  /** The roof is a garage roof, a simple flat roof over a garage. */
+  garage?: boolean
 }
 
 const metres = (mm: number) => (mm / 1000).toFixed(2)
@@ -63,11 +69,12 @@ export function describeFlatRoofShort(i: FlatRoofDescriptionInput, part: Describ
   if (part === 'structure') {
     const joists = i.joistSystem === 'posi' ? `${i.joistDepth}mm Posi-joists` : `47×${i.joistDepth} ${i.joistSystem.toUpperCase()} joists`
     const openings = i.openings.length ? ` and ${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}` : ''
-    return `Flat roof structure, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m — ${joists} at ${i.centresMm}mm centres, firrings and deck${openings}.`
+    const ins = i.insulationWithStructure && i.insulated !== false ? `, with ${i.insulationMm}mm ${i.buildUp === 'warm' ? 'PIR' : 'mineral wool'} insulation` : (i.garage && i.insulated === false ? ' (uninsulated)' : '')
+    return `${i.garage ? 'Garage flat roof' : 'Flat roof'} structure, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m — ${joists} at ${i.centresMm}mm centres, firrings and deck${openings}${ins}.`
   }
   if (part === 'covering') {
     const brand = i.covering === 'grp' && i.brand ? ` (${i.brand})` : ''
-    return `Flat roof covering, ${area.toFixed(1)} m² — ${COVERING_SHORT[i.covering]}${brand} covering with ${i.buildUp} roof insulation and edge trims.`
+    return `Flat roof covering, ${area.toFixed(1)} m² — ${COVERING_SHORT[i.covering]}${brand} covering with ${i.insulated === false ? '' : `${i.buildUp} roof insulation and `}edge trims.`
   }
   if (part === 'gutters') {
     const label = i.gutterLabel ?? 'uPVC half-round'
@@ -79,7 +86,7 @@ export function describeFlatRoofShort(i: FlatRoofDescriptionInput, part: Describ
   if (i.parapet && i.parapet.lm > 0) also.push('parapet wall')
   if (i.openings.length) also.push(`${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}`)
   const extras = also.length === 0 ? '' : also.length === 1 ? ` and ${also[0]}` : `, ${also.join(' and ')}`
-  const head = `${i.buildUp === 'warm' ? 'Warm' : 'Cold'} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²)`
+  const head = `${i.insulated === false ? 'Uninsulated' : i.buildUp === 'warm' ? 'Warm' : 'Cold'} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²)`
   return `${head} — ${COVERING_SHORT[i.covering]} covering${extras}.`
 }
 
@@ -91,9 +98,9 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
   const doCovering = whole || part === 'covering'
   const doGutters = whole || part === 'gutters'
 
-  if (whole) lines.push(`Supply and construct a ${i.buildUp} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
-  else if (part === 'structure') lines.push(`Supply and construct the structure of a flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
-  else if (part === 'covering') lines.push(`Supply and lay the insulation and waterproof covering of a ${i.buildUp} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²).`)
+  if (whole) lines.push(`Supply and construct ${i.insulated === false ? 'an uninsulated' : `a ${i.buildUp}`} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  else if (part === 'structure') lines.push(`Supply and construct the structure of a ${i.garage ? 'garage ' : ''}flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  else if (part === 'covering') lines.push(`Supply and lay the ${i.insulated === false ? '' : 'insulation and '}waterproof covering of ${i.insulated === false ? 'an uninsulated' : `a ${i.buildUp}`} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²).`)
   else lines.push('Supply and fix the rainwater goods to the flat roof.')
 
   // Structure
@@ -111,8 +118,10 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
   lines.push(structure)
   }
 
-  // Insulation
-  if (!doCovering) { /* the insulation and covering belong to the covering */ } else if (i.buildUp === 'warm') {
+  // Insulation: with the covering, or (a garage roof) with the structure; none at all when the roof is uninsulated
+  if (i.insulated === false) {
+    if (doCovering || doStructure) lines.push('Insulation: none. This is an uninsulated roof, suitable for an unheated garage or store: no insulation, vapour control layer or ventilation strips are included.')
+  } else if (!(doCovering || (doStructure && i.insulationWithStructure))) { /* the insulation and covering belong to the covering */ } else if (i.buildUp === 'warm') {
     lines.push(i.insulationMm > 0
       ? `Insulation: a vapour control layer over the deck, with ${i.insulationMm}mm rigid PIR insulation bonded above it — the insulation sits on top of the structure, keeping it warm and dry (a warm roof).`
       : 'Insulation: a vapour control layer over the deck.')
@@ -171,7 +180,7 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
   }
 
   if (whole) lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}ceiling and internal finishes below the roof.`)
-  else if (part === 'structure') lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}the insulation, covering and drainage, which are priced separately.`)
+  else if (part === 'structure') lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}${i.insulationWithStructure || i.insulated === false ? '' : 'the insulation, '}the covering and drainage, which are priced separately.`)
   else if (part === 'covering') lines.push('Not included: the roof structure and the drainage, which are priced separately, and ceiling and internal finishes below the roof.')
   else lines.push('Not included: connecting the downpipes to the underground drainage.')
   return lines.join('\n')
