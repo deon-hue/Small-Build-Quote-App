@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { TakeoffProject, TakeoffClient } from '@/lib/takeoff-types'
 import { JOB_TYPES } from '@/lib/utils'
 import { ContactPicker } from '@/components/ContactPicker'
+import { leadOptionsFrom, type LeadRowLite } from '@/lib/lead-options'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,9 @@ interface ClientRow {
   county?: string | null
   postcode?: string | null
   notes?: string | null
+  /** a lead (an enquiry that is not a client yet), listed after the clients: its address is the one text the lead keeps */
+  isLead?: boolean
+  stageLabel?: string
 }
 
 interface Props {
@@ -106,7 +110,16 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
           phone:        c.phone ?? null,
           address_line1:c.address ?? null,  // main clients store full address in one field
         } as ClientRow))
-      setClients([...takeoffClients, ...mainClients])
+      const all = [...takeoffClients, ...mainClients]
+      setClients(all)
+      // the leads too, below the clients (a lead who is already a client, by email or phone, is left out; a lost one too)
+      Promise.resolve(supabase.from('quote_requests').select('id, client_name, client_email, client_phone, project_address, status, created_at').order('created_at', { ascending: false }).limit(300))
+        .then(res => {
+          if (res.error || !Array.isArray(res.data)) return
+          const leads: ClientRow[] = leadOptionsFrom(res.data as LeadRowLite[], all).map(l => ({ id: 'lead:' + l.id, user_id: userId, name: l.name, email: l.email || null, phone: l.phone || null, address_line1: l.address || null, isLead: true, stageLabel: l.stageLabel }))
+          setClients(prev => [...prev.filter(c => !c.isLead), ...leads])
+        })
+        .catch(() => { /* no leads listed */ })
     })
   }, [open, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -193,7 +206,8 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
     } else if (selectedClientId) {
       const c = clients.find(c => c.id === selectedClientId)
       if (c) {
-        clientId = c.id
+        // a lead is not a client yet, so the take-off has no client id for it: it carries the lead's name, contact details and address
+        clientId = c.isLead ? undefined : c.id
         clientSnapshot = clientRowToTakeoffClient(c)
       }
     }
@@ -272,7 +286,7 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
 
           {mode === 'existing' && (
             clientsLoading ? (
-              <p style={{ color: '#888', fontSize: '14px' }}>Loading clients…</p>
+              <p style={{ color: '#888', fontSize: '14px' }}>Loading clients and leads…</p>
             ) : clients.length === 0 ? (
               <p style={{ color: '#888', fontSize: '14px' }}>
                 No clients yet.{' '}
@@ -288,8 +302,8 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
                 <ContactPicker
                   value={selectedClientId}
                   onChange={setSelectedClientId}
-                  contacts={clients}
-                  placeholder="Search client…"
+                  contacts={clients.map(c => (c.isLead ? { id: c.id, name: `${c.name}  ·  lead (${c.stageLabel})` } : c))}
+                  placeholder="Search clients and leads…"
                 />
               </Field>
             )

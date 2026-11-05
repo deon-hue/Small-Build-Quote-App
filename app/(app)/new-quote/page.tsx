@@ -13,6 +13,9 @@ import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import { linkLeadToQuote } from '@/lib/leads-db'
+import { useLeadOptions } from '@/components/useLeadOptions'
+import LeadPickRows from '@/components/LeadPickRows'
+import { filterLeadOptions, type LeadOption } from '@/lib/lead-options'
 import { buildTakeoffScope } from '@/lib/takeoff-scope'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
@@ -365,6 +368,9 @@ export default function NewQuotePage() {
   const scopeHelpModal = useDraggableModal()
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
+  // the leads, offered below the clients; one picked here is the lead this quote is for (linked at the first save, as when the quote is started from the lead)
+  const leadOpts = useLeadOptions(clients)
+  const pickedLeadRef = useRef<string | null>(null)
   const [contactSaved, setContactSaved] = useState(false)
   const [newClientOpen, setNewClientOpen] = useState(false)   // the 'Add a new client' pop-up
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
@@ -1801,9 +1807,18 @@ export default function NewQuotePage() {
       })
     : customers
 
+  const filteredLeads = filterLeadOptions(leadOpts, clientSearch)
+  function selectLead(l: LeadOption) {
+    setCustName(l.name); setCustEmail(l.email); setCustPhone(l.phone); setCustAddr(l.address)
+    leadIdRef.current = l.id; pickedLeadRef.current = l.id
+    setClientDrop(false); setClientSearch('')
+  }
   function selectClient(cid: string) {
     const c = clients.find(x => x.id === cid)
     if (!c) return
+    // a client picked after a lead, in the same quote, takes the lead's link off again (only a link made here: one from 'Start quote' on the lead stays)
+    if (pickedLeadRef.current && leadIdRef.current === pickedLeadRef.current) leadIdRef.current = null
+    pickedLeadRef.current = null
     setCustName(c.name || ''); setCustEmail(c.email || '')
     setCustPhone(c.phone || ''); setCustAddr(c.address || '')
     setClientDrop(false); setClientSearch('')
@@ -2153,6 +2168,7 @@ export default function NewQuotePage() {
                         </div>
                       </div>
                     ))}
+                    <LeadPickRows leads={filteredLeads} onPick={selectLead} />
                     {(clientNameIsNew || filteredClients.length === 0) && (
                       <div onMouseDown={e => { e.preventDefault(); setClientDrop(false); setNewClientOpen(true) }}
                         style={{ padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a', fontWeight: 600, fontSize: 12, borderTop: filteredClients.length > 0 ? '1px solid var(--border)' : 'none', background: '#f0fdf4', position: 'sticky', bottom: 0 }}>
