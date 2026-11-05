@@ -155,6 +155,9 @@ export function roofLook(i: RoofLookInput): RoofLook {
  * drawn size, as the roof calculator starts. `drawn` is the drawn shape's length and span (its longer and shorter sides), used when no size is saved.
  */
 export function roofLookFromState(canonicalId: string | undefined, makeupId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }): RoofLook | null {
+  // (a roof drawn with the Roof Coverings, Gutters, Rooflights or Fascias calculator also carries a flat roof Build-Up Type, which used to give it the members of the structure: only the structure calculator, the whole flat roof, or no calculator at all draws them)
+  const otherRoofCalc = !!canonicalId && canonicalId.startsWith('roof-') && canonicalId !== 'roof-structure' && canonicalId !== 'roof-flat'
+  if (otherRoofCalc) return null
   if (canonicalId !== 'roof-structure' && makeupId !== 'cold_flat_roof' && makeupId !== 'warm_flat_roof') return null
   const v = vals ?? {}
   const saved = (v.AssemblyRoofStructureDemo?.type as string | undefined)
@@ -170,4 +173,69 @@ export function roofLookFromState(canonicalId: string | undefined, makeupId: str
   }
   const s = (kind === 'gable' ? v.AssemblyGableRoofDemo : v.AssemblyHipRoofDemo) ?? {}
   return roofLook({ kind, lengthMm: num(s.lengthMm) ?? drawn.lengthMm, spanMm: num(s.spanMm) ?? drawn.spanMm, centresMm: num(s.rafterCentresMm), endA: typeof s.endA === 'string' ? s.endA : kind === 'hip' ? 'hip' : 'gable', endB: typeof s.endB === 'string' ? s.endB : kind === 'hip' ? 'hip' : 'gable' })
+}
+
+// ── What a roof COVERING looks like on the plan: not the members under it, but the surface on top, in the material chosen ─────────────────────────────────────────────────────────────────────────────────────────────
+
+export type CoveringMaterial = 'grp' | 'epdm' | 'tpo' | 'concrete-tile' | 'clay-tile' | 'natural-slate' | 'fibre-cement-slate'
+export interface CoveringStyle {
+  label: string
+  fill: string
+  line: string
+  /** mat: a glass-fibre mat (fine crossing lines); plain: one colour; seams: welded seams every metre or so; courses: rows of tiles or slates, each row's joints half a unit along from the one above */
+  pattern: 'mat' | 'plain' | 'seams' | 'courses'
+  /** courses: the distance between rows (the batten gauge) and the width of one tile or slate, mm */
+  gaugeMm?: number
+  unitWidthMm?: number
+}
+export const COVERING_STYLE: Record<CoveringMaterial, CoveringStyle> = {
+  'grp': { label: 'GRP (fibreglass) flat roof covering', fill: '#cfd8dc', line: '#607d8b', pattern: 'mat' },
+  'epdm': { label: 'EPDM rubber flat roof covering', fill: '#52525b', line: '#18181b', pattern: 'plain' },
+  'tpo': { label: 'TPO single-ply flat roof covering', fill: '#e4e4e7', line: '#71717a', pattern: 'seams' },
+  'concrete-tile': { label: 'Concrete tile roof covering', fill: '#a8998d', line: '#57534e', pattern: 'courses', gaugeMm: 345, unitWidthMm: 300 },
+  'clay-tile': { label: 'Clay tile roof covering', fill: '#c9683d', line: '#7c2d12', pattern: 'courses', gaugeMm: 100, unitWidthMm: 165 },
+  'natural-slate': { label: 'Natural slate roof covering', fill: '#4b5d70', line: '#1e293b', pattern: 'courses', gaugeMm: 225, unitWidthMm: 250 },
+  'fibre-cement-slate': { label: 'Fibre cement slate roof covering', fill: '#6b7c8f', line: '#334155', pattern: 'courses', gaugeMm: 225, unitWidthMm: 300 },
+}
+const FLAT_COVERINGS: CoveringMaterial[] = ['grp', 'epdm', 'tpo']
+const PITCHED_COVERINGS: CoveringMaterial[] = ['concrete-tile', 'clay-tile', 'natural-slate', 'fibre-cement-slate']
+
+export interface CoveringLook {
+  family: 'flat' | 'pitched'
+  material: CoveringMaterial
+  style: CoveringStyle
+  lengthMm: number
+  spanMm: number
+  /** a pitched roof: the ridge and the hips, as the structure draws them (no members) */
+  lines: RoofLine[]
+  /** the distance between rows of tiles or slates, from the saved batten gauge when there is one */
+  gaugeMm: number
+  /** the words for the plan, e.g. "Concrete tile roof covering, hip roof" */
+  label: string
+}
+
+/**
+ * The look of a roof COVERING from what the screen knows of its item: only the Roof Coverings calculator (`canonicalId` 'roof-covering') has one. The family and material come from its saved state (a flat covering: GRP, EPDM or
+ * single-ply TPO; a pitched covering: concrete or clay tile, natural or fibre cement slate), GRP flat when nothing is saved, as the calculator starts. A pitched covering also shows the ridge and the hips of its roof shape.
+ */
+export function roofCoveringLookFromState(canonicalId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }): CoveringLook | null {
+  if (canonicalId !== 'roof-covering') return null
+  const v = vals ?? {}
+  const pitched = v.AssemblyRoofCoveringDemo?.family === 'pitched'
+  if (!pitched) {
+    const s = v.AssemblyFlatRoofDemo ?? {}
+    const m = FLAT_COVERINGS.includes(s.covering as CoveringMaterial) ? (s.covering as CoveringMaterial) : 'grp'
+    const style = COVERING_STYLE[m]
+    return { family: 'flat', material: m, style, lengthMm: num(s.lengthMm) ?? drawn.lengthMm, spanMm: num(s.widthMm) ?? drawn.spanMm, lines: [], gaugeMm: 0, label: style.label }
+  }
+  const s = v.AssemblyPitchedRoofCoveringDemo ?? {}
+  const m = PITCHED_COVERINGS.includes(s.material as CoveringMaterial) ? (s.material as CoveringMaterial) : 'concrete-tile'
+  const style = COVERING_STYLE[m]
+  const shape: RoofKind = s.roofType === 'mono' || s.roofType === 'hip' || s.roofType === 'gable' ? (s.roofType as RoofKind) : 'gable'
+  const lengthMm = num(s.lengthMm) ?? drawn.lengthMm, spanMm = num(s.spanMm) ?? drawn.spanMm
+  const endA = shape === 'hip' ? (typeof s.hipEndA === 'string' ? s.hipEndA : 'hip') : (typeof s.gableEndA === 'string' ? s.gableEndA : 'gable')
+  const endB = shape === 'hip' ? (typeof s.hipEndB === 'string' ? s.hipEndB : 'hip') : (typeof s.gableEndB === 'string' ? s.gableEndB : 'gable')
+  // only the ridge and the hips of the shape are drawn over the covering, not the rafters under it
+  const lines = shape === 'mono' ? [] : roofLook({ kind: shape, lengthMm, spanMm, endA, endB }).lines.filter(l => l.role === 'ridge' || l.role === 'hip')
+  return { family: 'pitched', material: m, style, lengthMm, spanMm, lines, gaugeMm: num(s.battenGaugeMm) ?? style.gaugeMm ?? 345, label: `${style.label}, ${shape === 'hip' ? 'hipped roof' : shape === 'mono' ? 'mono-pitch roof' : 'gable roof'}` }
 }
