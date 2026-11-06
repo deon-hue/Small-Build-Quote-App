@@ -65,9 +65,11 @@ export type MasonryContext = 'partition' | 'external-wall'
 
 // The internal-face finish — identical whether it's the only face (a partition) or the
 // inside face of an external wall.
-export type FinishType = 'dot-dab' | 'wet-plaster' | 'battened'
+export type FinishType = 'none' | 'dot-dab' | 'wet-plaster' | 'battened'
 export interface FinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[]; boardLayerId: string }
 export const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
+  // bare block (a wall that is to be finished later, or left as it is): no finish materials at all
+  none: { label: 'No finish (bare block)', boardLayerId: '', buildLayers: () => [] },
   'dot-dab': {
     label: 'Dot & dab + plasterboard',
     boardLayerId: 'lining',
@@ -95,9 +97,10 @@ export const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
 
 // The outside face of an external wall — never the same material as the inside, so this is
 // its own separate choice rather than a "both faces" toggle on one finish.
-export type ExternalFinishType = 'render' | 'brick-slip' | 'painted-block'
+export type ExternalFinishType = 'none' | 'render' | 'brick-slip' | 'painted-block'
 export interface ExternalFinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[] }
 export const EXTERNAL_FINISH_CONFIG: Record<ExternalFinishType, ExternalFinishTypeConfig> = {
+  none: { label: 'No finish (bare block)', buildLayers: () => [] },
   render: {
     label: 'Two-coat render',
     buildLayers: wastePct => [
@@ -203,15 +206,15 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
       ? [
           `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high external blockwork wall`,
           BLOCK_TYPE_CONFIG[blockType].label.toLowerCase(),
-          `${EXTERNAL_FINISH_CONFIG[externalFinish].label.toLowerCase()} outside`,
-          `${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()} inside`,
+          externalFinish === 'none' ? 'bare block outside' : `${EXTERNAL_FINISH_CONFIG[externalFinish].label.toLowerCase()} outside`,
+          finishType === 'none' ? 'bare block inside' : `${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()} inside`,
         ]
       : [
           `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high masonry block partition`,
           BLOCK_TYPE_CONFIG[blockType].label.toLowerCase(),
-          `finished with ${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()}`,
+          finishType === 'none' ? 'bare block, no finish' : `finished with ${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()}`,
         ]
-    if (!isExternal && (layerSides[FINISH_TYPE_CONFIG[finishType].boardLayerId] ?? 1) === 2) parts.push('both faces')
+    if (!isExternal && finishType !== 'none' && (layerSides[FINISH_TYPE_CONFIG[finishType].boardLayerId] ?? 1) === 2) parts.push('both faces')
     let text = parts.join(', ') + '.'
     if (openings.length) {
       const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm)`).join(', ')
@@ -220,6 +223,15 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     return text
   }
   const [description, setDescription] = useCalcState('AssemblyMasonryWallDemo', 'description', buildAutoDescription)
+  // the quote wording follows the settings until it is edited by hand (it used to be a snapshot, only changed by the regenerate button)
+  const autoDescription = buildAutoDescription()
+  const lastAutoDescription = useRef(autoDescription)
+  useEffect(() => {
+    if (autoDescription === lastAutoDescription.current) return
+    if (description === lastAutoDescription.current) setDescription(autoDescription)
+    lastAutoDescription.current = autoDescription
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDescription])
 
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyMasonryWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
