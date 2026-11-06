@@ -223,6 +223,15 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     return text
   }
   const [description, setDescription] = useCalcState('AssemblyMasonryWallDemo', 'description', buildAutoDescription)
+  // the quote wording follows the settings until it is edited by hand (it used to be a snapshot, only changed by the regenerate button)
+  const autoDescription = buildAutoDescription()
+  const lastAutoDescription = useRef(autoDescription)
+  useEffect(() => {
+    if (autoDescription === lastAutoDescription.current) return
+    if (description === lastAutoDescription.current) setDescription(autoDescription)
+    lastAutoDescription.current = autoDescription
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDescription])
 
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyMasonryWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
