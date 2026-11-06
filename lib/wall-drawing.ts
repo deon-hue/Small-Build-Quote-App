@@ -168,6 +168,13 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
   }
 }
 
+/** A masonry block partition from its saved calculator (or the way it starts): the 100mm block with plasterboard on both faces, or the bare block when its finish is set to No finish. */
+export function masonryPartitionSpec(v: Record<string, unknown>): WallSpec | null {
+  return v.finishType === 'none'
+    ? make([{ kind: 'block', mm: 100 }])
+    : make([{ kind: 'board', mm: 13 }, { kind: 'block', mm: 100 }, { kind: 'board', mm: 13 }])
+}
+
 /** What a partition of the older "Construction type" list (block, brick, stud) is drawn as: the same make-ups as the partition calculators, with the board on each face. Null for an existing wall or drylining: there is no new wall to draw. */
 export function constructionWallSpec(type: string | undefined): WallSpec | null {
   const board = (mm: number): WallLayer => ({ kind: 'board', mm })
