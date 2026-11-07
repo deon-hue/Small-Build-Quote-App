@@ -59,14 +59,14 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
   const chooseFormed = (v: string) => {
     if (v === 'none') { update(o.id, { work: undefined }); return }
     const formed = v as OpeningFormed
-    update(o.id, { work: w ? { ...w, formed, loadBearing: formed === 'cut-existing' && w.wall !== 'stud', engineer: formed === 'cut-existing' && w.wall !== 'stud' } : defaultWork(o.kind, o.widthMm, formed) })
+    update(o.id, { work: w ? { ...w, formed, loadBearing: formed === 'cut-existing' && w.wall !== 'stud', engineer: formed === 'cut-existing' && w.wall !== 'stud' } : defaultWork(o.kind, o.widthMm, formed, !!o.wallLintel) })
   }
   const chooseWall = (wall: WdWall) => {
     if (!w) return
     const lintels = LINTELS_FOR[wall]
     const lintel: LintelKind = lintels.includes(w.lintel) ? w.lintel : defaultLintel(wall, o.widthMm)
     const cut = w.formed === 'cut-existing'
-    setWork({ wall, lintel, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, closers: wall === 'cavity', loadBearing: cut && wall !== 'stud', engineer: cut && wall !== 'stud' })
+    setWork({ wall, lintel, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, closers: wall === 'cavity' && lintel !== 'by-wall', loadBearing: cut && wall !== 'stud', engineer: cut && wall !== 'stud' })
   }
   const masonry = !!w && w.wall !== 'stud'
   return (
@@ -90,7 +90,7 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
         )}
         {w && (
           <PropRow label="What goes over the top">
-            <select value={w.lintel} onChange={e => setWork({ lintel: e.target.value as LintelKind })} style={propInput}>
+            <select value={w.lintel} onChange={e => setWork(e.target.value === 'by-wall' ? { lintel: 'by-wall', closers: false } : { lintel: e.target.value as LintelKind })} style={propInput}>
               {LINTELS_FOR[w.wall].map(l => <option key={l} value={l}>{LINTEL_LABEL[l]}</option>)}
             </select>
           </PropRow>
@@ -103,6 +103,12 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
           </PropRow>
         )}
       </div>
+      {w && o.wallLintel && w.lintel !== 'by-wall' && w.formed === 'new-wall' && (
+        <div style={{ marginTop: 6, padding: '6px 8px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 11, color: '#92400e', lineHeight: 1.4 }}>
+          The wall this is drawn on already prices a lintel over it. To avoid paying twice, choose <b>Already priced in the wall&apos;s calculator</b> for what goes over the top.
+          <button type="button" onClick={() => setWork({ lintel: 'by-wall', closers: false })} style={{ marginLeft: 8, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Do that</button>
+        </div>
+      )}
       {w && (
         <div style={{ marginTop: 4 }}>
           {w.wall === 'cavity' && <TilingCheck label="Cavity closers down both jambs (and a tray over a separate lintel)" on={w.closers} set={b => setWork({ closers: b })} />}
@@ -110,7 +116,9 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
           {w.formed === 'cut-existing' && masonry && w.loadBearing && <TilingCheck label="Include the structural engineer's calculations" on={w.engineer} set={b => setWork({ engineer: b })} />}
           <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>
             {w.formed === 'new-wall'
-              ? 'Priced here whether we supply the unit or only fit it: the lintel or beam, cavity closers and tray, and the bricklayer\'s time to form the opening. If the wall has its own calculator it prices these too: count them in one place only.'
+              ? (w.lintel === 'by-wall'
+                ? 'Priced here whether we supply the unit or only fit it: the bricklayer\'s time to form the opening. The lintel is left to the wall\'s own calculator, so it is not paid for twice.'
+                : 'Priced here whether we supply the unit or only fit it: the lintel or beam, cavity closers and tray, and the bricklayer\'s time to form the opening. If the wall has its own calculator it prices these too: count them in one place only, or choose "Already priced in the wall\'s calculator" above.')
               : 'Priced here: cutting the opening, the lintel or beam and its padstones, needles and props, rubble away, the jambs made good and the engineer. Plastering and decorating the reveals are not.'}
           </div>
         </div>
