@@ -94,6 +94,9 @@ export interface AssemblyOpening {
   heightMm: number
   offsetMm: number     // distance from the wall's left end to the opening's left (rough) edge
   sillHeightMm: number // 0 for a door — the opening runs down to the sole plate, no sill trimmer
+  /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
+  planId?: string
+  fromPlan?: string
 }
 
 export interface WallInput {

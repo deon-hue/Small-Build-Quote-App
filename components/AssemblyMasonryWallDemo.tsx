@@ -19,6 +19,8 @@
  * lib/assembly-calc.ts, the module built specifically for this construction method.
  */
 
+import { usePlanWallOpenings } from '@/components/usePlanWallOpenings'
+import type { PlanWallOpening } from '@/lib/wall-openings'
 import React, { useMemo, useState, useRef, useEffect } from 'react'
 import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
@@ -142,11 +144,13 @@ interface Props {
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
+  /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
+  planOpenings?: PlanWallOpening[]
   /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
   noSampleOpenings?: boolean
 }
 
-export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings }: Props) {
+export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings }: Props) {
   const isExternal = context === 'external-wall'
   const [name, setName] = useCalcState('AssemblyMasonryWallDemo', 'name', isExternal ? '100mm Blockwork External Wall' : 'Masonry Block Partition')
   const [qty, setQty] = useCalcState('AssemblyMasonryWallDemo', 'qty', 1)
@@ -162,6 +166,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
   const [externalFinish, setExternalFinish] = useCalcState<ExternalFinishType>('AssemblyMasonryWallDemo', 'externalFinish', 'render')
   const [wastePct, setWastePct] = useCalcState('AssemblyMasonryWallDemo', 'wastePct', 10)
   const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyMasonryWallDemo', 'openings', () => (noSampleOpenings ? [] : sampleOpenings(context)))
+  usePlanWallOpenings(planOpenings, setOpenings)
   const [location, setLocation] = useCalcState('AssemblyMasonryWallDemo', 'location', '')
   const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyMasonryWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build blockwork partition', hours: 6 },
