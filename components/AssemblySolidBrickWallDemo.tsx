@@ -48,9 +48,11 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
 }
 
-export default function AssemblySolidBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
+export default function AssemblySolidBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings, initialHeightMm }: Props) {
   const [name, setName] = useCalcState(NS, 'name', 'Solid Brick Wall (Victorian)')
   const [qty, setQty] = useCalcState(NS, 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState(NS, 'lengthMm', externalLengthMm ?? 5000)
@@ -58,7 +60,7 @@ export default function AssemblySolidBrickWallDemo({ onClose, onSave, labourTrad
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState(NS, 'heightMm', 2700)
+  const [heightMm, setHeightMm] = useCalcState(NS, 'heightMm', initialHeightMm ?? 2700)
   const [thickness, setThickness] = useCalcState<BrickThickness>(NS, 'thickness', 'one-half')
   const [bond, setBond] = useCalcState<BrickBond>(NS, 'bond', 'english')
   const [facing, setFacing] = useCalcState<FacingBrick>(NS, 'facing', 'stock-new')

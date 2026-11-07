@@ -167,18 +167,20 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
   /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
   noSampleOpenings?: boolean
 }
 
-export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings }: Props) {
+export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings, initialHeightMm }: Props) {
   const [name, setName] = useCalcState('AssemblyTimberFrameWallDemo', 'name', 'Timber Garden Room Wall')
   const [qty, setQty] = useCalcState('AssemblyTimberFrameWallDemo', 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState('AssemblyTimberFrameWallDemo', 'lengthMm', externalLengthMm ?? 4000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState('AssemblyTimberFrameWallDemo', 'heightMm', 2400)
+  const [heightMm, setHeightMm] = useCalcState('AssemblyTimberFrameWallDemo', 'heightMm', initialHeightMm ?? 2400)
   const [sectionKey, setSectionKey] = useCalcState('AssemblyTimberFrameWallDemo', 'sectionKey', '50x100')
   const [centresMm, setCentresMm] = useCalcState('AssemblyTimberFrameWallDemo', 'centresMm', 400)
   const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyTimberFrameWallDemo', 'doubleTopPlate', false)

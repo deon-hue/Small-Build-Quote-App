@@ -146,11 +146,13 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
   /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
   noSampleOpenings?: boolean
 }
 
-export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings }: Props) {
+export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings, initialHeightMm }: Props) {
   const isExternal = context === 'external-wall'
   const [name, setName] = useCalcState('AssemblyMasonryWallDemo', 'name', isExternal ? '100mm Blockwork External Wall' : 'Masonry Block Partition')
   const [qty, setQty] = useCalcState('AssemblyMasonryWallDemo', 'qty', 1)
@@ -158,7 +160,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState('AssemblyMasonryWallDemo', 'heightMm', 2400)
+  const [heightMm, setHeightMm] = useCalcState('AssemblyMasonryWallDemo', 'heightMm', initialHeightMm ?? 2400)
   const [blockType, setBlockType] = useCalcState<BlockType>('AssemblyMasonryWallDemo', 'blockType', 'concrete')
   // For a partition, this is the wall's only finish. For an external wall, it's the inside
   // face specifically — the outside face is externalFinish below.
