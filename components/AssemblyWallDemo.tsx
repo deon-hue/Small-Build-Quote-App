@@ -125,11 +125,13 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
   /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
   noSampleOpenings?: boolean
 }
 
-export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings }: Props) {
+export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings, initialHeightMm }: Props) {
   const cfg = WALL_SYSTEM_CONFIG[system]
   const [name, setName] = useCalcState('AssemblyWallDemo', 'name', cfg.label)
   const [qty, setQty] = useCalcState('AssemblyWallDemo', 'qty', 1)
@@ -137,7 +139,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState('AssemblyWallDemo', 'heightMm', 2400)
+  const [heightMm, setHeightMm] = useCalcState('AssemblyWallDemo', 'heightMm', initialHeightMm ?? 2400)
   const [centresMm, setCentresMm] = useCalcState('AssemblyWallDemo', 'centresMm', 400)
   const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyWallDemo', 'doubleTopPlate', false)
   const [wastePct, setWastePct] = useCalcState('AssemblyWallDemo', 'wastePct', 10)

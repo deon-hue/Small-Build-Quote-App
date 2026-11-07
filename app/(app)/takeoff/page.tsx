@@ -6727,7 +6727,7 @@ export default function TakeoffPage() {
           // a wall drawn here starts with no window or door: the calculator shows what is drawn on it (cavity walls are fed them), not its own sample
           noSampleOpenings: item.elementId ? true : undefined,
           // a wall starts the calculator at the height it was drawn at (the calculator's own 2.4m used to be taken whatever the wall was, so the wall, 3m in its Properties, was priced 2.4m high)
-          initialHeightMm: isExtWall && (item.wallHeight ?? 0) > 0 ? Math.round((item.wallHeight ?? 0) * 1000) : undefined,
+          initialHeightMm: (isExtWall || isIntWall) && (item.wallHeight ?? 0) > 0 ? Math.round((item.wallHeight ?? 0) * 1000) : undefined,
           basics: isFoundationLine ? { widthMm: item.foundationWidth ?? 600, depthMm: item.foundationDepth ?? 1000 } : undefined,
           planRooms: roomData ? roomInfos : undefined,
           prepScope: _prepCalc ? (item.prepScope ?? (linkedEl?.type === 'line' ? 'walls' : 'floor')) : undefined,

@@ -47,9 +47,11 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
 }
 
-export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
+export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings, initialHeightMm }: Props) {
   const [name, setName] = useCalcState(NS, 'name', 'Single Skin Brick Wall with Piers')
   const [qty, setQty] = useCalcState(NS, 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState(NS, 'lengthMm', externalLengthMm ?? 6000)
@@ -57,7 +59,7 @@ export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labou
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState(NS, 'heightMm', 2400)
+  const [heightMm, setHeightMm] = useCalcState(NS, 'heightMm', initialHeightMm ?? 2400)
   const [brick, setBrick] = useCalcState<SkinBrick>(NS, 'brick', 'machine')
   const [mortar, setMortar] = useCalcState<BrickMortar>(NS, 'mortar', 'cement')
   const [pierWidth, setPierWidth] = useCalcState<PierWidth>(NS, 'pierWidth', 'one-half')

@@ -108,16 +108,18 @@ interface Props {
   externalLengthMm?: number
   /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
   planOpenings?: PlanWallOpening[]
+  /** the height the wall was drawn at in Take-off (mm): where the calculator starts, until a height is saved */
+  initialHeightMm?: number
 }
 
-export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
+export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClose, onSave, labourTrades = [], externalLengthMm, planOpenings, initialHeightMm }: Props) {
   const [name, setName] = useCalcState('AssemblySolidBlockWallDemo', 'name', laidDefault === 'flat' ? 'Concrete Blockwork 215mm (laid flat)' : 'Solid Blockwork Wall')
   const [qty, setQty] = useCalcState('AssemblySolidBlockWallDemo', 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState('AssemblySolidBlockWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useCalcState('AssemblySolidBlockWallDemo', 'heightMm', 2400)
+  const [heightMm, setHeightMm] = useCalcState('AssemblySolidBlockWallDemo', 'heightMm', initialHeightMm ?? 2400)
   const [blockType, setBlockType] = useCalcState<BlockType>('AssemblySolidBlockWallDemo', 'blockType', 'dense')
   const [blockWidthMm, setBlockWidthMm] = useCalcState('AssemblySolidBlockWallDemo', 'blockWidthMm', 100)
   const [laid, setLaid] = useCalcState<BlockLaid>('AssemblySolidBlockWallDemo', 'laid', laidDefault)
