@@ -21,7 +21,8 @@ import { pdfjsResources } from '@/lib/pdfjs-resources'
 import type { TakeoffSheet } from '@/lib/takeoff-types'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
-import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
+import { BUILT_ASSEMBLY_CANON_IDS, type AssemblyRenderOpts } from '@/lib/built-assemblies'
+import { priceCalculatorHeadless } from '@/components/ai-headless-pricing'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
 import TakeoffPrintDialog, { DEFAULT_PRINT_OPTIONS, type PrintOptions, type PrintBuilt } from './components/TakeoffPrintDialog'
@@ -77,6 +78,13 @@ const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors', 'Joinery & Fixtures'])
 /** calculators sized from an AREA drawn on the plan: picking one before drawing starts the Rectangle tool, not the Line tool a phase such as Plumbing & Heating starts with (its Line is a pipe) */
 const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms', 'join-skirting-rooms'])
+/** calculators priced from the DRAWING alone (a wall's length, height and openings, a roof's box, a floor's area, a foundation's length): an item of one of these that was never Saved & Priced is priced by the calculator itself when it is sent to a quote, so it never reaches the quote as the old build-up. The room-by-room and item-by-item calculators are NOT here: what they price is typed in them. */
+const AUTO_PRICE_CALCS = new Set([
+  'iw-stud-partition', 'iw-metal-stud', 'iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-garden-room-timber', 'ew-cav-partial', 'ew-cav-full', 'ew-dwarf-wall', 'ew-sleeper-wall', 'ew-parapet-wall',
+  'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
+  'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete',
+  'fnd-strip', 'fnd-trench-fill', 'fnd-raft', 'fnd-piled', 'fnd-underpin',
+])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import { SharedWallAreasProvider } from '@/components/TilingShareContext'
@@ -4563,17 +4571,38 @@ export default function TakeoffPage() {
     }
   }
 
+  /** What a calculator's panel is given from the drawing, worked out for any item (not only the one selected), for pricing it out of sight when the take-off is sent to a quote */
+  function headlessOptsFor(it: TakeoffItem): Partial<AssemblyRenderOpts> {
+    const el = it.elementId ? project.elements.find(e => e.id === it.elementId) : undefined
+    const isWall = it.phase === 'External Walls' || it.phase === 'Internal Walls & Partitions'
+    const box = it.phase === 'Roof' || (it.phase === 'Foundations' && el && el.type !== 'line') ? drawnBoxMm(it) : undefined
+    const ap = it.phase === 'Floors & Screeds' && el && el.type !== 'line' ? drawnAreaPerimeter(it) : undefined
+    return {
+      externalLengthMm: box ? box.lengthMm : ((it.length ?? 0) > 0 ? Math.round((it.length ?? 0) * 1000) : undefined),
+      externalWidthMm: box?.widthMm,
+      externalAreaM2: ap?.areaM2,
+      externalPerimeterM: ap?.perimeterM,
+      variant: it.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
+      wallOpenings: isWall && it.elementId ? planWallOpenings(livePlaced, it.elementId, project.calibration.mpp) : undefined,
+      noSampleOpenings: it.elementId ? true : undefined,
+      initialHeightMm: isWall && (it.wallHeight ?? 0) > 0 ? Math.round((it.wallHeight ?? 0) * 1000) : undefined,
+      basics: it.phase === 'Foundations' && el?.type === 'line' ? { widthMm: it.foundationWidth ?? 600, depthMm: it.foundationDepth ?? 1000 } : undefined,
+    }
+  }
+
   // ── Send directly to New Quote (no file download) ─────────────────────────
   /** `intoLinked`: send back INTO the saved quote this take-off was opened from (its sub-phases are added to that quote); otherwise a new quote is made */
-  function sendToQuote(intoLinked = false, intoQuoteId?: string) {
+  async function sendToQuote(intoLinked = false, intoQuoteId?: string) {
     const into = intoQuoteId ?? project.quoteId
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
     const sendItems = project.items.filter(it => !it.notEstimated && !wdItemEmpty(it) && !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult) || (it.drainSummary && !it.assemblyResult && !it.drainPoints?.length)))
-    const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
+    const canonOf = (it: TakeoffItem): string | undefined => { const e = resolveBuiltAssembly(it); return e ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === e) : undefined }
+    // an item drawn as a calculator that was never Saved & Priced: one priced from the drawing alone is priced here by the calculator itself; the others (rooms and items typed in the calculator) go as a line with no price
+    const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult && !AUTO_PRICE_CALCS.has(canonOf(it) ?? ''))
     if (unpriced.length > 0 && !window.confirm(
-      `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
+      `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator with nothing priced in it yet:\n\n` +
       unpriced.map(it => `• ${it.name}${it.subPhase ? ` (${it.subPhase})` : ''}`).join('\n') +
       `\n\nOpen each one and press Save & Price to send its calculator price. Items you send unpriced reach the quote as a line for that calculator with no price, to be priced there. Send anyway?`
     )) return
@@ -4589,12 +4618,28 @@ export default function TakeoffPage() {
     if (dr?.assemblyResult && dr.drainPricedKey !== undefined && dr.drainPricedKey !== drainKeyNow && !window.confirm('The chambers, manholes and gullies on the plan have changed since they were priced, so the quote would carry the old price. Open the Chambers, Gullies & Connections calculator and Save & Price it again.\n\nSend anyway?')) return
     if (plumbNotes.length > 0 && !window.confirm('Check the plumbing before it goes to the quote:\n\n' + plumbNotes.map(n => '- ' + n).join('\n') + '\n\nSend anyway?')) return
     const { planImageUrl: _, ...rest } = project
+    // Priced from the drawing alone and never Saved & Priced: the calculator is run here (out of sight, as the AI quote does) on what is drawn, and its own Save & Price pressed, so the quote gets the calculator's price and not the old build-up
+    const autoPriced = new Map<string, { assemblyResult: NonNullable<TakeoffItem['assemblyResult']>; assemblyCalcState?: TakeoffItem['assemblyCalcState']; name: string; roomName?: string }>()
+    const toPrice = sendItems.filter(it => !it.assemblyResult && AUTO_PRICE_CALCS.has(canonOf(it) ?? ''))
+    if (toPrice.length > 0) {
+      showToast(`Pricing ${toPrice.length} item${toPrice.length !== 1 ? 's' : ''} with ${toPrice.length !== 1 ? 'their calculators' : 'its calculator'}…`)
+      for (const it of toPrice) {
+        const canonicalId = canonOf(it)!
+        const r = await priceCalculatorHeadless({ canonicalId, calcState: it.assemblyCalcState, labourTrades, renderOpts: headlessOptsFor(it) })
+        if (!r) continue
+        const { calcState, state: _st, size: _sz, ...res } = r
+        autoPriced.set(it.id, { assemblyResult: res, assemblyCalcState: calcState, name: r.name, roomName: r.location || it.roomName })
+      }
+      if (autoPriced.size > 0) setProject(p => ({ ...p, items: p.items.map(it => { const a = autoPriced.get(it.id); return a ? { ...it, ...a } : it }) }))
+    }
     // A wall (or other item) switched to a calculator AFTER it was drawn still carries the Build-up Type it started with (the default cavity wall); never priced, it would reach the quote as that cavity wall.
     // Mark it, so the quote makes an unpriced line for the calculator it IS (named and linked to it, at the drawn size) instead.
     // EVERY item that has a calculator is also tied to its Back Office sub-phase here (the quote only reopens a calculator through that link, `boSubPhaseId`): an item that got its calculator through its Build-up Type
     // or a summary item made before Back Office had the sub-phase carries no `taskSubphaseId`, and would reach the quote as an ordinary line with no calculator behind it.
     const missingSub: string[] = []
-    const outItems = sendItems.map(it0 => {
+    const outItems = sendItems.map(it00 => {
+      const a = autoPriced.get(it00.id)
+      const it0: TakeoffItem = a ? { ...it00, ...a } : it00
       const entry = resolveBuiltAssembly(it0)
       const canonicalId = entry ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === entry) : undefined
       if (!canonicalId) return it0
@@ -4603,8 +4648,7 @@ export default function TakeoffPage() {
       const it: TakeoffItem = sub ? { ...it0, taskSubphaseId: sub.id, subPhase: it0.subPhase || sub.name } : it0
       if (!sub) missingSub.push(it0.subPhase || it0.name)
       if (it.assemblyResult) return it
-      // never priced: a calculator that is only paired with the Build-up Type the item started with is still priced from that Build-up Type, as before
-      if (it.floorMakeupId && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] === canonicalId) return it
+      // never priced and not priced from the drawing alone (or the calculator would not price it): a line for that calculator, with no price, never the Build-up Type the item started with
       return { ...it, unpricedCalc: { canonicalId, name: sub?.name ?? it.subPhase ?? it.name } }
     })
     if (missingSub.length > 0 && !window.confirm(

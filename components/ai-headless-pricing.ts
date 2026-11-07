@@ -4,14 +4,15 @@
 // pick-ups (components/ai-floor-roof-pricing.ts). Browser only: it returns null on the server, if the calculator does not come up, or if it gives nothing back.
 
 import { createRoot } from 'react-dom/client'
-import { BUILT_ASSEMBLY_CANON_IDS, type AssemblySaveResult } from '@/lib/built-assemblies'
+import { BUILT_ASSEMBLY_CANON_IDS, type AssemblySaveResult, type AssemblyRenderOpts } from '@/lib/built-assemblies'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
 const sleep = (ms: number) => new Promise<void>(res => setTimeout(res, ms))
 const saveButton = (host: HTMLElement) => [...host.querySelectorAll('button')].find(b => b.textContent?.includes('Save & Price')) as HTMLButtonElement | undefined
 
-export async function priceCalculatorHeadless(o: { canonicalId: string; calcState: CalcStateSnapshot; labourTrades: BOLabourTrade[]; timeoutMs?: number }): Promise<AssemblySaveResult | null> {
+/** `renderOpts`: the sizes and openings a Take-off drawing gives the calculator (length, height, area, drawn openings...), as its panel passes them; `calcState` is what was typed in it, if anything. */
+export async function priceCalculatorHeadless(o: { canonicalId: string; calcState?: CalcStateSnapshot; labourTrades: BOLabourTrade[]; timeoutMs?: number; renderOpts?: Partial<AssemblyRenderOpts> }): Promise<AssemblySaveResult | null> {
   if (typeof document === 'undefined') return null
   const entry = BUILT_ASSEMBLY_CANON_IDS[o.canonicalId]
   if (!entry) return null
@@ -24,7 +25,7 @@ export async function priceCalculatorHeadless(o: { canonicalId: string; calcStat
   let give: (r: AssemblySaveResult | null) => void = () => {}
   const saved = new Promise<AssemblySaveResult | null>(res => { give = res })
   try {
-    root.render(entry.render({ labourTrades: o.labourTrades, calcState: o.calcState, onSave: (r: AssemblySaveResult) => give(r) }))
+    root.render(entry.render({ ...o.renderOpts, labourTrades: o.labourTrades, calcState: o.calcState, onSave: (r: AssemblySaveResult) => give(r) }))
     const deadline = Date.now() + timeout
     while (!saveButton(host) && Date.now() < deadline) await sleep(50)
     if (!saveButton(host)) return null
