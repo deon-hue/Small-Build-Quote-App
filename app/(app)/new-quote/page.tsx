@@ -2474,6 +2474,19 @@ export default function NewQuotePage() {
           initialScope={scope || undefined}
         />
       )}
+
+      {/* A touchscreen (phone or tablet): the total and Preview / Save always in reach along the bottom, since the Save buttons are otherwise far down a long page. Hidden on a computer (globals.css). */}
+      <div className="qb-stickybar">
+        <div className="qb-total">
+          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{vatOn ? 'Total inc VAT' : 'Total'}</div>
+          <div className="mono" style={{ fontSize: 18, fontWeight: 700 }}>{fmt(total)}</div>
+        </div>
+        <button className="btn btn-outline" onClick={() => setShowPreview(true)}>👁 Preview</button>
+        {!isLockedQuote && <button className="btn btn-outline" onClick={handleSaveDraft} disabled={saving}>{saving ? 'Saving…' : '📝 Save Draft'}</button>}
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving || isLockedQuote} style={{ opacity: isLockedQuote ? 0.45 : 1 }}>
+          {saving ? 'Saving…' : isLockedQuote ? '🔒 Locked' : editingId ? '💾 Update' : '💾 Save Quote'}
+        </button>
+      </div>
     </>
   )
 }
