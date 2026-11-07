@@ -476,6 +476,15 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setBuildUp(next)
     setInsulationMm(next === 'warm' ? 120 : Math.max(50, joistDepth - 50))
   }
+  // The Roof drop-down: warm, cold, or (Roof Structure only) a flat roof with NO insulation, as a garage has. A garage roof saved with insulation before keeps its own entry.
+  const roofChoice = part === 'structure' && garageRoof ? (insulated ? 'garage-insulated' : 'garage') : buildUp
+  function chooseRoof(v: string) {
+    setLabourOverride(null)
+    if (v === 'garage') { setGarageRoof(true); setInsulated(false); return }
+    if (v === 'garage-insulated') return
+    if (garageRoof) { setGarageRoof(false); setInsulated(true) }
+    changeBuildUp(v as FlatRoofBuildUp)
+  }
 
   // Labour is suggested from the roof (lib/flat-roof-labour.ts) and follows it — the trades, the tasks and the hours —
   // until it is edited; then the estimator's own lines are kept, and "Suggest again" goes back to following the roof.
@@ -840,35 +849,18 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {(showStructure || showCovering) && (
           <CollapsibleSection title={part === 'structure' ? 'Roof type' : 'Build-up'} borderColor="#bae6fd">
             <PropRow label="Roof">
-              <select value={buildUp} onChange={e => changeBuildUp(e.target.value as FlatRoofBuildUp)} style={propInput}>
+              <select value={roofChoice} onChange={e => chooseRoof(e.target.value)} style={propInput}>
                 <option value="warm">Warm roof — PIR above the deck</option>
                 <option value="cold">Cold roof — insulation between the joists</option>
+                {part === 'structure' && <option value="garage">Flat roof with no insulation (a garage or simple flat roof)</option>}
+                {part === 'structure' && garageRoof && insulated && <option value="garage-insulated">Garage flat roof with insulation (as saved)</option>}
               </select>
             </PropRow>
-            {part === 'structure' && (
-              <div style={{ marginTop: 6, padding: '6px 8px', border: '1px dashed #bae6fd', borderRadius: 6, background: '#f8fcff' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#0c4a6e', fontWeight: 600, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={garageRoof} onChange={e => { setGarageRoof(e.target.checked); setInsulated(!e.target.checked); setLabourOverride(null) }} />
-                  This is a garage roof (a simple flat roof over a garage)
-                </label>
-                {garageRoof && (
-                  <>
-                    <div style={{ marginTop: 6 }}>
-                      <PropRow label="Insulation">
-                        <select value={insulated ? buildUp : 'none'} onChange={e => { const v = e.target.value; setLabourOverride(null); if (v === 'none') setInsulated(false); else { setInsulated(true); if (v !== buildUp) changeBuildUp(v as FlatRoofBuildUp) } }} style={propInput}>
-                          <option value="none">None: an uninsulated garage roof</option>
-                          <option value="cold">Cold roof: wool between the joists, ventilated</option>
-                          <option value="warm">Warm roof: PIR above the deck</option>
-                        </select>
-                      </PropRow>
-                    </div>
-                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
-                      {insulated
-                        ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
-                        : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
-                    </div>
-                  </>
-                )}
+            {part === 'structure' && garageRoof && (
+              <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                {insulated
+                  ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
+                  : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
               </div>
             )}
             {part !== 'structure' && (
