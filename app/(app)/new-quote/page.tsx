@@ -1247,6 +1247,27 @@ export default function NewQuotePage() {
             continue
           }
 
+          if (item.unpricedCalc) {
+            // ── A calculator item that was never priced in Take-off ──
+            // It was drawn as (say) the default cavity wall and then switched to a calculator, so it still carries the cavity wall Build-up Type.
+            // Pricing that would put a cavity wall in the quote for what is drawn as something else (a single skin garage wall), so make the line for
+            // the calculator it IS: named for it, linked to it, opening at the drawn size, with no price until the calculator is Saved & Priced.
+            const isWall = item.phase === 'External Walls'
+            const lengthMm = item.length && item.length > 0 ? Math.round(item.length * 1000) : undefined
+            const heightMm = isWall && item.wallHeight && item.wallHeight > 0 ? Math.round(item.wallHeight * 1000) : undefined
+            const sizeNote = [lengthMm ? `${(lengthMm / 1000).toFixed(2)} m long` : '', heightMm ? `${(heightMm / 1000).toFixed(2)} m high` : ''].filter(Boolean).join(', ')
+            const ph = makePhase(item.unpricedCalc.name, defaultTypedItems(), parentPhase)
+            newPhases.push({
+              ...ph,
+              source: 'manual', itemStatus: 'bo-default',
+              needsReview: true,
+              ...(item.taskSubphaseId && { boSubPhaseId: item.taskSubphaseId }),
+              ...(isWall && lengthMm ? { assemblySize: { lengthMm, ...(heightMm ? { heightMm } : {}) } } : {}),
+              reviewNote: `Drawn in Take-off as ${item.unpricedCalc.name}${sizeNote ? ` (${sizeNote})` : ''}, but its calculator was not priced there. Open the calculator on this line and Save & Price it.`,
+            })
+            continue
+          }
+
           if (item.floorMakeupId) {
             // ── Build-up item: one sub-phase per build-up type, layers as rows ──
             // DB wall types take precedence (Back Office master); ALL_MAKEUPS is the static fallback
@@ -1540,7 +1561,7 @@ export default function NewQuotePage() {
           })
         }
 
-        const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
+        const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId && !i.assemblyResult && !i.unpricedCalc).length
         const ratesNote = hasBORates ? ' Back Office rates applied.' : ' Add your rates to complete the estimate.'
         const msg = buildupCount > 0
           ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers).${ratesNote}${scopeNote}`

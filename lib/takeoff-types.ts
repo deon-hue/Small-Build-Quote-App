@@ -267,6 +267,8 @@ export interface TakeoffItem {
   // and what the electrics calculator was last saved as. Its price comes from the calculator (assemblyResult), not from the points.
   /** What was typed into the assembly calculator at the last Save & Price, so it opens again as it was left. */
   assemblyCalcState?: CalcStateSnapshot
+  /** Set only on the copy sent to a quote: this item is drawn as a calculator (picked after it was drawn, so it still carries the Build-up Type it started with) but was never Saved & Priced, so the quote makes an unpriced line for that calculator instead of pricing the old Build-up Type */
+  unpricedCalc?: { canonicalId: string; name: string }
   electricsSummary?: boolean
   electricPoints?: ElectricPoint[]
   electricsState?: unknown
