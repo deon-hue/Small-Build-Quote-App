@@ -351,6 +351,8 @@ interface Props {
   externalWidthMm?: number
   /** Take-off: the joists added by hand on the drawn roof (clicked onto it). Whenever the count changes it overwrites the calculator's own, still editable by hand. */
   extraJoistsFromPlan?: number
+  /** Take-off: where each added joist stands, mm along the roof's length from its start (drawn on the calculator's plan) */
+  extraJoistAtFromPlan?: number[]
   /** Take-off: which way the fall runs on the drawn roof ('along' the joists, or 'across' them). Whenever it changes it overwrites the calculator's own, still editable by hand. */
   fallDirFromPlan?: 'along' | 'across'
   /** Which build-up the calculator opens on — Take-off passes it from the Build-Up Type picked. */
@@ -359,7 +361,7 @@ interface Props {
 
 const PART_NAME: Record<FlatRoofPart, string> = { complete: 'Flat Roof', structure: 'Flat roof structure', covering: 'Flat roof covering', gutters: 'Gutters and downpipes' }
 
-export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, fallDirFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
+export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, extraJoistAtFromPlan, fallDirFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
   // What this calculator shows: the roof's structure, its covering, its gutters — or all of it.
   const showStructure = part === 'complete' || part === 'structure'
   const showCovering = part === 'complete' || part === 'covering'
@@ -380,6 +382,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const [centresMm, setCentresMm] = useCalcState('AssemblyFlatRoofDemo', 'centresMm', 400)
   const [extraJoists, setExtraJoists] = useCalcState('AssemblyFlatRoofDemo', 'extraJoists', extraJoistsFromPlan ?? 0)
   useEffect(() => { if (extraJoistsFromPlan != null) setExtraJoists(extraJoistsFromPlan) }, [extraJoistsFromPlan])
+  const [extraJoistAt, setExtraJoistAt] = useCalcState<number[]>('AssemblyFlatRoofDemo', 'extraJoistAt', extraJoistAtFromPlan ?? [])
+  const extraAtKey = extraJoistAtFromPlan ? extraJoistAtFromPlan.join(',') : null
+  useEffect(() => { if (extraJoistAtFromPlan) setExtraJoistAt(extraJoistAtFromPlan) }, [extraAtKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyFlatRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
   const [fallRatio, setFallRatio] = useCalcState('AssemblyFlatRoofDemo', 'fallRatio', 80)
   const [fallDir, setFallDir] = useCalcState<'along' | 'across'>('AssemblyFlatRoofDemo', 'fallDir', fallDirFromPlan ?? 'along')
@@ -829,6 +834,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {g && (<>
             <FlatRoofPlanSvg
               g={g} lengthMm={lengthMm} widthMm={widthMm} centresMm={centresMm} fallRatio={fallRatio}
+              fallAcross={fallDir === 'across' && (part === 'structure' || part === 'complete')} extraJoistAt={(part === 'structure' || part === 'complete') && extraJoistAt.length === extraJoists ? extraJoistAt : []}
               edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets} part={part}
               onMoveOpening={(id, offsetMm, offsetSpanMm) => updateOpening(id, { offsetMm, offsetSpanMm })}
               onMoveOutlet={(id, positionMm) => updateOutlet(id, { positionMm })}
@@ -1568,8 +1574,12 @@ function SpanChartPanel({ chart, check, grade, spanMm, centresMm, depthMm, picke
 const TRIMMER_COLOUR = '#b45309'
 const EDGE_BAR = 9
 
-function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, part, onMoveOpening, onMoveOutlet }: {
+function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, fallAcross, extraJoistAt, edges, wallConnection, openings, outlets, part, onMoveOpening, onMoveOutlet }: {
   part: FlatRoofPart
+  /** the fall runs across the joists: the firrings are drawn across them and the arrow runs along the length */
+  fallAcross: boolean
+  /** the added joists, mm along the length */
+  extraJoistAt: number[]
   g: FlatRoofGeometry
   lengthMm: number
   widthMm: number
@@ -1646,6 +1656,10 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       <line key={`${j.positionMm}-${i}`} x1={x0 + j.positionMm * k} x2={x0 + j.positionMm * k} y1={y0 + a * k} y2={y0 + b * k} stroke="#b4b2a9" strokeWidth={1} />,
     ))
   }
+
+  // The added joists (full span, orange) and, when the fall runs across the joists, the firrings lying across them
+  const extraLines = extraJoistAt.map((p, i) => <line key={'ex' + i} x1={x0 + p * k} x2={x0 + p * k} y1={y0} y2={y0 + h} stroke="#c2410c" strokeWidth={2.4} />)
+  const firringLines = fallAcross ? studPositionsMm(widthMm, centresMm).map((p, i) => <line key={'fr' + i} x1={x0} x2={x0 + w} y1={y0 + p * k} y2={y0 + p * k} stroke="#a16207" strokeWidth={1.4} strokeDasharray="6 3" />) : []
 
   // ── Edges: a bar outside each one, styled by what it is.
   const bars: React.ReactNode[] = []
@@ -1762,15 +1776,23 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       </defs>
       <rect x={x0} y={y0} width={w} height={h} fill="#fafaf9" stroke="#78716c" strokeWidth={1.2} />
       {(part === 'complete' || part === 'structure') && joistLines}
+      {(part === 'complete' || part === 'structure') && firringLines}
+      {(part === 'complete' || part === 'structure') && extraLines}
       {bars}
       {labels}
       {(part === 'complete' || part === 'structure') && fixings}
       {(part === 'complete' || part === 'gutters') && gullyMarks}
 
       {/* Fall */}
-      <line x1={x0 + w - 10} x2={x0 + w - 10} y1={y0 + 14} y2={y0 + h - 16} stroke="#2563eb" strokeWidth={1.2} />
-      <polygon points={`${x0 + w - 10},${y0 + h - 6} ${x0 + w - 15},${y0 + h - 17} ${x0 + w - 5},${y0 + h - 17}`} fill="#2563eb" />
-      <text x={x0 + w - 10} y={y0 + 10} fontSize={9} fill="#2563eb" textAnchor="middle">1:{fallRatio}</text>
+      {fallAcross ? (<>
+        <line x1={x0 + 16} x2={x0 + w - 16} y1={y0 + h - 10} y2={y0 + h - 10} stroke="#2563eb" strokeWidth={1.2} />
+        <polygon points={`${x0 + w - 6},${y0 + h - 10} ${x0 + w - 17},${y0 + h - 15} ${x0 + w - 17},${y0 + h - 5}`} fill="#2563eb" />
+        <text x={x0 + w / 2} y={y0 + h - 14} fontSize={9} fill="#2563eb" textAnchor="middle">fall 1:{fallRatio} across the joists</text>
+      </>) : (<>
+        <line x1={x0 + w - 10} x2={x0 + w - 10} y1={y0 + 14} y2={y0 + h - 16} stroke="#2563eb" strokeWidth={1.2} />
+        <polygon points={`${x0 + w - 10},${y0 + h - 6} ${x0 + w - 15},${y0 + h - 17} ${x0 + w - 5},${y0 + h - 17}`} fill="#2563eb" />
+        <text x={x0 + w - 10} y={y0 + 10} fontSize={9} fill="#2563eb" textAnchor="middle">1:{fallRatio}</text>
+      </>)}
 
       {(part === 'complete' || part === 'structure') && trimmerLines}
 
