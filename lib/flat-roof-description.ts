@@ -7,6 +7,8 @@
 import type { FlatRoofBuildUp, FlatRoofEdges, RoofOpeningKind } from './assembly-calc'
 
 export interface FlatRoofDescriptionInput {
+  /** the fall runs across the joists, so the firrings lie across them */
+  fallAcross?: boolean
   /** joists added by hand over and above those at the centres */
   extraJoists?: number
   buildUp: FlatRoofBuildUp
@@ -100,8 +102,8 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
   const doCovering = whole || part === 'covering'
   const doGutters = whole || part === 'gutters'
 
-  if (whole) lines.push(`Supply and construct ${i.insulated === false ? 'an uninsulated' : `a ${i.buildUp}`} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
-  else if (part === 'structure') lines.push(`Supply and construct the structure of a ${i.garage ? 'garage ' : ''}flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  if (whole) lines.push(`Supply and construct ${i.insulated === false ? 'an uninsulated' : `a ${i.buildUp}`} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge${i.fallAcross ? ', the falls running across the joists' : ''}.`)
+  else if (part === 'structure') lines.push(`Supply and construct the structure of a ${i.garage ? 'garage ' : ''}flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge${i.fallAcross ? ', the falls running across the joists' : ''}.`)
   else if (part === 'covering') lines.push(`Supply and lay the ${i.insulated === false ? '' : 'insulation and '}waterproof covering of ${i.insulated === false ? 'an uninsulated' : `a ${i.buildUp}`} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²).`)
   else lines.push('Supply and fix the rainwater goods to the flat roof.')
 
@@ -110,7 +112,7 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
   const joists = i.joistSystem === 'posi'
     ? `${i.joistDepth}mm deep Posi-joists supplied to length`
     : `47×${i.joistDepth} ${i.joistSystem.toUpperCase()} solid timber joists`
-  let structure = `Roof structure: ${joists} at ${i.centresMm}mm centres spanning ${metres(i.widthMm)}m, with tapered timber firrings to form the falls${i.strutting ? ', herringbone strutting between the joists' : ''} and ${aOrAn(i.deckLabel)} ${i.deckLabel} deck.`
+  let structure = `Roof structure: ${joists} at ${i.centresMm}mm centres spanning ${metres(i.widthMm)}m, with tapered timber firrings ${i.fallAcross ? 'laid across the joists' : 'on the joists'} to form the falls${i.strutting ? ', herringbone strutting between the joists' : ''} and ${aOrAn(i.deckLabel)} ${i.deckLabel} deck.`
   if (i.ledgerEnds > 0) {
     structure += ` The joists are hung on joist hangers from a treated ledger plate bolted to the existing wall with M12 anchor bolts at 600mm centres${i.ledgerEnds === 2 ? ' at each end' : ''}${i.wallPlateEnds > 0 ? ', and bear on a treated wall plate at the other end' : ''}.`
   } else {

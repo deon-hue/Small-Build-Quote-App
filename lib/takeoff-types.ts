@@ -303,6 +303,8 @@ export interface TakeoffItem {
   beamDir?: 'vertical' | 'horizontal'
   /** a roof structure: which way its joists run on the plan ('vertical' = up and down, 'horizontal' = left to right); unset = across the shorter side. The calculator's length is the side the joists are spaced along and its span the side they run along. */
   joistDir?: 'vertical' | 'horizontal'
+  /** a flat roof structure: which way the fall runs relative to the joists ('along' them, firrings on the joists, the start; or 'across' them, firrings the other way) */
+  fallDir?: 'along' | 'across'
   /** a flat roof structure: joists added by hand, clicked onto the roof (plan position); each is a full-span joist running the roof's joist direction, counted by the calculator */
   extraJoists?: { id: string; x: number; y: number }[]
   /** the radiators and suggested boiler size when the heating system was last priced, to say when the plan has changed since */

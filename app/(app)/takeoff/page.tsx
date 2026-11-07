@@ -4601,6 +4601,7 @@ export default function TakeoffPage() {
     return {
       externalLengthMm: box ? box.lengthMm : ((it.length ?? 0) > 0 ? Math.round((it.length ?? 0) * 1000) : undefined),
       externalWidthMm: box?.widthMm,
+      fallDir: it.phase === 'Roof' ? it.fallDir : undefined,
       extraJoists: it.phase === 'Roof' && el ? (it.extraJoists ?? []).filter(j => pointInPolygon(j, el.type === 'rect' ? cornersOf(el) : el.points)).length : undefined,
       externalAreaM2: ap?.areaM2,
       externalPerimeterM: ap?.perimeterM,
@@ -5384,7 +5385,7 @@ export default function TakeoffPage() {
     if (!(b.w > 0 && b.h > 0)) return null
     const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
     const lenX = lengthAlongX(b.w, b.h, item.joistDir)
-    return roofLookFromState(sub?.canonical_id ?? undefined, item.floorMakeupId, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: (lenX ? b.w : b.h) * mpp * 1000, spanMm: (lenX ? b.h : b.w) * mpp * 1000 }, !!item.joistDir)
+    return roofLookFromState(sub?.canonical_id ?? undefined, item.floorMakeupId, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: (lenX ? b.w : b.h) * mpp * 1000, spanMm: (lenX ? b.h : b.w) * mpp * 1000 }, !!item.joistDir, item.fallDir)
   }
   /** The roof look painted inside the roof's outline: the longer side is the roof's length (as the calculators size it), members run across the shorter, lines keep the same width at any zoom */
   function roofLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: RoofLook): React.ReactNode {
@@ -5396,13 +5397,13 @@ export default function TakeoffPage() {
     const P = (x: number, y: number) => (horizontal ? { x: b.minX + (x / L) * b.w, y: b.minY + (y / S) * b.h } : { x: b.minX + (y / S) * b.w, y: b.minY + (x / L) * b.h })
     const box = (r: { x: number; y: number; w: number; h: number }) => { const a = P(r.x, r.y), c = P(r.x + r.w, r.y + r.h); return { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x), h: Math.abs(c.y - a.y) } }
     const clipId = 'rf-clip-' + el.id
-    const stroke: Record<string, { c: string; w: number }> = { member: { c: '#78716c', w: 1.1 }, ridge: { c: '#0f766e', w: 2.6 }, hip: { c: '#b45309', w: 2.2 } }
+    const stroke: Record<string, { c: string; w: number }> = { member: { c: '#78716c', w: 1.1 }, ridge: { c: '#0f766e', w: 2.6 }, hip: { c: '#b45309', w: 2.2 }, firring: { c: '#a16207', w: 1.5 } }
     const bar = 4 / zoom
     return (
       <g style={{ pointerEvents: 'none' }}>
         <defs><clipPath id={clipId}><polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} /></clipPath></defs>
         <g clipPath={`url(#${clipId})`}>
-          {look.lines.map((l, i) => { const a = P(l.x1, l.y1), c = P(l.x2, l.y2); const st = stroke[l.role]; return <line key={i} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={st.c} strokeWidth={st.w} vectorEffect="non-scaling-stroke" strokeLinecap="round" /> })}
+          {look.lines.map((l, i) => { const a = P(l.x1, l.y1), c = P(l.x2, l.y2); const st = stroke[l.role]; return <line key={i} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={st.c} strokeWidth={st.w} strokeDasharray={l.role === 'firring' ? '7 4' : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" /> })}
           {extras.map(j => horizontal
             ? <line key={'x' + j.id} x1={j.x} y1={b.minY} x2={j.x} y2={b.maxY} stroke="#c2410c" strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
             : <line key={'x' + j.id} x1={b.minX} y1={j.y} x2={b.maxX} y2={j.y} stroke="#c2410c" strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />)}
@@ -5421,6 +5422,21 @@ export default function TakeoffPage() {
               </g>
             )
           })}
+          {look.fall && (() => {
+            // the arrow down the fall (high to low), across the middle of the roof: along the joists or across them
+            const across = look.fall.across
+            const a = across ? P(L * 0.3, S / 2) : P(L / 2, S * 0.3), c = across ? P(L * 0.7, S / 2) : P(L / 2, S * 0.7)
+            const dx = c.x - a.x, dy = c.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len
+            const hs = 9 / zoom
+            const tip = { x: c.x, y: c.y }, p1 = { x: tip.x - ux * hs + uy * hs * 0.5, y: tip.y - uy * hs - ux * hs * 0.5 }, p2 = { x: tip.x - ux * hs - uy * hs * 0.5, y: tip.y - uy * hs + ux * hs * 0.5 }
+            return (
+              <g>
+                <line x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke="#1d4ed8" strokeWidth={2.2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+                <polygon points={`${tip.x},${tip.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`} fill="#1d4ed8" />
+                <text x={(a.x + c.x) / 2 + 6 / zoom} y={(a.y + c.y) / 2 - 6 / zoom} fontSize={11 / zoom} fontWeight={700} fill="#1d4ed8" stroke="#ffffff" strokeWidth={3 / zoom} paintOrder="stroke">fall 1 in {look.fall.ratio}</text>
+              </g>
+            )
+          })()}
           {look.ends.map((e, i) => {
             const start = e.at === 'start'
             const x = horizontal ? (start ? b.minX : b.maxX - bar) : b.minX, y = horizontal ? b.minY : (start ? b.minY : b.maxY - bar)
@@ -6788,6 +6804,7 @@ export default function TakeoffPage() {
         {builtAssembly.render({
           externalLengthMm: isBoxShape ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
+          fallDir: isRoof ? item.fallDir : undefined,
           extraJoists: isRoof && linkedEl ? (item.extraJoists ?? []).filter(j => pointInPolygon(j, linkedEl.type === 'rect' ? cornersOf(linkedEl) : linkedEl.points)).length : undefined,
           externalAreaM2: floorDims?.areaM2,
           externalPerimeterM: floorDims?.perimeterM,
@@ -7619,6 +7636,17 @@ export default function TakeoffPage() {
                         <option value="horizontal">Running left to right</option>
                       </select>
                       <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>The joists on the plan turn, and the calculator's span follows the side they run along. Open the calculator and Save &amp; Price again after turning them.</div>
+                      {isFlatRoof && (
+                        <div style={{ marginTop: 8 }}>
+                          <label style={labelStyle}>The fall runs</label>
+                          <select style={inputStyle} value={item.fallDir ?? ''} onChange={e => saveItemEdit({ ...item, fallDir: e.target.value === 'across' || e.target.value === 'along' ? e.target.value : undefined, assemblyResult: undefined })}>
+                            <option value="">As set in the calculator (along the joists to start)</option>
+                            <option value="along">Along the joists (firrings on top of the joists)</option>
+                            <option value="across">Across the joists (firrings run the other way)</option>
+                          </select>
+                          <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>The firrings and a blue arrow down the fall are drawn on the roof (the fall itself, 1 in 20 to 1 in 100, is set in the calculator's Fall). Save &amp; Price again after changing it.</div>
+                        </div>
+                      )}
                       {isFlatRoof && (
                         <div style={{ marginTop: 8 }}>
                           <label style={labelStyle}>Added joists{extras.length > 0 ? ` (${extras.length})` : ''}</label>

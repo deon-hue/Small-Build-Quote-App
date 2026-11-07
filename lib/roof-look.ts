@@ -3,7 +3,7 @@
 // x runs along its LENGTH (the eaves, the way the members are spaced), y across its SPAN; the screen maps that onto the drawn shape (the longer side is the length, as the calculators size it).
 
 export type RoofKind = 'flat' | 'mono' | 'gable' | 'hip'
-export type RoofLineRole = 'member' | 'ridge' | 'hip'
+export type RoofLineRole = 'member' | 'ridge' | 'hip' | 'firring'
 
 export interface RoofLine { x1: number; y1: number; x2: number; y2: number; role: RoofLineRole }
 /** A trimmer or header: a solid member, in mm (thickness 47mm), as the calculators draw them. */
@@ -21,6 +21,8 @@ export interface RoofLook {
   ends: { at: 'start' | 'end'; kind: 'gable' | 'existing-wall' }[]
   /** the words for the roof on the plan, e.g. "Hip roof, 400mm rafters" */
   label: string
+  /** a flat roof's fall: 1 in `ratio`, running across the joists or along them (the firrings lie the other way across); the arrow on the plan points down the fall */
+  fall?: { across: boolean; ratio: number }
 }
 
 export const MEMBER_THICKNESS_MM = 47
@@ -100,6 +102,9 @@ export interface RoofLookInput {
   /** gable and hip: how each end of the ridge is finished ('hip' only on a hip roof) */
   endA?: string
   endB?: string
+  /** flat roof: the fall (1 in ratio) and whether it runs across the joists */
+  fallAcross?: boolean
+  fallRatio?: number
 }
 
 /** The picture of a roof's structure, from its kind and sizes. */
@@ -111,7 +116,12 @@ export function roofLook(i: RoofLookInput): RoofLook {
   const endKind = (e?: string): 'gable' | 'existing-wall' | null => (e === 'existing-wall' ? 'existing-wall' : e === 'gable' ? 'gable' : null)
 
   if (i.kind === 'flat' || i.kind === 'mono') {
-    return { ...base, kind: i.kind, lines: acrossMembers(L, S, centres, openings), trimmers: trimmersFor(S, openings), openings: openingShapes(openings), label: (i.kind === 'flat' ? 'Flat roof' : 'Mono-pitch roof') + `, ${centres}mm centres` }
+    const lines = acrossMembers(L, S, centres, openings)
+    const ratio = i.fallRatio && i.fallRatio > 0 ? i.fallRatio : 80
+    const across = i.kind === 'flat' && !!i.fallAcross
+    // firrings lying across the joists (the fall runs the roof's length): one every `centres` along the span, the full length
+    if (across) for (const p of memberPositions(S, centres)) lines.push({ x1: 0, y1: p, x2: L, y2: p, role: 'firring' })
+    return { ...base, kind: i.kind, lines, trimmers: trimmersFor(S, openings), openings: openingShapes(openings), ...(i.kind === 'flat' ? { fall: { across, ratio } } : {}), label: (i.kind === 'flat' ? 'Flat roof' : 'Mono-pitch roof') + `, ${centres}mm centres` + (i.kind === 'flat' ? `, fall 1 in ${ratio} ${across ? 'across the joists' : 'along the joists'}` : '') }
   }
 
   if (i.kind === 'gable') {
@@ -159,7 +169,7 @@ export function roofLook(i: RoofLookInput): RoofLook {
  * (`vals`, by calculator name). Only the roof STRUCTURE is drawn: the covering, the gutters, the rooflights and the fascias have no structure to show (null). With nothing saved the roof is a flat one at the
  * drawn size, as the roof calculator starts. `drawn` is the drawn shape's length and span (its longer and shorter sides), used when no size is saved.
  */
-export function roofLookFromState(canonicalId: string | undefined, makeupId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }, preferDrawn = false): RoofLook | null {
+export function roofLookFromState(canonicalId: string | undefined, makeupId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }, preferDrawn = false, fallDirOverride?: 'along' | 'across'): RoofLook | null {
   // (a roof drawn with the Roof Coverings, Gutters, Rooflights or Fascias calculator also carries a flat roof Build-Up Type, which used to give it the members of the structure: only the structure calculator, the whole flat roof, or no calculator at all draws them)
   const otherRoofCalc = !!canonicalId && canonicalId.startsWith('roof-') && canonicalId !== 'roof-structure' && canonicalId !== 'roof-flat'
   if (otherRoofCalc) return null
@@ -170,7 +180,7 @@ export function roofLookFromState(canonicalId: string | undefined, makeupId: str
   const openingsOf = (x: unknown): OpeningIn[] => (Array.isArray(x) ? x.filter((o): o is OpeningIn => !!o && typeof o === 'object' && typeof (o as OpeningIn).widthMm === 'number' && typeof (o as OpeningIn).offsetMm === 'number') : [])
   if (kind === 'flat') {
     const s = v.AssemblyFlatRoofDemo ?? {}
-    return roofLook({ kind, lengthMm: (preferDrawn ? undefined : num(s.lengthMm)) ?? drawn.lengthMm, spanMm: (preferDrawn ? undefined : num(s.widthMm)) ?? drawn.spanMm, centresMm: num(s.centresMm), openings: openingsOf(s.openings) })
+    return roofLook({ kind, lengthMm: (preferDrawn ? undefined : num(s.lengthMm)) ?? drawn.lengthMm, spanMm: (preferDrawn ? undefined : num(s.widthMm)) ?? drawn.spanMm, centresMm: num(s.centresMm), openings: openingsOf(s.openings), fallAcross: (fallDirOverride ?? s.fallDir) === 'across', fallRatio: num(s.fallRatio) })
   }
   if (kind === 'mono') {
     const s = v.AssemblyMonoPitchRoofDemo ?? {}
