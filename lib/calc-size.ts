@@ -36,7 +36,8 @@ export interface ResizePlan { sx: number; sy: number; ox: number; oy: number; wa
  *   line  the drawn line's length: every point is scaled along the line from its first point
  *   box   a roof or raft: the box the shape sits in is scaled to the calculator's length and width (the long side stays the long side)
  *   area  a floor: scaled evenly (the shape keeps its proportions) to the calculator's area */
-export function planResize(kind: ResizeKind, points: Pt[], mpp: number, size: CalcSize): ResizePlan | null {
+/** `lengthOnX`: for a box, which side the calculator's LENGTH is on (a roof whose joists were turned has its length on the shorter side); unset = the longer side */
+export function planResize(kind: ResizeKind, points: Pt[], mpp: number, size: CalcSize, lengthOnX?: boolean): ResizePlan | null {
   if (points.length < 2 || !(mpp > 0)) return null
   const minX = Math.min(...points.map(p => p.x)), minY = Math.min(...points.map(p => p.y))
   const m = (mm: number) => (mm / 1000).toFixed(2)
@@ -52,7 +53,7 @@ export function planResize(kind: ResizeKind, points: Pt[], mpp: number, size: Ca
     const wPx = Math.max(...points.map(p => p.x)) - minX, hPx = Math.max(...points.map(p => p.y)) - minY
     const wMm = wPx * mpp * 1000, hMm = hPx * mpp * 1000
     if (!(wMm > 0) || !(hMm > 0)) return null
-    const xIsLong = wMm >= hMm
+    const xIsLong = lengthOnX ?? wMm >= hMm
     const sx = (xIsLong ? size.lengthMm : size.widthMm) / wMm
     const sy = (xIsLong ? size.widthMm : size.lengthMm) / hMm
     if (Math.abs(sx - 1) < 0.002 && Math.abs(sy - 1) < 0.002) return null

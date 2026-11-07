@@ -1485,6 +1485,8 @@ export interface FlatRoofInput {
   parapetType?: ParapetType // default 'cavity-brick-block'
   outlets?: FlatRoofOutlet[] // the rainwater and overflow outlets through the parapet, each placed on its edge
   openings: FlatRoofOpening[]
+  /** joists added by hand over and above those at the centres (each runs the full span): counted as joists, with their timber, firrings, hangers and strutting */
+  extraJoists?: number
 }
 
 export interface FlatRoofGeometry {
@@ -1607,7 +1609,8 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
   // short (it stops at the header); where a trimmer goes, the joist there is replaced by the trimmer.
   const layout = flatRoofJoistLayout(L, S, C, openings)
   const positions = layout.map(j => j.positionMm)
-  let joistMm = 0
+  const extra = Math.max(0, Math.floor(input.extraJoists ?? 0))
+  let joistMm = extra * S
   for (const j of layout) {
     if (j.replaced) continue
     joistMm += Math.max(0, S - j.cuts.reduce((sum, [from, to]) => sum + (to - from), 0))
@@ -1635,7 +1638,7 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
 
   // Strutting between the joists at no more than 2.5m along the span.
   const strutRows = S > STRUT_SPACING_MM ? Math.ceil(S / STRUT_SPACING_MM) - 1 : 0
-  const strutCount = strutRows * Math.max(0, positions.length - 1)
+  const strutCount = strutRows * Math.max(0, positions.length + extra - 1)
 
   // The four edges by type.
   const edgeMm: Record<keyof FlatRoofEdges, number> = { high: L, low: L, left: S, right: S }
@@ -1649,7 +1652,7 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     if (edges[end] === 'abutment' && connection === 'ledger') {
       ledgerMm += L
       ledgerBolts += Math.ceil(L / LEDGER_BOLT_CENTRES_MM) + 1
-      hangers += positions.length
+      hangers += positions.length + extra
     } else {
       wallPlateMm += L
       if (edges[end] === 'abutment') straps += Math.ceil(L / RESTRAINT_STRAP_CENTRES_MM) + 1
@@ -1688,7 +1691,7 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
   return {
     edges,
     lengthM: toM(L), widthM: toM(S), grossAreaM2, openingAreaM2, netAreaM2,
-    joistCount: positions.length,
+    joistCount: positions.length + extra,
     joistLm: +toM(joistMm).toFixed(3),
     trimLm: +toM(trimMm).toFixed(3),
     wallPlateLm: +toM(wallPlateMm).toFixed(3),

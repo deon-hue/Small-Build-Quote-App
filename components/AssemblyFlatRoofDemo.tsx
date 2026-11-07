@@ -349,13 +349,15 @@ interface Props {
    * span the width. Whenever they change they overwrite the calculator's own, still editable by hand. */
   externalLengthMm?: number
   externalWidthMm?: number
+  /** Take-off: the joists added by hand on the drawn roof (clicked onto it). Whenever the count changes it overwrites the calculator's own, still editable by hand. */
+  extraJoistsFromPlan?: number
   /** Which build-up the calculator opens on — Take-off passes it from the Build-Up Type picked. */
   buildUpDefault?: FlatRoofBuildUp
 }
 
 const PART_NAME: Record<FlatRoofPart, string> = { complete: 'Flat Roof', structure: 'Flat roof structure', covering: 'Flat roof covering', gutters: 'Gutters and downpipes' }
 
-export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, buildUpDefault = 'warm', part = 'complete' }: Props) {
+export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
   // What this calculator shows: the roof's structure, its covering, its gutters — or all of it.
   const showStructure = part === 'complete' || part === 'structure'
   const showCovering = part === 'complete' || part === 'covering'
@@ -374,6 +376,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // Until the section is picked by hand it follows the span chart: the smallest section that works for the span.
   const [depthPicked, setDepthPicked] = useCalcState('AssemblyFlatRoofDemo', 'depthPicked', false)
   const [centresMm, setCentresMm] = useCalcState('AssemblyFlatRoofDemo', 'centresMm', 400)
+  const [extraJoists, setExtraJoists] = useCalcState('AssemblyFlatRoofDemo', 'extraJoists', extraJoistsFromPlan ?? 0)
+  useEffect(() => { if (extraJoistsFromPlan != null) setExtraJoists(extraJoistsFromPlan) }, [extraJoistsFromPlan])
   const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyFlatRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
   const [fallRatio, setFallRatio] = useCalcState('AssemblyFlatRoofDemo', 'fallRatio', 80)
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
@@ -476,6 +480,15 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setBuildUp(next)
     setInsulationMm(next === 'warm' ? 120 : Math.max(50, joistDepth - 50))
   }
+  // The Roof drop-down: warm, cold, or (Roof Structure only) a flat roof with NO insulation, as a garage has. A garage roof saved with insulation before keeps its own entry.
+  const roofChoice = part === 'structure' && garageRoof ? (insulated ? 'garage-insulated' : 'garage') : buildUp
+  function chooseRoof(v: string) {
+    setLabourOverride(null)
+    if (v === 'garage') { setGarageRoof(true); setInsulated(false); return }
+    if (v === 'garage-insulated') return
+    if (garageRoof) { setGarageRoof(false); setInsulated(true) }
+    changeBuildUp(v as FlatRoofBuildUp)
+  }
 
   // Labour is suggested from the roof (lib/flat-roof-labour.ts) and follows it — the trades, the tasks and the hours —
   // until it is edited; then the estimator's own lines are kept, and "Suggest again" goes back to following the roof.
@@ -525,7 +538,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   const input: FlatRoofInput = {
     lengthMm, widthMm, joistCentresMm: centresMm, buildUp, fallRatio, edges, wallConnection,
-    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings,
+    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings, extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
   }
   const openingsKey = JSON.stringify(openings)
   const edgesKey = JSON.stringify(edges)
@@ -535,7 +548,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     try { return { ok: true as const, geometry: calculateFlatRoofGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey])
+  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey, extraJoists, part])
 
   const g = geometryResult.ok ? geometryResult.geometry : null
 
@@ -626,6 +639,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: drain.picks.gutter === DRAIN_NONE ? 0 : g.gutterLm,
     parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
+    extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
   } : null
   // Two levels: a one-line description for the quote's phase line (`description`, printed everywhere) and the
   // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
@@ -840,35 +854,18 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {(showStructure || showCovering) && (
           <CollapsibleSection title={part === 'structure' ? 'Roof type' : 'Build-up'} borderColor="#bae6fd">
             <PropRow label="Roof">
-              <select value={buildUp} onChange={e => changeBuildUp(e.target.value as FlatRoofBuildUp)} style={propInput}>
+              <select value={roofChoice} onChange={e => chooseRoof(e.target.value)} style={propInput}>
                 <option value="warm">Warm roof — PIR above the deck</option>
                 <option value="cold">Cold roof — insulation between the joists</option>
+                {part === 'structure' && <option value="garage">Flat roof with no insulation (a garage or simple flat roof)</option>}
+                {part === 'structure' && garageRoof && insulated && <option value="garage-insulated">Garage flat roof with insulation (as saved)</option>}
               </select>
             </PropRow>
-            {part === 'structure' && (
-              <div style={{ marginTop: 6, padding: '6px 8px', border: '1px dashed #bae6fd', borderRadius: 6, background: '#f8fcff' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#0c4a6e', fontWeight: 600, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={garageRoof} onChange={e => { setGarageRoof(e.target.checked); setInsulated(!e.target.checked); setLabourOverride(null) }} />
-                  This is a garage roof (a simple flat roof over a garage)
-                </label>
-                {garageRoof && (
-                  <>
-                    <div style={{ marginTop: 6 }}>
-                      <PropRow label="Insulation">
-                        <select value={insulated ? buildUp : 'none'} onChange={e => { const v = e.target.value; setLabourOverride(null); if (v === 'none') setInsulated(false); else { setInsulated(true); if (v !== buildUp) changeBuildUp(v as FlatRoofBuildUp) } }} style={propInput}>
-                          <option value="none">None: an uninsulated garage roof</option>
-                          <option value="cold">Cold roof: wool between the joists, ventilated</option>
-                          <option value="warm">Warm roof: PIR above the deck</option>
-                        </select>
-                      </PropRow>
-                    </div>
-                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
-                      {insulated
-                        ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
-                        : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
-                    </div>
-                  </>
-                )}
+            {part === 'structure' && garageRoof && (
+              <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                {insulated
+                  ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
+                  : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
               </div>
             )}
             {part !== 'structure' && (
@@ -927,6 +924,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                   </select>
                 </PropRow>
               </div>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <PropRow label="Extra joists added (on top of those at the centres)">{numInput(extraJoists, setExtraJoists, 0)}</PropRow>
+              {extraJoistsFromPlan != null && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>Taken from the joists added on the Take-off drawing; adding or removing them there changes this.</div>}
             </div>
             {joistSystem === 'posi' ? (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Posi-joists are sized by the supplier for the span — pick the depth they give you.</div>
