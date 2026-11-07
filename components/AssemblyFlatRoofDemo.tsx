@@ -351,13 +351,15 @@ interface Props {
   externalWidthMm?: number
   /** Take-off: the joists added by hand on the drawn roof (clicked onto it). Whenever the count changes it overwrites the calculator's own, still editable by hand. */
   extraJoistsFromPlan?: number
+  /** Take-off: which way the fall runs on the drawn roof ('along' the joists, or 'across' them). Whenever it changes it overwrites the calculator's own, still editable by hand. */
+  fallDirFromPlan?: 'along' | 'across'
   /** Which build-up the calculator opens on — Take-off passes it from the Build-Up Type picked. */
   buildUpDefault?: FlatRoofBuildUp
 }
 
 const PART_NAME: Record<FlatRoofPart, string> = { complete: 'Flat Roof', structure: 'Flat roof structure', covering: 'Flat roof covering', gutters: 'Gutters and downpipes' }
 
-export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
+export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, fallDirFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
   // What this calculator shows: the roof's structure, its covering, its gutters — or all of it.
   const showStructure = part === 'complete' || part === 'structure'
   const showCovering = part === 'complete' || part === 'covering'
@@ -380,6 +382,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   useEffect(() => { if (extraJoistsFromPlan != null) setExtraJoists(extraJoistsFromPlan) }, [extraJoistsFromPlan])
   const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyFlatRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
   const [fallRatio, setFallRatio] = useCalcState('AssemblyFlatRoofDemo', 'fallRatio', 80)
+  const [fallDir, setFallDir] = useCalcState<'along' | 'across'>('AssemblyFlatRoofDemo', 'fallDir', fallDirFromPlan ?? 'along')
+  useEffect(() => { if (fallDirFromPlan != null) setFallDir(fallDirFromPlan) }, [fallDirFromPlan])
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
   const [insulationMm, setInsulationMm] = useCalcState('AssemblyFlatRoofDemo', 'insulationMm', buildUpDefault === 'cold' ? 125 : 120)
   const [deck, setDeck] = useCalcState<DeckType>('AssemblyFlatRoofDemo', 'deck', 'ply')
@@ -476,6 +480,14 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
       setJoistDepth(next === 'posi' ? 250 : (checkFlatRoofJoist({ grade: next, depthMm: 175, centresMm, spanMm: widthMm, loads: spanLoads }).suggestedDepthMm ?? 175))
     }
   }
+  // Turning the fall: the water now runs toward the left or right side (across the joists) or toward the high and low ends (along them), so the edges that were left at their usual (abutment high, gutter low) go with it
+  function chooseFallDir(next: 'along' | 'across') {
+    setFallDir(next)
+    const along: FlatRoofEdges = { high: 'abutment', low: 'gutter', left: 'free', right: 'free' }
+    const across: FlatRoofEdges = { high: 'free', low: 'free', left: 'abutment', right: 'gutter' }
+    const same = (a: FlatRoofEdges, b: FlatRoofEdges) => a.high === b.high && a.low === b.low && a.left === b.left && a.right === b.right
+    setEdges(prev => (next === 'across' && same(prev, along) ? across : next === 'along' && same(prev, across) ? along : prev))
+  }
   function changeBuildUp(next: FlatRoofBuildUp) {
     setBuildUp(next)
     setInsulationMm(next === 'warm' ? 120 : Math.max(50, joistDepth - 50))
@@ -538,7 +550,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   const input: FlatRoofInput = {
     lengthMm, widthMm, joistCentresMm: centresMm, buildUp, fallRatio, edges, wallConnection,
-    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings, extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
+    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings, extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0, fallAcross: fallDir === 'across',
   }
   const openingsKey = JSON.stringify(openings)
   const edgesKey = JSON.stringify(edges)
@@ -548,7 +560,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     try { return { ok: true as const, geometry: calculateFlatRoofGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey, extraJoists, part])
+  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey, extraJoists, part, fallDir])
 
   const g = geometryResult.ok ? geometryResult.geometry : null
 
@@ -640,6 +652,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
     extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
+    fallAcross: fallDir === 'across',
   } : null
   // Two levels: a one-line description for the quote's phase line (`description`, printed everywhere) and the
   // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
@@ -881,13 +894,23 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                   <div style={{ flex: 1 }}>
                     <PropRow label="Fall">
                       <select value={fallRatio} onChange={e => setFallRatio(+e.target.value)} style={propInput}>
-                        <option value={40}>1 in 40</option>
-                        <option value={60}>1 in 60</option>
-                        <option value={80}>1 in 80</option>
+                        {[20, 30, 40, 60, 80, 100].map(r => <option key={r} value={r}>1 in {r}</option>)}
+                        {![20, 30, 40, 60, 80, 100].includes(fallRatio) && <option value={fallRatio}>1 in {fallRatio}</option>}
                       </select>
                     </PropRow>
                   </div>
                 )}
+              </div>
+            )}
+            {showStructure && (
+              <div style={{ marginTop: 6 }}>
+                <PropRow label="The fall runs">
+                  <select value={fallDir} onChange={e => chooseFallDir(e.target.value as 'along' | 'across')} style={propInput}>
+                    <option value="along">Along the joists (firrings on top of the joists)</option>
+                    <option value="across">Across the joists (firrings run the other way)</option>
+                  </select>
+                </PropRow>
+                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>{fallDir === 'across' ? `The firrings lie across the joists at ${centresMm}mm, and the roof falls 1 in ${fallRatio} along its ${(lengthMm / 1000).toFixed(2)}m length (${Math.round(lengthMm / fallRatio)}mm at the high end). The edges: the high and low sides are now the left and right ones.` : `The firrings lie on each joist and the roof falls 1 in ${fallRatio} along the ${(widthMm / 1000).toFixed(2)}m span (${Math.round(widthMm / fallRatio)}mm at the high end).`}</div>
               </div>
             )}
             {showStructure && (

@@ -1487,6 +1487,8 @@ export interface FlatRoofInput {
   openings: FlatRoofOpening[]
   /** joists added by hand over and above those at the centres (each runs the full span): counted as joists, with their timber, firrings, hangers and strutting */
   extraJoists?: number
+  /** the fall runs ACROSS the joists (along the roof's length) instead of along them: the firrings then lie across the joists, spaced at the joist centres along the span, and the fall depth is the length over the ratio */
+  fallAcross?: boolean
 }
 
 export interface FlatRoofGeometry {
@@ -1700,8 +1702,9 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     hangerCount: hangers,
     strapCount: straps,
     strutRows, strutCount,
-    firringLm: +toM(joistMm).toFixed(3),
-    fallMm: +(S / fallRatio).toFixed(1),
+    // (firrings along the joists lie on each joist, so they are the joists' length; across the joists they run the roof's length at the joist centres along the span)
+    firringLm: input.fallAcross ? +toM((Math.floor(S / C) + 1) * L).toFixed(3) : +toM(joistMm).toFixed(3),
+    fallMm: +((input.fallAcross ? L : S) / fallRatio).toFixed(1),
     kerbLm: +toM(kerbMm).toFixed(3),
     kerbFaceAreaM2: +kerbFaceAreaM2.toFixed(4),
     membraneAreaM2: +(netAreaM2 + abutmentLm * toM(upstand) + parapetM * toM(parapetHeight) + kerbFaceAreaM2).toFixed(3),
