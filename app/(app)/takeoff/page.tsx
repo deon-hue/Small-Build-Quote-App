@@ -4592,6 +4592,15 @@ export default function TakeoffPage() {
     }
   }
 
+  /** Where each added joist of a roof stands, mm along the roof's length from its start (the side the joists are spaced along), nearest the start first */
+  function extraJoistAtMm(it: TakeoffItem, el: DrawnElement | undefined): number[] {
+    if (!el || it.phase !== 'Roof') return []
+    const poly = el.type === 'rect' ? cornersOf(el) : el.points
+    if (poly.length < 3) return []
+    const b = boxOf(poly), mpp = project.calibration.mpp
+    const lenX = lengthAlongX(b.w, b.h, it.joistDir)
+    return (it.extraJoists ?? []).filter(j => pointInPolygon(j, poly)).map(j => Math.max(0, Math.round((lenX ? j.x - b.minX : j.y - b.minY) * mpp * 1000))).sort((a, c) => a - c)
+  }
   /** What a calculator's panel is given from the drawing, worked out for any item (not only the one selected), for pricing it out of sight when the take-off is sent to a quote */
   function headlessOptsFor(it: TakeoffItem): Partial<AssemblyRenderOpts> {
     const el = it.elementId ? project.elements.find(e => e.id === it.elementId) : undefined
@@ -4602,10 +4611,11 @@ export default function TakeoffPage() {
       externalLengthMm: box ? box.lengthMm : ((it.length ?? 0) > 0 ? Math.round((it.length ?? 0) * 1000) : undefined),
       externalWidthMm: box?.widthMm,
       fallDir: it.phase === 'Roof' ? it.fallDir : undefined,
-      extraJoists: it.phase === 'Roof' && el ? (it.extraJoists ?? []).filter(j => pointInPolygon(j, el.type === 'rect' ? cornersOf(el) : el.points)).length : undefined,
+      extraJoists: it.phase === 'Roof' && el ? extraJoistAtMm(it, el).length : undefined,
+      extraJoistAt: it.phase === 'Roof' && el ? extraJoistAtMm(it, el) : undefined,
       externalAreaM2: ap?.areaM2,
       externalPerimeterM: ap?.perimeterM,
-      variant: it.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
+      variant: it.floorMakeupId === 'cold_flat_roof' && !it.taskSubphaseId ? 'cold' : undefined,
       wallOpenings: isWall && it.elementId ? planWallOpenings(livePlaced, it.elementId, project.calibration.mpp) : undefined,
       noSampleOpenings: it.elementId ? true : undefined,
       initialHeightMm: isWall && (it.wallHeight ?? 0) > 0 ? Math.round((it.wallHeight ?? 0) * 1000) : undefined,
@@ -6805,12 +6815,13 @@ export default function TakeoffPage() {
           externalLengthMm: isBoxShape ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
           fallDir: isRoof ? item.fallDir : undefined,
-          extraJoists: isRoof && linkedEl ? (item.extraJoists ?? []).filter(j => pointInPolygon(j, linkedEl.type === 'rect' ? cornersOf(linkedEl) : linkedEl.points)).length : undefined,
+          extraJoists: isRoof && linkedEl ? extraJoistAtMm(item, linkedEl).length : undefined,
+          extraJoistAt: isRoof && linkedEl ? extraJoistAtMm(item, linkedEl) : undefined,
           externalAreaM2: floorDims?.areaM2,
           externalPerimeterM: floorDims?.perimeterM,
           externalName: ufhRoomName,
           externalSpanMm: beamSpanMm,
-          variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
+          variant: item.floorMakeupId === 'cold_flat_roof' && !item.taskSubphaseId ? 'cold' : undefined,
           labourTrades,
           calcState: item.assemblyCalcState,
           wallOpenings: (isExtWall || isIntWall) && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
@@ -7575,7 +7586,8 @@ export default function TakeoffPage() {
             const _pairedCanonicals = new Set(Object.values(WALL_MAKEUP_TO_SUBPHASE_CANONICAL))
             const _calcSubs = isRoof ? getAllSubphasesForPhase('Roof').filter(sp => {
               const c = boSubPhases.find(b => b.id === sp.id)?.canonical_id
-              return !!c && !!BUILT_ASSEMBLY_CANON_IDS[c] && !_pairedCanonicals.has(c)
+              // (the Roof Structure calculator is paired with the two flat roof Build-Up Types but is listed too: a roof drawn with Roof Structure picked as the Sub-Phase must show Roof Structure, not the Build-Up Type it was given by default)
+              return !!c && !!BUILT_ASSEMBLY_CANON_IDS[c] && (!_pairedCanonicals.has(c) || c === 'roof-structure')
             }) : []
             const _calcSubSelected = _calcSubs.find(s => s.id === item.taskSubphaseId)
 

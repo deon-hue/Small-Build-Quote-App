@@ -36,6 +36,7 @@ interface Props {
   externalWidthMm?: number
   /** the joists added by hand on the Take-off drawing (flat roof only) */
   extraJoistsFromPlan?: number
+  extraJoistAtFromPlan?: number[]
   /** the way the fall runs on the Take-off drawing (flat roof only) */
   fallDirFromPlan?: 'along' | 'across'
   buildUpDefault?: 'warm' | 'cold'
