@@ -4093,9 +4093,17 @@ export default function TakeoffPage() {
     return null
   }
 
+  /** No plan loaded yet: the paper and the scale are chosen by making a blank sheet (the 'A blank sheet' form of the Add Plan window), opened ready filled, so the paper button and the scale list never dead-end. */
+  function openBlankSheetSetup(denom?: number) {
+    const d = denom ?? denomFromLabel(project.calibration.label ?? '') ?? 50
+    setBlankForm({ paper: 'A1', denom: d, name: '' })
+    setPlanChooserOpen(true)
+    showToast('No plan loaded: choose the paper and scale for a blank sheet, or load a plan.')
+  }
+
   /** A scale preset (1:150 ...): the real size of a pixel follows from the paper size, so a plan printed at that scale measures right. */
   function applyScaleDenom(denom: number, info = paperInfoForActiveSheet()) {
-    if (!canvasImgSize) { showToast('Load a plan first, then set its scale.'); return }
+    if (!canvasImgSize) { openBlankSheetSetup(denom); return }
     if (!info) { setPendingDenom(denom); setShowPaperModal(true); return }
     const label = scaleLabel(denom)
     const n = rescaleActiveSheet(mppForScale(info.mmPerPx, denom), label)
@@ -8974,22 +8982,23 @@ export default function TakeoffPage() {
             </button>
             <select
               style={{ ...inputStyle, width: 112, height: 28 }}
-              value={project.calibration.label ?? ''}
+              value={canvasImgSize ? (project.calibration.label ?? '') : ''}
               onChange={e => {
-                if (e.target.value === 'custom') { setShowCalib(true); return }
+                if (e.target.value === 'custom') { if (!canvasImgSize) { openBlankSheetSetup(); return } setShowCalib(true); return }
                 { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
               }}
               title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
             >
+              {!canvasImgSize && <option value="" disabled>Scale…</option>}
               {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
               {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
                 <option value={project.calibration.label}>{project.calibration.label}</option>
               )}
               <option value="custom">Custom…</option>
             </select>
-            <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
-              onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
-              title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
+            <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }}
+              onClick={() => { if (!canvasImgSize) { openBlankSheetSetup(); return } setPendingDenom(null); setShowPaperModal(true) }}
+              title={canvasImgSize ? 'The paper size this plan is printed on. The scale presets need it to measure correctly.' : 'No plan loaded: choose a paper size and scale for a blank sheet'}>
               📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
             </button>
             <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} onClick={() => setShowCalib(true)} title="Calibrate the scale from a length you know on the drawing">Calibrate</button>
@@ -9289,7 +9298,9 @@ export default function TakeoffPage() {
           <div style={{ fontWeight: 700, fontSize: 15, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName || project.name || 'Untitled take-off'}</div>
           {renderToolbarFrame({ ...toolbarOf('phase'), dock: 'top' })}
           {activeLevelId && <button type="button" onClick={() => setTabMenu(true)} style={{ ...btnStyle, minHeight: 44, fontSize: 13 }} title="Change the level or the sheet">{levelName(project, activeLevelId)} ▾</button>}
-          <span style={{ fontSize: 12, color: 'var(--to-muted)' }}>{project.calibration.label ?? ''}</span>
+          {canvasImgSize
+            ? <span style={{ fontSize: 12, color: 'var(--to-muted)' }}>{project.calibration.label ?? ''}</span>
+            : <button type="button" onClick={() => openBlankSheetSetup()} style={{ ...btnStyle, minHeight: 44, fontSize: 13 }} title="No plan loaded: choose a paper size and scale for a blank sheet">📄 Paper &amp; scale</button>}
           <div style={{ flex: 1 }} />
           <button type="button" onClick={() => setTabMenu(true)} style={{ ...btnStyle, minHeight: 44, fontSize: 14 }}>☰ Menu</button>
           <button type="button" onClick={() => { setPanelMode('schedule'); setTabPanel(v => !(v && panelMode === 'schedule')) }} style={{ ...btnStyle, minHeight: 44, fontSize: 14, ...(tabPanel && panelMode === 'schedule' ? { background: 'var(--to-hover)' } : {}) }}>📋 Schedule</button>
