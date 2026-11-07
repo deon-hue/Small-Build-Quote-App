@@ -13,6 +13,8 @@
  * calculateSolidBlockGeometry in lib/assembly-calc.ts.
  */
 
+import { usePlanWallOpenings } from '@/components/usePlanWallOpenings'
+import type { PlanWallOpening } from '@/lib/wall-openings'
 import React, { useMemo, useState, useEffect } from 'react'
 import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
@@ -104,9 +106,11 @@ interface Props {
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
+  /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
+  planOpenings?: PlanWallOpening[]
 }
 
-export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
   const [name, setName] = useCalcState('AssemblySolidBlockWallDemo', 'name', laidDefault === 'flat' ? 'Concrete Blockwork 215mm (laid flat)' : 'Solid Blockwork Wall')
   const [qty, setQty] = useCalcState('AssemblySolidBlockWallDemo', 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState('AssemblySolidBlockWallDemo', 'lengthMm', externalLengthMm ?? 5000)
@@ -129,6 +133,7 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
   const [reinforceEveryNCourses, setReinforceEveryNCourses] = useCalcState('AssemblySolidBlockWallDemo', 'reinforceEveryNCourses', 0)
   const [wastePct, setWastePct] = useCalcState('AssemblySolidBlockWallDemo', 'wastePct', 10)
   const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblySolidBlockWallDemo', 'openings', [])
+  usePlanWallOpenings(planOpenings, setOpenings)
   const [location, setLocation] = useCalcState('AssemblySolidBlockWallDemo', 'location', '')
 
   const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblySolidBlockWallDemo', 'labourLines', [

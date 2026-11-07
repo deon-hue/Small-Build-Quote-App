@@ -133,7 +133,7 @@ export interface AssemblyRenderOpts {
   plumbPipes?: PipeSummary
   /** Windows & Doors only: the doors and windows placed on the Take-off plan, which the calculator adds and follows. */
   planOpenings?: PlanOpening[]
-  /** A wall calculator with openings of its own (the cavity wall): the doors and windows drawn on this wall, which it adds and follows. */
+  /** A wall calculator with openings of its own (cavity, stud and metal partitions, block, solid block, solid brick, single skin brick, timber frame): the doors and windows drawn on this wall, which it adds and follows. */
   wallOpenings?: PlanWallOpening[]
   /** A by-room calculator: the rooms found on the Take-off plan, which it can add with their sizes and then follows. */
   planRooms?: PlanRoomInfo[]
@@ -147,14 +147,14 @@ type BuiltAssemblyEntry = {
 }
 
 const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
-  'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
-  'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
-  'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
-  'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'ew-solid-brick-victorian': { icon: 'block-wall', render: opts => <AssemblySolidBrickWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'ew-single-skin-brick-piers': { icon: 'block-wall', render: opts => <AssemblySingleSkinBrickWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-solid-brick-victorian': { icon: 'block-wall', render: opts => <AssemblySolidBrickWallDemo planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-single-skin-brick-piers': { icon: 'block-wall', render: opts => <AssemblySingleSkinBrickWallDemo planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-sleeper-wall': { icon: 'sleeper-wall', render: opts => <AssemblySleeperWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-parapet-wall': { icon: 'parapet-wall', render: opts => <AssemblyParapetWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

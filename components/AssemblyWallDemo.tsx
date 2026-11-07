@@ -14,6 +14,8 @@
  * and an "Add to Quote" action for the Walls phase.
  */
 
+import { usePlanWallOpenings } from '@/components/usePlanWallOpenings'
+import type { PlanWallOpening } from '@/lib/wall-openings'
 import React, { useMemo, useState, useRef, useEffect } from 'react'
 import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
@@ -121,11 +123,13 @@ interface Props {
    * changes (the user redraws or adjusts the shape), it overwrites the length field below,
    * same as any other seeded default in Take-off; still freely editable by hand in between. */
   externalLengthMm?: number
+  /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
+  planOpenings?: PlanWallOpening[]
   /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
   noSampleOpenings?: boolean
 }
 
-export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings }: Props) {
+export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings, planOpenings }: Props) {
   const cfg = WALL_SYSTEM_CONFIG[system]
   const [name, setName] = useCalcState('AssemblyWallDemo', 'name', cfg.label)
   const [qty, setQty] = useCalcState('AssemblyWallDemo', 'qty', 1)
@@ -138,6 +142,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
   const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyWallDemo', 'doubleTopPlate', false)
   const [wastePct, setWastePct] = useCalcState('AssemblyWallDemo', 'wastePct', 10)
   const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyWallDemo', 'openings', () => (noSampleOpenings ? [] : sampleOpenings()))
+  usePlanWallOpenings(planOpenings, setOpenings)
   const [location, setLocation] = useCalcState('AssemblyWallDemo', 'location', '')
   const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build stud wall', hours: 4 },

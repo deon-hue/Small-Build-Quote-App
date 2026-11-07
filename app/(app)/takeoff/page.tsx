@@ -6723,7 +6723,7 @@ export default function TakeoffPage() {
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           calcState: item.assemblyCalcState,
-          wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
+          wallOpenings: (isExtWall || isIntWall) && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
           // a wall drawn here starts with no window or door: the calculator shows what is drawn on it (cavity walls are fed them), not its own sample
           noSampleOpenings: item.elementId ? true : undefined,
           // a wall starts the calculator at the height it was drawn at (the calculator's own 2.4m used to be taken whatever the wall was, so the wall, 3m in its Properties, was priced 2.4m high)

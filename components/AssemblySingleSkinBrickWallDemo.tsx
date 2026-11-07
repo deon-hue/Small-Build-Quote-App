@@ -10,6 +10,8 @@
  * under Foundations. See lib/single-skin-brick-wall.ts.
  */
 
+import { usePlanWallOpenings } from '@/components/usePlanWallOpenings'
+import type { PlanWallOpening } from '@/lib/wall-openings'
 import React, { useMemo } from 'react'
 import LocationInput from './LocationInput'
 import NumInput from '@/components/NumInput'
@@ -43,9 +45,11 @@ interface Props {
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
+  /** the doors and windows drawn on this wall in Take-off: added to its openings, and followed until typed over */
+  planOpenings?: PlanWallOpening[]
 }
 
-export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
   const [name, setName] = useCalcState(NS, 'name', 'Single Skin Brick Wall with Piers')
   const [qty, setQty] = useCalcState(NS, 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState(NS, 'lengthMm', externalLengthMm ?? 6000)
@@ -70,6 +74,7 @@ export default function AssemblySingleSkinBrickWallDemo({ onClose, onSave, labou
   const [movementJointSpacingMm, setMovementJointSpacingMm] = useCalcState(NS, 'movementJointSpacingMm', 0)
   const [wastePct, setWastePct] = useCalcState(NS, 'wastePct', 10)
   const [openings, setOpenings] = useCalcState<AssemblyOpening[]>(NS, 'openings', [])
+  usePlanWallOpenings(planOpenings, setOpenings)
   const [location, setLocation] = useCalcState(NS, 'location', '')
 
   const [labourLines, setLabourLines] = useCalcState<LabourLine[]>(NS, 'labourLines', [
