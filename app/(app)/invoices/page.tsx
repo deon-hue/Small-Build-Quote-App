@@ -657,15 +657,15 @@ export default function InvoicesPage() {
                   <button className="btn-sm btn-outline" onClick={() => setLineItems(p => [...p, BLANK_LINE()])}>+ Add Line</button>
                 </div>
                 <div style={{ border: '1.5px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
+                  <div className="inv-li-head" style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
                     <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'right' }}>Unit Price</span><span style={{ textAlign: 'center' }}>%</span><span style={{ textAlign: 'right' }}>Total</span><span />
                   </div>
                   {lineItems.map(l => (
-                    <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
+                    <div key={l.id} className="inv-li-row" style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
                       <input value={l.desc} onChange={e => updateLine(l.id, 'desc', e.target.value)} placeholder="Description" style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }} />
-                      <NumInput type="number" value={l.qty} onChange={e => updateLine(l.id, 'qty', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
-                      <NumInput type="number" value={l.unitPrice} onChange={e => updateLine(l.id, 'unitPrice', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px' }} />
-                      <NumInput type="number" value={l.percentage ?? 100} onChange={e => updateLine(l.id, 'percentage', Math.min(100, Math.max(0, Number(e.target.value))))} min="0" max="100" style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
+                      <label className="inv-li-f"><span className="inv-li-cap">Qty</span><NumInput type="number" placeholder="Qty" value={l.qty} onChange={e => updateLine(l.id, 'qty', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} /></label>
+                      <label className="inv-li-f"><span className="inv-li-cap">Unit price</span><NumInput type="number" placeholder="Unit price" value={l.unitPrice} onChange={e => updateLine(l.id, 'unitPrice', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px' }} /></label>
+                      <label className="inv-li-f"><span className="inv-li-cap">%</span><NumInput type="number" placeholder="%" value={l.percentage ?? 100} onChange={e => updateLine(l.id, 'percentage', Math.min(100, Math.max(0, Number(e.target.value))))} min="0" max="100" style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} /></label>
                       <span style={{ fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(l.total)}</span>
                       <button className="rm-btn" onClick={() => setLineItems(p => p.filter(x => x.id !== l.id))}>×</button>
                     </div>

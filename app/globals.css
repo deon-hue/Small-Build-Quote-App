@@ -333,6 +333,17 @@ textarea{resize:vertical;min-height:56px}
   .desktop-only-notice .dn-title{font-size:17px;font-weight:700;margin-bottom:6px}
   .desktop-only-notice .dn-text{font-size:14px;color:var(--muted);line-height:1.5}
 }
+.inv-li-f{display:contents}
+.inv-li-cap{display:none}
+/* The invoice form's line items on a phone: the description gets its own full-width line, then quantity, unit price, percentage, total and the remove button along the next (the six columns do not fit 375px) */
+@media (hover:none) and (pointer:coarse) and (max-width:600px){
+  .inv-li-head{display:none!important}
+  .inv-li-row{grid-template-columns:1fr 1fr 1fr 1.4fr 36px!important;row-gap:8px!important;padding:10px 8px!important}
+  .inv-li-row > :first-child{grid-column:1 / -1}
+  .inv-li-row input{border:1px solid var(--border)!important;border-radius:8px!important;padding:8px!important;font-size:16px!important;min-width:0;width:100%}
+  .inv-li-f{display:flex!important;flex-direction:column;gap:2px;min-width:0}
+  .inv-li-cap{display:block!important;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+}
 /* Take-off & Draw also opens on a TABLET: a real touchscreen at least 700px across (an upright iPad is 768 or more; a phone keeps the notice for now) */
 @media (hover:none) and (pointer:coarse) and (min-width:700px){
   .desktop-only.tablet-ok{display:flex!important}
