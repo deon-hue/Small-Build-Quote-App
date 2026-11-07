@@ -21,7 +21,7 @@ export type CillChoice = 'none' | 'internal' | 'external' | 'both'
 /** Is the opening made here? 'new-wall': formed as a new wall is built. 'cut-existing': cut through a wall that is already standing. Neither (no `work`): the wall calculator prices it, or it is already there. */
 export type OpeningFormed = 'new-wall' | 'cut-existing'
 export type WdWall = 'cavity' | 'solid' | 'block' | 'stud'
-export type LintelKind = 'steel-cavity' | 'concrete' | 'steel-box' | 'steel-beam' | 'timber' | 'none'
+export type LintelKind = 'steel-cavity' | 'concrete' | 'steel-box' | 'steel-beam' | 'timber' | 'by-wall' | 'none'
 
 export interface KindInfo {
   id: OpeningKind; label: string; group: OpeningGroup
@@ -112,6 +112,8 @@ export interface WdOpening {
   /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
   planId?: string
   fromPlan?: string
+  /** drawn on a wall whose own calculator already prices a lintel (and closers) over it: set from the drawing, so the lintel here is not paid for twice */
+  wallLintel?: boolean
 }
 
 export interface OpeningWork {
@@ -160,13 +162,14 @@ export const WALL_WORD: Record<WdWall, string> = { cavity: 'cavity wall', solid:
 export const FORMED_LABEL: Record<OpeningFormed, string> = { 'new-wall': 'New wall: form the opening as it is built', 'cut-existing': 'Existing wall: cut a new opening' }
 export const LINTEL_LABEL: Record<LintelKind, string> = {
   'steel-cavity': 'Steel cavity lintel (one, spans both leaves)', concrete: 'Precast concrete lintel', 'steel-box': 'Steel box lintel',
-  'steel-beam': 'Steel beam (a section the designer specifies, with padstones)', timber: 'Timber header (doubled)', none: 'None priced (by others)',
+  'steel-beam': 'Steel beam (a section the designer specifies, with padstones)', timber: 'Timber header (doubled)',
+  'by-wall': "Already priced in the wall's calculator (not here)", none: 'None priced (by others)',
 }
 /** the lintels that make sense for each kind of wall */
 export const LINTELS_FOR: Record<WdWall, LintelKind[]> = {
-  cavity: ['steel-cavity', 'concrete', 'steel-beam', 'none'],
-  solid: ['concrete', 'steel-box', 'steel-beam', 'none'],
-  block: ['concrete', 'steel-box', 'steel-beam', 'none'],
+  cavity: ['steel-cavity', 'concrete', 'steel-beam', 'by-wall', 'none'],
+  solid: ['concrete', 'steel-box', 'steel-beam', 'by-wall', 'none'],
+  block: ['concrete', 'steel-box', 'steel-beam', 'by-wall', 'none'],
   stud: ['timber', 'steel-beam', 'none'],
 }
 export const BEAM_SIZES = ['UB 152x89x16', 'UB 178x102x19', 'UB 203x133x25', 'UB 254x146x31', 'UB 305x165x40'] as const
@@ -193,11 +196,13 @@ export const BEARING_MM = 150
 export const LABOURER_ON_WORK = 0.5   // a labourer works with the bricklayer on forming a new opening: this share of the bricklayer's hours
 
 /** A new opening's work, started sensibly for the opening: a cavity wall if it is an outside door or window, a stud partition for an internal door; the lintel that suits its width. */
-export function defaultWork(kind: OpeningKind, widthMm: number, formed: OpeningFormed): OpeningWork {
+export function defaultWork(kind: OpeningKind, widthMm: number, formed: OpeningFormed, wallPricesLintel = false): OpeningWork {
   const wall = (isInternalDoor(kind) ? 'stud' : 'cavity') as WdWall
-  const lintel = defaultLintel(wall, widthMm)
+  // drawn on a wall whose calculator already prices the lintel and the closers: start with neither here, so nothing is paid for twice
+  const byWall = wallPricesLintel && formed === 'new-wall' && wall !== 'stud'
+  const lintel = byWall ? 'by-wall' : defaultLintel(wall, widthMm)
   const loadBearing = formed === 'cut-existing' && wall !== 'stud'
-  return { formed, wall, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, lintel, beamSize: DEFAULT_BEAM, loadBearing, closers: wall === 'cavity', engineer: loadBearing }
+  return { formed, wall, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, lintel, beamSize: DEFAULT_BEAM, loadBearing, closers: wall === 'cavity' && !byWall, engineer: loadBearing }
 }
 export function defaultLintel(wall: WdWall, widthMm: number): LintelKind {
   if (wall === 'stud') return widthMm > 1800 ? 'steel-beam' : 'timber'
@@ -339,6 +344,9 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
         brickHours += WORK_HOURS.setBeamBase + WORK_HOURS.setBeamPerM * spanM; bits.push(`a ${size} steel beam on padstones`)
       } else if (w.lintel === 'timber') {
         add('header', 'doubled timber header', 'm', rateW('timberHeaderPerM') * 2, spanM * qty); carpHours += WORK_HOURS.setTimber; bits.push('a doubled timber header')
+      } else if (w.lintel === 'by-wall') {
+        // the wall's own calculator prices the lintel (and its tray); nothing for it here, so it is not paid for twice
+        bits.push("the lintel included in the wall's price")
       } else warnings.push(`${label}: no lintel is priced over this opening: someone else is supplying it, or the opening is not a structural one.`)
       // a cavity wall: the tray over a separate lintel and its weeps, and the closers down the jambs
       if (w.wall === 'cavity') {
@@ -350,7 +358,9 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
         if (masonry) { brickHours += WORK_HOURS.formBase + WORK_HOURS.formPerPerimM * perimM; labourHours += brickHours * LABOURER_ON_WORK }
         else { carpHours += WORK_HOURS.studBase + WORK_HOURS.studPerPerimM * perimM; add('studs', 'studs and noggins to trim the opening', 'item', rateW('studTimber'), qty) }
         parts.push(`the opening formed in the new ${wallWord}${bits.length ? ' with ' + (bits.length === 1 ? bits[0] : bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1]) : ''}`)
-        warnings.push(`${label}: if this opening is drawn on a wall that has its own calculator, that calculator already prices its lintel and cavity closers: count them in one place only.`)
+        if (w.lintel === 'by-wall') { if (w.closers && w.wall === 'cavity' && o.wallLintel) warnings.push(`${label}: the wall this is drawn on already prices the cavity closers down the jambs: untick them here or they are paid for twice.`) }
+        else if (o.wallLintel) warnings.push(`${label}: the wall this is drawn on already prices a lintel over it: choose "Already priced in the wall's calculator" for what goes over the top (and untick the cavity closers), or the lintel is paid for twice.`)
+        else warnings.push(`${label}: if this opening is drawn on a wall that has its own calculator, that calculator already prices its lintel and cavity closers: count them in one place only.`)
       } else {
         // cut through a wall that is standing
         if (masonry) {
@@ -380,7 +390,7 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
         if (w.loadBearing && masonry) warnings.push(`${label}: cutting an opening in a load-bearing wall needs the engineer's design and a Building Control notice before work starts${w.engineer ? '' : ' (the engineer is not priced here)'}.`)
         warnings.push(`${label}: plastering the reveals, decorating and any damp-proof or insulation work to the new jambs are not included.`)
       }
-      if (masonry && w.lintel !== 'none' && o.widthMm > 2400 && w.lintel !== 'steel-beam') warnings.push(`${label}: an opening ${o.widthMm}mm wide normally needs a steel beam specified by the designer rather than a standard lintel.`)
+      if (masonry && w.lintel !== 'none' && w.lintel !== 'by-wall' && o.widthMm > 2400 && w.lintel !== 'steel-beam') warnings.push(`${label}: an opening ${o.widthMm}mm wide normally needs a steel beam specified by the designer rather than a standard lintel.`)
       if (brickHours > 0) { const h = hoursOf(brickHours * uplift * qty); if (h > 0) labour.push({ key: `bricks|${o.id}`, roomId: o.id, trade: 'bricklayer', task: `${label} — ${cut ? 'cut the opening, set the lintel and make good' : 'form the opening and set the lintel'}`, hours: h, basis: `${n1(brickHours)}h each${qty > 1 ? ` x ${qty}` : ''}` }) }
       if (carpHours > 0) { const h = hoursOf(carpHours * uplift * qty); if (h > 0) labour.push({ key: `carp|${o.id}`, roomId: o.id, trade: 'carpenter', task: `${label} — ${cut ? 'cut and trim the stud opening' : 'trim the stud opening and fit the header'}`, hours: h, basis: `${n1(carpHours)}h each${qty > 1 ? ` x ${qty}` : ''}` }) }
       if (labourHours > 0) { const h = hoursOf(labourHours * (cut ? 1 : qty) * uplift); if (h > 0) labour.push({ key: `labour|${o.id}`, roomId: o.id, trade: 'labourer', task: `${label} — ${cut ? 'support, break out and clear the rubble' : 'help form the opening'}`, hours: h, basis: 'labourer with the bricklayer' }) }
@@ -413,7 +423,7 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
 
 // ── Openings placed on the Take-off drawing ──────────────────────────────────────────────────────────────────────────
 /** An opening as the drawing knows it (lib/wall-openings.ts PlacedOpening, without where on the wall it is) */
-export interface PlanOpening { id: string; ref: string; location?: string; kind: OpeningKind; widthMm: number; heightMm: number; swing: WdSwing }
+export interface PlanOpening { id: string; ref: string; location?: string; kind: OpeningKind; widthMm: number; heightMm: number; swing: WdSwing; /** the wall it is drawn on has a calculator that already prices a lintel over each opening */ wallPricesLintel?: boolean }
 export const planOpeningSig = (p: PlanOpening) => [p.kind, p.widthMm, p.heightMm, p.swing, p.ref, p.location ?? ''].join('|')
 
 /**
@@ -430,13 +440,13 @@ export function mergePlanOpenings(existing: WdOpening[], plan: PlanOpening[]): W
     if (!p) continue
     seen.add(p.id)
     const sig = planOpeningSig(p)
-    if (e.fromPlan === sig) { out.push(e); continue }
+    if (e.fromPlan === sig) { out.push(e.wallLintel === !!p.wallPricesLintel ? e : { ...e, wallLintel: !!p.wallPricesLintel }); continue }
     const base = e.kind === p.kind ? e : { ...newOpening(e.id, p.ref, p.kind, e.location), qty: e.qty, supply: e.supply, pcEach: e.pcEach, removeOld: e.removeOld, ...(e.work ? { work: e.work } : {}) }
-    out.push({ ...base, ref: p.ref, location: p.location ?? base.location, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: sig })
+    out.push({ ...base, ref: p.ref, location: p.location ?? base.location, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: sig, wallLintel: !!p.wallPricesLintel })
   }
   for (const p of plan) {
     if (seen.has(p.id)) continue
-    out.push({ ...newOpening('op-' + p.id, p.ref, p.kind, p.location ?? ''), widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: planOpeningSig(p) })
+    out.push({ ...newOpening('op-' + p.id, p.ref, p.kind, p.location ?? ''), widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: planOpeningSig(p), wallLintel: !!p.wallPricesLintel })
   }
   return out
 }

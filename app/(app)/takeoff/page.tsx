@@ -79,6 +79,8 @@ const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 
 /** calculators sized from an AREA drawn on the plan: picking one before drawing starts the Rectangle tool, not the Line tool a phase such as Plumbing & Heating starts with (its Line is a pipe) */
 const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms', 'join-skirting-rooms'])
 /** calculators priced from the DRAWING alone (a wall's length, height and openings, a roof's box, a floor's area, a foundation's length): an item of one of these that was never Saved & Priced is priced by the calculator itself when it is sent to a quote, so it never reaches the quote as the old build-up. The room-by-room and item-by-item calculators are NOT here: what they price is typed in them. */
+/** wall calculators that already price a lintel over each opening drawn on the wall (a door or window on one of these must not price a lintel again in Windows & Doors) */
+const WALL_LINTEL_CALCS = new Set(['iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-cav-partial', 'ew-cav-full'])
 const AUTO_PRICE_CALCS = new Set([
   'iw-stud-partition', 'iw-metal-stud', 'iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-garden-room-timber', 'ew-cav-partial', 'ew-cav-full', 'ew-dwarf-wall', 'ew-sleeper-wall', 'ew-parapet-wall',
   'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
@@ -3498,7 +3500,14 @@ export default function TakeoffPage() {
     const mpp = project.calibration.mpp
     const it = wdItem
     const built = BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
-    const plan: PlanOpening[] = livePlaced.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing }))
+    // does the wall an opening is drawn on have a calculator that already prices a lintel over each opening? (then the doors and windows calculator must not price one too)
+    const wallPricesLintel = (wallId: string): boolean => {
+      const wi = project.items.find(i => i.elementId === wallId)
+      const e = wi ? resolveBuiltAssembly(wi) : undefined
+      const c = e ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === e) : undefined
+      return !!c && WALL_LINTEL_CALCS.has(c)
+    }
+    const plan: PlanOpening[] = livePlaced.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing, wallPricesLintel: wallPricesLintel(o.wallId) }))
     const planKey = plan.map(planOpeningSig).join(';') + '#' + plan.map(o => o.id).join(',')
     const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
     // the Windows card and the Doors card: each is fed only the openings that belong to it (a window or bi-fold or sliding door system to Windows, any other door to Doors) and has its own saved price
