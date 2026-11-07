@@ -94,8 +94,8 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',     '📐', 'Take-off & Draw', 'desktop-only tablet-ok')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
-          {can('invoices')&& navItem('/bills',           '📄', 'Bills')}
-          {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors')}
+          {can('invoices')&& navItem('/bills',           '📄', 'Bills', 'desktop-only')}
+          {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors', 'desktop-only')}
           {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
           {can('jobs') && (
             <div className="nav-item" onClick={() => { setShowQuickNotes(true); onClose() }} style={{ cursor: 'pointer' }}>
@@ -106,9 +106,9 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('clients') && navItem('/clients', '○', 'Contacts')}
           <div className="nav-section">Settings</div>
           {can('jobs')        && navItem('/documents',   '📥', 'Documents')}
-          {can('settings')    && navItem('/settings',    '◇', 'Company Setup')}
+          {can('settings')    && navItem('/settings',    '◇', 'Company Setup', 'desktop-only')}
           {can('back_office') && navItem('/back-office', '⊞', 'Back Office', 'desktop-only')}
-          {can('team')        && navItem('/team',        '👥', 'Team')}
+          {can('team')        && navItem('/team',        '👥', 'Team', 'desktop-only')}
           <div className="nav-section">Account</div>
           {navItem('/help', '❓', 'Help & Guides')}
           <div className="nav-item" onClick={signOut} style={{ cursor: 'pointer' }}>
@@ -273,7 +273,9 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  const desktopOnly = pathname === '/takeoff' || pathname === '/back-office'
+  // desktop-only pages (a phone or tablet is for site work: Deon, 2026-11-07): Take-off opens on a tablet (tabletOk), the rest on a computer only
+  const onPath = (p: string) => pathname === p || pathname.startsWith(p + '/')
+  const desktopOnly = ['/takeoff', '/back-office', '/bills', '/subcontractors', '/settings', '/team'].some(onPath)
   const isHome = pathname === '/dashboard'
   return (
     <>

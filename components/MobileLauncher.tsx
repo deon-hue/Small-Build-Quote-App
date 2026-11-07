@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Briefcase, FileText, FilePlus, Camera, StickyNote, Zap, Mail, Receipt, CalendarDays,
-  Ruler, Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
+  Ruler, Contact, Inbox, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { useApp } from '@/contexts/AppContext'
@@ -36,18 +36,14 @@ const NAV: NavItem[] = [
   { label: 'Documents', Icon: Inbox,        perm: 'jobs',     href: '/documents' },
 ]
 
-const FOOTER_NAV: NavItem[] = [
-  { label: 'Company setup', Icon: Settings, perm: 'settings', href: '/settings' },
-  { label: 'Team',          Icon: Users,    perm: 'team',     href: '/team' },
-]
+// (Company setup, Team, Bills, Subcontractors and Back Office are desktop-only: Deon, 2026-11-07, a phone or tablet is for site work)
+const FOOTER_NAV: NavItem[] = []
 
 /** Everything else, one tap away (Scan and New quote are already header buttons). */
 const QUICK: (NavItem | { label: string; Icon: LucideIcon; perm: keyof UserPermissions; opensNotes: true })[] = [
   { label: 'Notes',          Icon: StickyNote, perm: 'jobs',     opensNotes: true },
   { label: 'Quick quote',    Icon: Zap,        perm: 'quotes',   href: '/quick-quote' },
   { label: 'Leads', Icon: Mail,       perm: 'quotes',   href: '/quote-requests' },
-  { label: 'Bills',          Icon: Wallet,     perm: 'invoices', href: '/bills' },
-  { label: 'Subcontractors', Icon: Wrench,     perm: 'invoices', href: '/subcontractors' },
   { label: 'Scan to job',    Icon: Camera,     perm: 'jobs',     href: '/scan' },
   { label: 'New quote',      Icon: FilePlus,   perm: 'quotes',   href: '/new-quote' },
 ]
@@ -143,7 +139,6 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
   if (can('quotes') && draftQuotes.length) attention.push({ id: 'draft', title: `${plural(draftQuotes.length, 'draft quote')} to finish`, hint: 'Pick up where you left off', href: '/quotes', Icon: FileText })
   if (can('jobs') && heldJobs.length) attention.push({ id: 'held', title: `${plural(heldJobs.length, 'job')} on hold`, hint: 'Review and restart', href: '/jobs', Icon: PauseCircle })
   if (can('quotes')) attention.push({ id: 'requests', title: 'Leads', hint: 'New enquiries and who to chase', href: '/quote-requests', Icon: Mail })
-  if (can('invoices') && attention.length < 4) attention.push({ id: 'bills', title: 'Bills and subcontractors', hint: 'Timesheets and payments', href: '/bills', Icon: Wallet })
 
   const quick: HomeQuick[] = QUICK.filter(i => can(i.perm) && i.label !== 'Scan to job' && i.label !== 'New quote').map(i =>
     'opensNotes' in i ? { label: i.label, Icon: i.Icon, onClick: onOpenNotes } : { label: i.label, Icon: i.Icon, href: i.href },
