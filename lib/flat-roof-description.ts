@@ -7,6 +7,8 @@
 import type { FlatRoofBuildUp, FlatRoofEdges, RoofOpeningKind } from './assembly-calc'
 
 export interface FlatRoofDescriptionInput {
+  /** joists added by hand over and above those at the centres */
+  extraJoists?: number
   buildUp: FlatRoofBuildUp
   lengthMm: number
   widthMm: number
@@ -115,6 +117,7 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart
     structure += ` The joists bear on treated wall plates at each end${i.endStraps ? ', strapped to the existing wall with lateral restraint straps' : ''}.`
   }
   if (i.sideStrapped) structure += ' The first joist is strapped to the existing wall that runs alongside it.'
+  if ((i.extraJoists ?? 0) > 0) structure += ` ${i.extraJoists === 1 ? 'One extra joist is' : `${i.extraJoists} extra joists are`} added where the roof needs it, over and above those at the centres.`
   lines.push(structure)
   }
 

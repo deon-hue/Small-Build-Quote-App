@@ -34,6 +34,8 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
   externalWidthMm?: number
+  /** the joists added by hand on the Take-off drawing (flat roof only) */
+  extraJoistsFromPlan?: number
   buildUpDefault?: 'warm' | 'cold'
 }
 

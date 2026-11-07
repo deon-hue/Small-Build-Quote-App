@@ -44,7 +44,7 @@ import { newDrainPoint, placedDrainOf, drainPricedKey, nearestDrainPoint, runEnd
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { electricSymbol } from '@/lib/electric-symbols'
-import { roofLookFromState, roofCoveringLookFromState, type RoofLook, type CoveringLook } from '@/lib/roof-look'
+import { roofLookFromState, roofCoveringLookFromState, lengthAlongX, type RoofLook, type CoveringLook } from '@/lib/roof-look'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { floorLookOf, ufhLoopPaths, blockBeamLook, boxOf, type FloorLook } from '@/lib/floor-look'
 import { ufhLoopCount, MAX_LOOP_M, PIPE_WASTE } from '@/lib/ufh-units'
@@ -1006,6 +1006,14 @@ export default function TakeoffPage() {
   const [planChooserOpen, setPlanChooserOpen] = useState(false)
   // a blank sheet to draw on with no plan behind it: its paper, scale and name while it is being asked for
   const [blankForm, setBlankForm] = useState<{ paper: string; denom: number; name: string } | null>(null)
+  /** the roof item that is having joists clicked onto it (Esc or Done ends it) */
+  const [addJoistFor, setAddJoistFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!addJoistFor) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddJoistFor(null) }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [addJoistFor])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   // Sheets (plans): the one showing, whether its picture is missing from this device, and a nudge to reload the picture after it is put back
   const activeSheetId = activeSheetIdOf(project)
@@ -1742,6 +1750,17 @@ export default function TakeoffPage() {
     placeOffsetGuide(Math.abs(signedOffset(guideBase.a, guideBase.b, pt)))
   }
   /** pressing on a guide with the Guides tool (before whatever drawing is under it gets the click): it is picked and, dragged, moves sideways */
+  /** Add joist: a click on the roof being edited puts a full-span joist there (running the roof's joist direction); the count goes to its calculator and its saved price is cleared */
+  function handleAddJoistDown(e: React.MouseEvent<SVGSVGElement>) {
+    if (!addJoistFor || e.button !== 0 || spaceHeld) return
+    const it = project.items.find(i => i.id === addJoistFor)
+    const el = it?.elementId ? project.elements.find(x => x.id === it.elementId) : undefined
+    if (!it || !el) { setAddJoistFor(null); return }
+    e.preventDefault(); e.stopPropagation()
+    const pt = svgCoords(e)
+    if (!pointInPolygon(pt, el.type === 'rect' ? cornersOf(el) : el.points)) { showToast('Click inside the roof to add a joist there'); return }
+    setProject(p => ({ ...p, items: p.items.map(x => x.id === it.id ? { ...x, extraJoists: [...(x.extraJoists ?? []), { id: uid(), x: pt.x, y: pt.y }], assemblyResult: undefined } : x) }))
+  }
   function handleGuideMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     if (tool !== 'guide' || guideMode !== 'move' || e.button !== 0 || spaceHeld) return
     const g = nearestGuide(guides, svgCoords(e), 8 / zoom)
@@ -2366,7 +2385,9 @@ export default function TakeoffPage() {
     const xs = el.points.map(p => p.x), ys = el.points.map(p => p.y)
     const w = (Math.max(...xs) - Math.min(...xs)) * project.calibration.mpp * 1000
     const h = (Math.max(...ys) - Math.min(...ys)) * project.calibration.mpp * 1000
-    const long = Math.max(w, h), short = Math.min(w, h)
+    // a roof structure whose joists were turned: its length is the side the joists are spaced along, its width (span) the side they run along
+    const lenX = it.phase === 'Roof' && it.joistDir ? lengthAlongX(w, h, it.joistDir) : undefined
+    const long = lenX === undefined ? Math.max(w, h) : lenX ? w : h, short = lenX === undefined ? Math.min(w, h) : lenX ? h : w
     return long > 0 ? { lengthMm: Math.round(long), widthMm: Math.round(short) } : undefined
   }
 
@@ -4580,6 +4601,7 @@ export default function TakeoffPage() {
     return {
       externalLengthMm: box ? box.lengthMm : ((it.length ?? 0) > 0 ? Math.round((it.length ?? 0) * 1000) : undefined),
       externalWidthMm: box?.widthMm,
+      extraJoists: it.phase === 'Roof' && el ? (it.extraJoists ?? []).filter(j => pointInPolygon(j, el.type === 'rect' ? cornersOf(el) : el.points)).length : undefined,
       externalAreaM2: ap?.areaM2,
       externalPerimeterM: ap?.perimeterM,
       variant: it.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
@@ -5361,12 +5383,15 @@ export default function TakeoffPage() {
     const b = boxOf(el.type === 'rect' ? cornersOf(el) : el.points)
     if (!(b.w > 0 && b.h > 0)) return null
     const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
-    return roofLookFromState(sub?.canonical_id ?? undefined, item.floorMakeupId, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: Math.max(b.w, b.h) * mpp * 1000, spanMm: Math.min(b.w, b.h) * mpp * 1000 })
+    const lenX = lengthAlongX(b.w, b.h, item.joistDir)
+    return roofLookFromState(sub?.canonical_id ?? undefined, item.floorMakeupId, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: (lenX ? b.w : b.h) * mpp * 1000, spanMm: (lenX ? b.h : b.w) * mpp * 1000 }, !!item.joistDir)
   }
   /** The roof look painted inside the roof's outline: the longer side is the roof's length (as the calculators size it), members run across the shorter, lines keep the same width at any zoom */
   function roofLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: RoofLook): React.ReactNode {
     const b = boxOf(poly)
-    const horizontal = b.w >= b.h
+    const rItem = project.items.find(it => it.elementId === el.id)
+    const horizontal = lengthAlongX(b.w, b.h, rItem?.joistDir)
+    const extras = look.kind === 'flat' ? (rItem?.extraJoists ?? []).filter(j => pointInPolygon(j, poly)) : []
     const L = look.lengthMm, S = look.spanMm
     const P = (x: number, y: number) => (horizontal ? { x: b.minX + (x / L) * b.w, y: b.minY + (y / S) * b.h } : { x: b.minX + (y / S) * b.w, y: b.minY + (x / L) * b.h })
     const box = (r: { x: number; y: number; w: number; h: number }) => { const a = P(r.x, r.y), c = P(r.x + r.w, r.y + r.h); return { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x), h: Math.abs(c.y - a.y) } }
@@ -5378,6 +5403,9 @@ export default function TakeoffPage() {
         <defs><clipPath id={clipId}><polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} /></clipPath></defs>
         <g clipPath={`url(#${clipId})`}>
           {look.lines.map((l, i) => { const a = P(l.x1, l.y1), c = P(l.x2, l.y2); const st = stroke[l.role]; return <line key={i} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={st.c} strokeWidth={st.w} vectorEffect="non-scaling-stroke" strokeLinecap="round" /> })}
+          {extras.map(j => horizontal
+            ? <line key={'x' + j.id} x1={j.x} y1={b.minY} x2={j.x} y2={b.maxY} stroke="#c2410c" strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+            : <line key={'x' + j.id} x1={b.minX} y1={j.y} x2={b.maxX} y2={j.y} stroke="#c2410c" strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />)}
           {look.trimmers.map((t, i) => { const r = box(t); return <rect key={'t' + i} x={r.x} y={r.y} width={Math.max(r.w, 1 / zoom)} height={Math.max(r.h, 1 / zoom)} fill="#b45309" stroke="#fff" strokeWidth={0.4} vectorEffect="non-scaling-stroke" /> })}
           {look.openings.map((o, i) => {
             const r = box(o)
@@ -6760,6 +6788,7 @@ export default function TakeoffPage() {
         {builtAssembly.render({
           externalLengthMm: isBoxShape ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
+          extraJoists: isRoof && linkedEl ? (item.extraJoists ?? []).filter(j => pointInPolygon(j, linkedEl.type === 'rect' ? cornersOf(linkedEl) : linkedEl.points)).length : undefined,
           externalAreaM2: floorDims?.areaM2,
           externalPerimeterM: floorDims?.perimeterM,
           externalName: ufhRoomName,
@@ -6786,7 +6815,7 @@ export default function TakeoffPage() {
             // A size typed over inside the calculator carries back to the drawing: the drawn line, roof box or floor is scaled to match, and its quantity, label and area follow (the drawing is what Take-off measures from)
             const drawn = item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
             const kind = isBoxShape ? 'box' : isFloorShape ? 'area' : isLineBased ? 'line' : null
-            const plan = drawn && kind && size ? planResize(kind, drawn.points, project.calibration.mpp, size) : null
+            const plan = drawn && kind && size ? planResize(kind, drawn.points, project.calibration.mpp, size, kind === 'box' && item.joistDir ? lengthAlongX(0, 0, item.joistDir) : undefined) : null
             if (drawn && plan) {
               setProject(p => {
                 const elements = p.elements.map(e => (e.id === drawn.id ? { ...e, points: applyResize(e.points, plan) } : e))
@@ -7574,6 +7603,40 @@ export default function TakeoffPage() {
                     <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>The beams on the plan turn, and the calculator's beam span follows the side they run along. Open the calculator and Save &amp; Price again after turning them.</div>
                   </div>
                 )}
+                {isRoof && (() => { const cn = boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id; return cn === 'roof-structure' || cn === 'roof-flat' || (!cn && (item.floorMakeupId === 'cold_flat_roof' || item.floorMakeupId === 'warm_flat_roof')) })() && (() => {
+                  const roofEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+                  const roofPoly = roofEl ? (roofEl.type === 'rect' ? cornersOf(roofEl) : roofEl.points) : []
+                  const roofType = (item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined)?.AssemblyRoofStructureDemo?.type
+                  const isFlatRoof = !roofType || roofType === 'flat'
+                  const extras = (item.extraJoists ?? []).filter(j => roofPoly.length > 2 && pointInPolygon(j, roofPoly))
+                  const adding = addJoistFor === item.id
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <label style={labelStyle}>Joist direction</label>
+                      <select style={inputStyle} value={item.joistDir ?? ''} onChange={e => saveItemEdit({ ...item, joistDir: e.target.value === 'vertical' || e.target.value === 'horizontal' ? e.target.value : undefined, assemblyResult: undefined })}>
+                        <option value="">Across the shorter side (automatic)</option>
+                        <option value="vertical">Running up and down the plan</option>
+                        <option value="horizontal">Running left to right</option>
+                      </select>
+                      <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>The joists on the plan turn, and the calculator's span follows the side they run along. Open the calculator and Save &amp; Price again after turning them.</div>
+                      {isFlatRoof && (
+                        <div style={{ marginTop: 8 }}>
+                          <label style={labelStyle}>Added joists{extras.length > 0 ? ` (${extras.length})` : ''}</label>
+                          <button style={{ ...btnStyle, width: '100%', justifyContent: 'center', ...(adding ? { background: '#c2410c', borderColor: '#c2410c', color: '#fff' } : {}) }} onClick={() => { setAddJoistFor(adding ? null : item.id); if (!adding) { setTool('select'); showToast('Click on the roof where each joist goes. Esc or Done to finish.') } }}>
+                            {adding ? '✓ Done adding joists' : '＋ Add a joist (click on the roof)'}
+                          </button>
+                          {extras.map((j, k) => (
+                            <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11 }}>
+                              <span style={{ flex: 1 }}>Added joist {k + 1}</span>
+                              <button style={{ ...btnStyle, padding: '1px 8px', fontSize: 11 }} title="Remove this joist" onClick={() => saveItemEdit({ ...item, extraJoists: (item.extraJoists ?? []).filter(x => x.id !== j.id), assemblyResult: undefined })}>×</button>
+                            </div>
+                          ))}
+                          <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>Each added joist runs the full span in the joist direction, is counted and priced as a joist in the calculator, and shows orange on the plan. Save &amp; Price again after adding or removing.</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
                 {(isRoof || isFoundationShape || isFloorShape) && builtAssembly && (
                   <div style={{ marginTop: 10 }}>
                     {renderAssemblyPanel((isFoundationShape || isFloorShape) ? (() => {
@@ -9564,7 +9627,7 @@ export default function TakeoffPage() {
             onClick={handleSvgClick}
             onDoubleClick={handleSvgDblClick}
             onMouseMove={handleMouseMove}
-            onMouseDownCapture={handleGuideMouseDown}
+            onMouseDownCapture={e => { handleGuideMouseDown(e); handleAddJoistDown(e) }}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}

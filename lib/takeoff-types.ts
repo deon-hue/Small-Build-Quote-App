@@ -301,6 +301,10 @@ export interface TakeoffItem {
   notEstimated?: boolean
   /** a block and beam floor: which way its beams run on the plan ('vertical' = up and down, 'horizontal' = left to right); missing = across the shorter side */
   beamDir?: 'vertical' | 'horizontal'
+  /** a roof structure: which way its joists run on the plan ('vertical' = up and down, 'horizontal' = left to right); unset = across the shorter side. The calculator's length is the side the joists are spaced along and its span the side they run along. */
+  joistDir?: 'vertical' | 'horizontal'
+  /** a flat roof structure: joists added by hand, clicked onto the roof (plan position); each is a full-span joist running the roof's joist direction, counted by the calculator */
+  extraJoists?: { id: string; x: number; y: number }[]
   /** the radiators and suggested boiler size when the heating system was last priced, to say when the plan has changed since */
   boilerPricedKey?: string
 

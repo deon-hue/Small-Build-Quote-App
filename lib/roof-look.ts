@@ -24,6 +24,11 @@ export interface RoofLook {
 }
 
 export const MEMBER_THICKNESS_MM = 47
+
+/** Which way the roof's LENGTH (the side its members are spaced along) lies on the plan: along x when the joists run up and down (`vertical`), along y when they run left to right (`horizontal`), and with no choice made along the longer side (the joists then run across the shorter). */
+export function lengthAlongX(w: number, h: number, dir?: 'vertical' | 'horizontal'): boolean {
+  return dir === 'vertical' ? true : dir === 'horizontal' ? false : w >= h
+}
 const DEFAULT_CENTRES = 400
 
 interface OpeningIn { id?: string; kind?: string; widthMm: number; depthMm: number; offsetMm: number; offsetSpanMm: number; trimmers?: number }
@@ -154,7 +159,7 @@ export function roofLook(i: RoofLookInput): RoofLook {
  * (`vals`, by calculator name). Only the roof STRUCTURE is drawn: the covering, the gutters, the rooflights and the fascias have no structure to show (null). With nothing saved the roof is a flat one at the
  * drawn size, as the roof calculator starts. `drawn` is the drawn shape's length and span (its longer and shorter sides), used when no size is saved.
  */
-export function roofLookFromState(canonicalId: string | undefined, makeupId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }): RoofLook | null {
+export function roofLookFromState(canonicalId: string | undefined, makeupId: string | undefined, vals: Record<string, Record<string, unknown>> | undefined, drawn: { lengthMm: number; spanMm: number }, preferDrawn = false): RoofLook | null {
   // (a roof drawn with the Roof Coverings, Gutters, Rooflights or Fascias calculator also carries a flat roof Build-Up Type, which used to give it the members of the structure: only the structure calculator, the whole flat roof, or no calculator at all draws them)
   const otherRoofCalc = !!canonicalId && canonicalId.startsWith('roof-') && canonicalId !== 'roof-structure' && canonicalId !== 'roof-flat'
   if (otherRoofCalc) return null
@@ -165,14 +170,14 @@ export function roofLookFromState(canonicalId: string | undefined, makeupId: str
   const openingsOf = (x: unknown): OpeningIn[] => (Array.isArray(x) ? x.filter((o): o is OpeningIn => !!o && typeof o === 'object' && typeof (o as OpeningIn).widthMm === 'number' && typeof (o as OpeningIn).offsetMm === 'number') : [])
   if (kind === 'flat') {
     const s = v.AssemblyFlatRoofDemo ?? {}
-    return roofLook({ kind, lengthMm: num(s.lengthMm) ?? drawn.lengthMm, spanMm: num(s.widthMm) ?? drawn.spanMm, centresMm: num(s.centresMm), openings: openingsOf(s.openings) })
+    return roofLook({ kind, lengthMm: (preferDrawn ? undefined : num(s.lengthMm)) ?? drawn.lengthMm, spanMm: (preferDrawn ? undefined : num(s.widthMm)) ?? drawn.spanMm, centresMm: num(s.centresMm), openings: openingsOf(s.openings) })
   }
   if (kind === 'mono') {
     const s = v.AssemblyMonoPitchRoofDemo ?? {}
-    return roofLook({ kind, lengthMm: num(s.lengthMm) ?? drawn.lengthMm, spanMm: num(s.spanMm) ?? drawn.spanMm, centresMm: num(s.rafterCentresMm), openings: openingsOf(s.openings) })
+    return roofLook({ kind, lengthMm: (preferDrawn ? undefined : num(s.lengthMm)) ?? drawn.lengthMm, spanMm: (preferDrawn ? undefined : num(s.spanMm)) ?? drawn.spanMm, centresMm: num(s.rafterCentresMm), openings: openingsOf(s.openings) })
   }
   const s = (kind === 'gable' ? v.AssemblyGableRoofDemo : v.AssemblyHipRoofDemo) ?? {}
-  return roofLook({ kind, lengthMm: num(s.lengthMm) ?? drawn.lengthMm, spanMm: num(s.spanMm) ?? drawn.spanMm, centresMm: num(s.rafterCentresMm), endA: typeof s.endA === 'string' ? s.endA : kind === 'hip' ? 'hip' : 'gable', endB: typeof s.endB === 'string' ? s.endB : kind === 'hip' ? 'hip' : 'gable' })
+  return roofLook({ kind, lengthMm: (preferDrawn ? undefined : num(s.lengthMm)) ?? drawn.lengthMm, spanMm: (preferDrawn ? undefined : num(s.spanMm)) ?? drawn.spanMm, centresMm: num(s.rafterCentresMm), endA: typeof s.endA === 'string' ? s.endA : kind === 'hip' ? 'hip' : 'gable', endB: typeof s.endB === 'string' ? s.endB : kind === 'hip' ? 'hip' : 'gable' })
 }
 
 // ── What a roof COVERING looks like on the plan: not the members under it, but the surface on top, in the material chosen ─────────────────────────────────────────────────────────────────────────────────────────────

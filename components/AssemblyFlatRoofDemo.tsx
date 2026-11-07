@@ -349,13 +349,15 @@ interface Props {
    * span the width. Whenever they change they overwrite the calculator's own, still editable by hand. */
   externalLengthMm?: number
   externalWidthMm?: number
+  /** Take-off: the joists added by hand on the drawn roof (clicked onto it). Whenever the count changes it overwrites the calculator's own, still editable by hand. */
+  extraJoistsFromPlan?: number
   /** Which build-up the calculator opens on — Take-off passes it from the Build-Up Type picked. */
   buildUpDefault?: FlatRoofBuildUp
 }
 
 const PART_NAME: Record<FlatRoofPart, string> = { complete: 'Flat Roof', structure: 'Flat roof structure', covering: 'Flat roof covering', gutters: 'Gutters and downpipes' }
 
-export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, buildUpDefault = 'warm', part = 'complete' }: Props) {
+export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, extraJoistsFromPlan, buildUpDefault = 'warm', part = 'complete' }: Props) {
   // What this calculator shows: the roof's structure, its covering, its gutters — or all of it.
   const showStructure = part === 'complete' || part === 'structure'
   const showCovering = part === 'complete' || part === 'covering'
@@ -374,6 +376,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // Until the section is picked by hand it follows the span chart: the smallest section that works for the span.
   const [depthPicked, setDepthPicked] = useCalcState('AssemblyFlatRoofDemo', 'depthPicked', false)
   const [centresMm, setCentresMm] = useCalcState('AssemblyFlatRoofDemo', 'centresMm', 400)
+  const [extraJoists, setExtraJoists] = useCalcState('AssemblyFlatRoofDemo', 'extraJoists', extraJoistsFromPlan ?? 0)
+  useEffect(() => { if (extraJoistsFromPlan != null) setExtraJoists(extraJoistsFromPlan) }, [extraJoistsFromPlan])
   const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyFlatRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
   const [fallRatio, setFallRatio] = useCalcState('AssemblyFlatRoofDemo', 'fallRatio', 80)
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
@@ -534,7 +538,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   const input: FlatRoofInput = {
     lengthMm, widthMm, joistCentresMm: centresMm, buildUp, fallRatio, edges, wallConnection,
-    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings,
+    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings, extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
   }
   const openingsKey = JSON.stringify(openings)
   const edgesKey = JSON.stringify(edges)
@@ -544,7 +548,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     try { return { ok: true as const, geometry: calculateFlatRoofGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey])
+  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey, extraJoists, part])
 
   const g = geometryResult.ok ? geometryResult.geometry : null
 
@@ -635,6 +639,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: drain.picks.gutter === DRAIN_NONE ? 0 : g.gutterLm,
     parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
+    extraJoists: part === 'structure' || part === 'complete' ? extraJoists : 0,
   } : null
   // Two levels: a one-line description for the quote's phase line (`description`, printed everywhere) and the
   // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
@@ -919,6 +924,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                   </select>
                 </PropRow>
               </div>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <PropRow label="Extra joists added (on top of those at the centres)">{numInput(extraJoists, setExtraJoists, 0)}</PropRow>
+              {extraJoistsFromPlan != null && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>Taken from the joists added on the Take-off drawing; adding or removing them there changes this.</div>}
             </div>
             {joistSystem === 'posi' ? (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Posi-joists are sized by the supplier for the span — pick the depth they give you.</div>
