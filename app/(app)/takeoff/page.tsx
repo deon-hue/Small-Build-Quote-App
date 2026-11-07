@@ -4591,14 +4591,25 @@ export default function TakeoffPage() {
     const { planImageUrl: _, ...rest } = project
     // A wall (or other item) switched to a calculator AFTER it was drawn still carries the Build-up Type it started with (the default cavity wall); never priced, it would reach the quote as that cavity wall.
     // Mark it, so the quote makes an unpriced line for the calculator it IS (named and linked to it, at the drawn size) instead.
-    const outItems = sendItems.map(it => {
-      if (it.assemblyResult || !it.floorMakeupId || !it.taskSubphaseId) return it
-      const entry = resolveBuiltAssembly(it)
+    // EVERY item that has a calculator is also tied to its Back Office sub-phase here (the quote only reopens a calculator through that link, `boSubPhaseId`): an item that got its calculator through its Build-up Type
+    // or a summary item made before Back Office had the sub-phase carries no `taskSubphaseId`, and would reach the quote as an ordinary line with no calculator behind it.
+    const missingSub: string[] = []
+    const outItems = sendItems.map(it0 => {
+      const entry = resolveBuiltAssembly(it0)
       const canonicalId = entry ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === entry) : undefined
-      if (!canonicalId || WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] === canonicalId) return it
-      const name = boSubPhases.find(sp => sp.id === it.taskSubphaseId)?.name ?? it.subPhase
-      return name ? { ...it, unpricedCalc: { canonicalId, name } } : it
+      if (!canonicalId) return it0
+      const own = it0.taskSubphaseId ? boSubPhases.find(sp => sp.id === it0.taskSubphaseId && sp.canonical_id === canonicalId) : undefined
+      const sub = own ?? boSubPhases.find(sp => sp.canonical_id === canonicalId)
+      const it: TakeoffItem = sub ? { ...it0, taskSubphaseId: sub.id, subPhase: it0.subPhase || sub.name } : it0
+      if (!sub) missingSub.push(it0.subPhase || it0.name)
+      if (it.assemblyResult) return it
+      // never priced: a calculator that is only paired with the Build-up Type the item started with is still priced from that Build-up Type, as before
+      if (it.floorMakeupId && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] === canonicalId) return it
+      return { ...it, unpricedCalc: { canonicalId, name: sub?.name ?? it.subPhase ?? it.name } }
     })
+    if (missingSub.length > 0 && !window.confirm(
+      `Back Office does not have the sub-phase for ${[...new Set(missingSub)].map(n => '"' + n + '"').join(', ')} yet, so on the quote ${missingSub.length === 1 ? 'it' : 'they'} would not open ${missingSub.length === 1 ? 'its' : 'their'} calculator.\n\nOpen Back Office once so it adds the new sub-phases, then send again. Send anyway?`
+    )) return
     const data = { version: 1, ...rest, items: outItems }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
     if (intoLinked && into) sessionStorage.setItem('sbc_takeoff_into_quote', into)
