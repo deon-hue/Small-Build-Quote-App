@@ -1008,6 +1008,9 @@ export default function TakeoffPage() {
   // the toolbar's drop-down menus (one open at a time; a click anywhere else closes it) and whether the side panel (schedule / properties) is shown
   const [openMenu, setOpenMenu] = useState<null | 'phase' | 'more' | 'file' | 'view' | 'clear'>(null)
   const [panelOpen, setPanelOpen] = useState(true)
+  // a tablet: the Menu sheet (every toolbar) and the pull-out Schedule / Properties panel, both closed to start so the drawing has the screen
+  const [tabMenu, setTabMenu] = useState(false)
+  const [tabPanel, setTabPanel] = useState(false)
   // the toolbars: where each is docked, its name, text or icons, order and whether it shows (kept per browser, see lib/takeoff-toolbars.ts), and the open right-click menu
   const [toolbars, setToolbars] = useState<TbPref[]>(() => defaultToolbars())
   const [tbMenu, setTbMenu] = useState<{ id: TbId | null; x: number; y: number } | null>(null)
@@ -8754,12 +8757,14 @@ export default function TakeoffPage() {
     { t: 'drain',    icon: '🕳', label: 'Place Chamber / Manhole / Gully', pinned: true, show: activePhase === 'Drainage & Services' },
     { t: 'click',    icon: '💠', label: 'Click to Place Item',     pinned: false, show: true },
   ]
+  /** shows the Schedule / Properties panel: the side column on a computer, the pull-out panel on a tablet */
+  function openSidePanel() { if (coarse) setTabPanel(true); else setPanelOpen(true) }
   function chooseTool(t: DrawingTool) {
     if (tool === 'measure' || t === 'measure' || tool === 'guide' || t === 'guide') { setDrawPoints([]); setIsDrawing(false) }
     if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t)
     if (t === 'select') { setDrawPoints([]); setIsDrawing(false) }
-    if (t === 'electric' || t === 'plumb' || t === 'drain') { setPanelMode('properties'); setPanelOpen(true) }
-    if (t === 'opening' || t === 'room') { setPanelMode('properties'); setPanelOpen(true); setEditingItem(null); setEditingElement(null); setSelectedId(null) }
+    if (t === 'electric' || t === 'plumb' || t === 'drain') { setPanelMode('properties'); openSidePanel() }
+    if (t === 'opening' || t === 'room') { setPanelMode('properties'); openSidePanel(); setEditingItem(null); setEditingElement(null); setSelectedId(null) }
     if (t === 'join') { setJoinFirst(null); showToast('Join Corner: click one wall near the corner, then the other') }
   }
 
@@ -9278,19 +9283,49 @@ export default function TakeoffPage() {
         .to-ib.tip-up[data-tip]:hover::after { top: auto; bottom: calc(100% + 6px); }
         .to-tbname:hover { color: var(--to-text) !important; }
       `}</style>
+      {coarse ? (
+        <div data-tabletbar style={{ background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)', flexShrink: 0, padding: '6px 10px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', minHeight: 56 }}>
+          <button type="button" aria-label="Back to Home" onClick={() => router.push('/dashboard')} style={{ ...btnStyle, minWidth: 48, minHeight: 44, fontSize: 18 }}>←</button>
+          <div style={{ fontWeight: 700, fontSize: 15, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName || project.name || 'Untitled take-off'}</div>
+          {renderToolbarFrame({ ...toolbarOf('phase'), dock: 'top' })}
+          {activeLevelId && <button type="button" onClick={() => setTabMenu(true)} style={{ ...btnStyle, minHeight: 44, fontSize: 13 }} title="Change the level or the sheet">{levelName(project, activeLevelId)} ▾</button>}
+          <span style={{ fontSize: 12, color: 'var(--to-muted)' }}>{project.calibration.label ?? ''}</span>
+          <div style={{ flex: 1 }} />
+          <button type="button" onClick={() => setTabMenu(true)} style={{ ...btnStyle, minHeight: 44, fontSize: 14 }}>☰ Menu</button>
+          <button type="button" onClick={() => { setPanelMode('schedule'); setTabPanel(v => !(v && panelMode === 'schedule')) }} style={{ ...btnStyle, minHeight: 44, fontSize: 14, ...(tabPanel && panelMode === 'schedule' ? { background: 'var(--to-hover)' } : {}) }}>📋 Schedule</button>
+          <button type="button" onClick={() => { setPanelMode('properties'); setTabPanel(v => !(v && panelMode === 'properties')) }} style={{ ...btnStyle, minHeight: 44, fontSize: 14, ...(tabPanel && panelMode === 'properties' ? { background: 'var(--to-hover)' } : {}) }}>✏️ Properties</button>
+          <button type="button" onClick={() => { if (project.quoteId) sendToQuote(true); else setSendChooser(true) }} style={{ ...btnStyle, minHeight: 44, fontSize: 14, background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}>{project.quoteRef ? 'Send to ' + project.quoteRef : 'Send to quote'}</button>
+        </div>
+      ) : (
       <div onContextMenu={openTbMenuHere}
         style={{ background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)', flexShrink: 0, padding: '4px 8px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', minHeight: 30 }}>
         {tbZone('top')}
         {toolbarsOn(toolbars, 'top').length === 0 && <span style={{ fontSize: 11, color: 'var(--to-muted)' }}>No toolbars along the top: right-click here to show them</span>}
       </div>
+      )}
 
       {/* ── Main 3-column layout ─────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
-        {/* Toolbars docked to the left */}
+        {/* Toolbars docked to the left (a tablet has a rail of big tool buttons instead) */}
+        {coarse ? (
+          <div data-tabletrail style={{ width: 72, flexShrink: 0, background: 'var(--to-panel)', borderRight: '1px solid var(--to-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 0', overflowY: 'auto' }}>
+            {toolDefs.filter(d => d.show && d.pinned).map(d => (
+              <button key={d.t} type="button" aria-label={d.label} onClick={() => chooseTool(d.t)}
+                style={{ width: 60, minHeight: 58, borderRadius: 12, border: tool === d.t ? '2px solid var(--to-active-bd)' : '1px solid var(--to-border)', background: tool === d.t ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', padding: 0 }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{d.icon}</span>
+                <span style={{ fontSize: 10, lineHeight: 1.1 }}>{d.label.split(' ')[0].replace('Place', 'Place')}</span>
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button type="button" aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} style={{ width: 60, minHeight: 50, borderRadius: 12, border: '1px solid var(--to-border)', background: snapOn ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', cursor: 'pointer', fontSize: 11 }}>🧲<br />Snap</button>
+            <button type="button" aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} style={{ width: 60, minHeight: 50, borderRadius: 12, border: '1px solid var(--to-border)', background: orthoOn ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', cursor: 'pointer', fontSize: 11 }}>⊾<br />Straight</button>
+          </div>
+        ) : (<>
         {toolbarsOn(toolbars, 'left').length > 0 && (
           <div onContextMenu={openTbMenuHere} style={{ display: 'flex', flexDirection: 'column', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, padding: 6, background: 'var(--to-panel)', borderRight: '1px solid var(--to-border)', flexShrink: 0, maxHeight: '100%' }}>{tbZone('left')}</div>
         )}
+        </>)}
 
         {/* Centre: SVG canvas */}
         <div
@@ -9299,7 +9334,7 @@ export default function TakeoffPage() {
         >
           {/* A tablet: the keys the page uses, as buttons (the same handler runs: Enter, Backspace, Escape, Delete, R, Ctrl+Z), and a box to type a length */}
           {coarse && (
-            <div className="to-touchbar" style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '82%', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 12, padding: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+            <div className="to-touchbar" style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '94%', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 12, padding: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
               {typedAllowed() && (
                 <>
                   <input inputMode="decimal" value={typed} onChange={e => setTyped(e.target.value.toLowerCase().replace(/[^0-9.,x*]/g, ''))} placeholder={tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect') ? 'type 4.5x3' : 'type a length (m)'}
@@ -9321,6 +9356,8 @@ export default function TakeoffPage() {
                   {selectedId && <button type="button" onClick={() => sendKey('d', { ctrlKey: true })}>⧉ Copy</button>}
                 </>
               )}
+              {!isDrawing && (selectedId || selectedOpeningId || selectedElectricPointId || selectedPlumbPointId || selectedPlumbPipeId) && <button type="button" onClick={() => { setPanelMode('properties'); setTabPanel(true) }}>✏️ Details</button>}
+              <button type="button" onClick={() => fitToScreen()}>⤢ Fit</button>
               <button type="button" onClick={() => sendKey('z', { ctrlKey: true })}>↶ Undo</button>
               <button type="button" onClick={() => sendKey('y', { ctrlKey: true })}>↷ Redo</button>
               <button type="button" onClick={() => setShiftHeld(v => !v)} title="Like holding Shift: a straight line while drawing, or pick a second wall to join" style={shiftHeld ? { background: '#f97316', color: '#fff', borderColor: '#f97316' } : undefined}>⇧ Shift{shiftHeld ? ' on' : ''}</button>
@@ -9413,15 +9450,15 @@ export default function TakeoffPage() {
           )}
 
           {/* The Levels and sheets toolbar when it is docked to the bottom: along the bottom of the drawing, above the status line */}
-          {toolbarOf('levels').vis && toolbarOf('levels').dock === 'bottom' && (
+          {!coarse && toolbarOf('levels').vis && toolbarOf('levels').dock === 'bottom' && (
             <div style={{ position: 'absolute', left: 0, right: 0, bottom: 22, zIndex: 5, background: 'var(--to-panel)' }}>{renderToolbarFrame(toolbarOf('levels'))}</div>
           )}
           {/* Hide or show the side panel (schedule and properties) to give the drawing the full width */}
-          <button className="to-ib tip-r" data-tip={panelOpen ? 'Hide the side panel' : 'Show the schedule and properties'} aria-label={panelOpen ? 'Hide the side panel' : 'Show the side panel'}
+          {!coarse && <button className="to-ib tip-r" data-tip={panelOpen ? 'Hide the side panel' : 'Show the schedule and properties'} aria-label={panelOpen ? 'Hide the side panel' : 'Show the side panel'}
             onClick={() => setPanelOpen(v => !v)}
             style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, width: 32, height: 32, padding: 0, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, color: 'var(--to-text)', cursor: 'pointer', fontSize: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
             {panelOpen ? '⇥' : '⇤'}
-          </button>
+          </button>}
           {sheetImageLoading && (
             <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '8px 14px', fontSize: 12 }}>
               ⏳ Getting this plan from your account…
@@ -9837,15 +9874,22 @@ export default function TakeoffPage() {
         </div>
 
         {/* Toolbars docked to the right */}
-        {toolbarsOn(toolbars, 'right').length > 0 && (
+        {!coarse && toolbarsOn(toolbars, 'right').length > 0 && (
           <div onContextMenu={openTbMenuHere} style={{ display: 'flex', flexDirection: 'column', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, padding: 6, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)', flexShrink: 0, maxHeight: '100%' }}>{tbZone('right')}</div>
         )}
 
         {/* Right panel */}
         <div style={{
-          width: 300, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)',
-          display: panelOpen ? 'flex' : 'none', flexDirection: 'column', flexShrink: 0,
+          width: coarse ? 'min(420px, 62vw)' : 300, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)',
+          display: (coarse ? tabPanel : panelOpen) ? 'flex' : 'none', flexDirection: 'column', flexShrink: 0,
+          ...(coarse ? { position: 'absolute' as const, right: 0, top: 0, bottom: 0, zIndex: 12, boxShadow: '-6px 0 20px rgba(0,0,0,0.35)' } : {}),
         }}>
+          {coarse && (
+            <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--to-border)', flexShrink: 0 }}>
+              <div style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>{panelMode === 'schedule' ? 'Schedule' : 'Properties'}</div>
+              <button type="button" aria-label="Close" onClick={() => setTabPanel(false)} style={{ ...btnStyle, minWidth: 48, minHeight: 44, fontSize: 18 }}>✕</button>
+            </div>
+          )}
           {/* Panel tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--to-border)', flexShrink: 0 }}>
             {(['schedule', 'properties'] as PanelMode[]).map(m => (
@@ -10034,12 +10078,25 @@ export default function TakeoffPage() {
       )}
 
       {/* Toolbars docked to the bottom (the Levels and sheets toolbar sits over the bottom of the drawing instead) */}
-      {tbZone('bottom').length > 0 && (
+      {!coarse && tbZone('bottom').length > 0 && (
         <div onContextMenu={openTbMenuHere} style={{ background: 'var(--to-panel)', borderTop: '1px solid var(--to-border)', flexShrink: 0, padding: '4px 8px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           {tbZone('bottom')}
         </div>
       )}
       {renderTbMenu()}
+      {coarse && tabMenu && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'var(--to-scrim)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '56px 12px 12px' }} onClick={e => { if (e.target === e.currentTarget) setTabMenu(false) }}>
+          <div style={{ background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 14, padding: 12, width: 'min(960px, 100%)', maxHeight: '86vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ flex: 1, fontWeight: 700, fontSize: 15 }}>Menu: plan, scale, levels, view, files and more</div>
+              <button type="button" aria-label="Close" onClick={() => setTabMenu(false)} style={{ ...btnStyle, minWidth: 48, minHeight: 44, fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
+              {toolbars.filter(t => t.vis && t.id !== 'phase').map(t => renderToolbarFrame({ ...t, dock: 'top' }))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── My Take-offs: open a saved take-off, or start a new one ─────────────────────────────────────── */}
       {showTakeoffList && (

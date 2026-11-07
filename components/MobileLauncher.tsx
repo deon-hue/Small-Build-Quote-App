@@ -8,10 +8,11 @@
  * deliberately absent — they're desktop-only.
  */
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Briefcase, FileText, FilePlus, Camera, StickyNote, Zap, Mail, Receipt, CalendarDays,
-  Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
+  Ruler, Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { useApp } from '@/contexts/AppContext'
@@ -84,7 +85,10 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
   }
 
   const toLink = ({ label, href, Icon }: NavItem): HomeLink => ({ label, href, Icon })
-  const nav = NAV.filter(i => can(i.perm)).map(toLink)
+  // Take-off & Draw opens with touch on a tablet at least 700px wide (the same rule as the page itself); a phone does not list it yet
+  const [wide, setWide] = useState(false)
+  useEffect(() => { const mq = window.matchMedia('(min-width: 700px)'); const f = () => setWide(mq.matches); f(); mq.addEventListener('change', f); return () => mq.removeEventListener('change', f) }, [])
+  const nav = [...NAV, ...(wide ? [{ label: 'Take-off & Draw', Icon: Ruler, perm: 'quotes' as keyof UserPermissions, href: '/takeoff' }] : [])].filter(i => can(i.perm)).map(toLink)
   const footerNav = [...FOOTER_NAV.filter(i => can(i.perm)).map(toLink), { label: 'Help & guides', href: '/help', Icon: HelpCircle } as HomeLink]
 
   // Headline numbers — archived jobs are excluded everywhere here, same as the Jobs list itself.
