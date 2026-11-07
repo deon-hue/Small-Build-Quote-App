@@ -28,6 +28,8 @@ export interface ScopeItem {
   drainSummary?: boolean
   wdSummary?: boolean
   assemblyResult?: { name?: string; location?: string; description?: string }
+  /** drawn as a calculator that was never priced: the calculator's name, not the Build-up Type the item started with */
+  unpricedCalc?: { canonicalId: string; name: string }
 }
 
 export interface ScopeInput {
@@ -77,7 +79,7 @@ function bulletFor(it: ScopeItem, makeupName?: (id: string) => string | undefine
   }
   if (isSummaryOnly(it)) return null
 
-  const label = ((it.floorMakeupId && makeupName?.(it.floorMakeupId)) || it.name || '').trim() || it.phase
+  const label = (it.unpricedCalc?.name || (it.floorMakeupId && makeupName?.(it.floorMakeupId)) || it.name || '').trim() || it.phase
   const spec = (it.spec || '').trim()
   const isWall = (it.phase === 'External Walls' || it.phase === 'Internal Walls & Partitions') && (it.length ?? 0) > 0
   const unit = UNIT_WORD[(it.unit || '').toLowerCase()]

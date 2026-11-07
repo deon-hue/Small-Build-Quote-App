@@ -4575,7 +4575,7 @@ export default function TakeoffPage() {
     if (unpriced.length > 0 && !window.confirm(
       `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
       unpriced.map(it => `• ${it.name}${it.subPhase ? ` (${it.subPhase})` : ''}`).join('\n') +
-      `\n\nUnpriced items are sent to the quote as a plain build-up, not from their calculator. Send anyway?`
+      `\n\nOpen each one and press Save & Price to send its calculator price. Items you send unpriced reach the quote as a line for that calculator with no price, to be priced there. Send anyway?`
     )) return
     // the plumbing was priced, but the fittings or pipes on the plan have changed since, or the pipework has something the estimator should look at
     const pl = sendItems.find(it => it.plumbSummary)
@@ -4589,7 +4589,17 @@ export default function TakeoffPage() {
     if (dr?.assemblyResult && dr.drainPricedKey !== undefined && dr.drainPricedKey !== drainKeyNow && !window.confirm('The chambers, manholes and gullies on the plan have changed since they were priced, so the quote would carry the old price. Open the Chambers, Gullies & Connections calculator and Save & Price it again.\n\nSend anyway?')) return
     if (plumbNotes.length > 0 && !window.confirm('Check the plumbing before it goes to the quote:\n\n' + plumbNotes.map(n => '- ' + n).join('\n') + '\n\nSend anyway?')) return
     const { planImageUrl: _, ...rest } = project
-    const data = { version: 1, ...rest, items: sendItems }
+    // A wall (or other item) switched to a calculator AFTER it was drawn still carries the Build-up Type it started with (the default cavity wall); never priced, it would reach the quote as that cavity wall.
+    // Mark it, so the quote makes an unpriced line for the calculator it IS (named and linked to it, at the drawn size) instead.
+    const outItems = sendItems.map(it => {
+      if (it.assemblyResult || !it.floorMakeupId || !it.taskSubphaseId) return it
+      const entry = resolveBuiltAssembly(it)
+      const canonicalId = entry ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === entry) : undefined
+      if (!canonicalId || WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] === canonicalId) return it
+      const name = boSubPhases.find(sp => sp.id === it.taskSubphaseId)?.name ?? it.subPhase
+      return name ? { ...it, unpricedCalc: { canonicalId, name } } : it
+    })
+    const data = { version: 1, ...rest, items: outItems }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
     if (intoLinked && into) sessionStorage.setItem('sbc_takeoff_into_quote', into)
     else sessionStorage.removeItem('sbc_takeoff_into_quote')
