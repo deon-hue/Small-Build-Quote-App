@@ -497,13 +497,13 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setBuildUp(next)
     setInsulationMm(next === 'warm' ? 120 : Math.max(50, joistDepth - 50))
   }
-  // The Roof drop-down: warm, cold, or (Roof Structure only) a flat roof with NO insulation, as a garage has. A garage roof saved with insulation before keeps its own entry.
-  const roofChoice = part === 'structure' && garageRoof ? (insulated ? 'garage-insulated' : 'garage') : buildUp
+  // The Roof drop-down: warm, cold, or a flat roof with NO insulation, as a garage has (Roof Structure and Roof Coverings both). In Roof Structure it is the garage roof (`garageRoof`, uninsulated); in Roof Coverings it is the roof not insulated (`insulated` off, which replaces the old 'Insulated roof' tick). A garage roof saved with insulation before keeps its own entry.
+  const roofChoice = part === 'structure' ? (garageRoof ? (insulated ? 'garage-insulated' : 'garage') : buildUp) : (insulated ? buildUp : 'garage')
   function chooseRoof(v: string) {
     setLabourOverride(null)
-    if (v === 'garage') { setGarageRoof(true); setInsulated(false); return }
+    if (v === 'garage') { if (part === 'structure') setGarageRoof(true); setInsulated(false); return }
     if (v === 'garage-insulated') return
-    if (garageRoof) { setGarageRoof(false); setInsulated(true) }
+    if (part === 'structure') { if (garageRoof) { setGarageRoof(false); setInsulated(true) } } else if (!insulated) setInsulated(true)
     changeBuildUp(v as FlatRoofBuildUp)
   }
 
@@ -876,22 +876,19 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               <select value={roofChoice} onChange={e => chooseRoof(e.target.value)} style={propInput}>
                 <option value="warm">Warm roof — PIR above the deck</option>
                 <option value="cold">Cold roof — insulation between the joists</option>
-                {part === 'structure' && <option value="garage">Flat roof with no insulation (a garage or simple flat roof)</option>}
+                <option value="garage">Flat roof with no insulation (a garage or simple flat roof)</option>
                 {part === 'structure' && garageRoof && insulated && <option value="garage-insulated">Garage flat roof with insulation (as saved)</option>}
               </select>
             </PropRow>
             {part === 'structure' && garageRoof && (
               <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
                 {insulated
-                  ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and untick Insulated roof there, or the insulation is counted twice.'
-                  : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. Roof Coverings: untick Insulated roof there too.'}
+                  ? 'The insulation, its vapour control layer and its fixings are priced here, with the structure. Price the covering in Roof Coverings and choose the flat roof with no insulation there, or the insulation is counted twice.'
+                  : 'No insulation, vapour control layer or ventilation is priced. Fine for an unheated garage; if it is ever heated or converted it needs insulation. In Roof Coverings choose the flat roof with no insulation there too.'}
               </div>
             )}
-            {part !== 'structure' && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569', marginTop: 6, cursor: 'pointer' }} title="Untick for an uninsulated roof, such as a garage: no insulation, vapour control layer or ventilation is priced">
-                <input type="checkbox" checked={insulated} onChange={e => { setInsulated(e.target.checked); setLabourOverride(null) }} />
-                Insulated roof (untick for an uninsulated one, e.g. a garage)
-              </label>
+            {part !== 'structure' && !insulated && (
+              <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>No insulation, vapour control layer or ventilation is priced, and the quote words say it is an uninsulated roof. Fine for an unheated garage. In Roof Structure choose the flat roof with no insulation there too, so the structure is not priced with insulation either.</div>
             )}
             {(showCovering || showStructure) && (
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
