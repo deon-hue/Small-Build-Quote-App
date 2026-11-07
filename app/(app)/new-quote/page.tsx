@@ -1262,7 +1262,8 @@ export default function NewQuotePage() {
               source: 'manual', itemStatus: 'bo-default',
               needsReview: true,
               ...(item.taskSubphaseId && { boSubPhaseId: item.taskSubphaseId }),
-              ...(isWall && lengthMm ? { assemblySize: { lengthMm, ...(heightMm ? { heightMm } : {}) } } : {}),
+              ...(item.assemblyCalcState && { calcState: item.assemblyCalcState }),
+              ...(isWall && lengthMm && !item.assemblyCalcState ? { assemblySize: { lengthMm, ...(heightMm ? { heightMm } : {}) } } : {}),
               reviewNote: `Drawn in Take-off as ${item.unpricedCalc.name}${sizeNote ? ` (${sizeNote})` : ''}, but its calculator was not priced there. Open the calculator on this line and Save & Price it.`,
             })
             continue
