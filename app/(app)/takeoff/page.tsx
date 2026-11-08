@@ -129,6 +129,7 @@ import {
   WALL_CONSTRUCTION_LABELS, WALL_FINISH_LABELS,
   type WallConstructionType, type WallFinishType, type CalculatedMaterial,
 } from '@/lib/material-recipes'
+import { beamFor as structuralBeamFor } from '@/lib/structural-openings-units'
 
 // ── Smart Draw Mode: phase → default tool mapping ─────────────────────────────
 // When the user selects a phase, the draw tool auto-resets to this default.
@@ -3453,6 +3454,51 @@ export default function TakeoffPage() {
   }
 
   /** the openings drawn on the walls: the wall is cut (a white gap), the jambs, a window's glass, a door's leaf and swing arc, bi-fold panels; with the ghost of the next one under the pointer while placing */
+  /** A structural opening drawn on a wall (the Structural Openings calculator's line): painted over the walls as an OPENING, like a door or window: a gap through the wall at its thickness with its jambs, the steel beam dashed across it, a square for each steel post, and a label with its width and beam. The wall thickness, beams and posts come from the calculator once it is saved; before that it is a 215mm wall with one beam. */
+  function renderStructuralOpenings() {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || hiddenPhases.has('Structural Frame')) return null
+    const sw = (n: number) => n / zoom
+    const STEEL = '#1d4ed8'
+    const nodes: React.ReactNode[] = []
+    for (const el of elementsOnActiveSheet(project)) {
+      if (el.phase !== 'Structural Frame' || el.type !== 'line' || el.points.length < 2) continue
+      const it = project.items.find(i => i.elementId === el.id)
+      if (!it || it.notEstimated || boSubPhases.find(b => b.id === it.taskSubphaseId)?.canonical_id !== 'sf-openings-calc') continue
+      const values = (it.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>
+      const first = ((values.AssemblyStructuralOpeningsDemo?.openings ?? []) as Record<string, unknown>[])[0]
+      const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
+      const thickMm = num(first?.thicknessMm, 215)
+      const beams = Math.round(num(first?.beams, 1)), posts = Math.round(num(first?.posts, 0))
+      const lenM = polylineLength(el.points, mpp)
+      // at least about 11 screen pixels wide, so a thin wall on a small-scale plan still reads as an opening
+      const wd = wallDrawing(el.points, { layers: [{ kind: 'solid', mm: Math.max(thickMm, (11 / zoom) * mpp * 1000) }], label: '' }, mpp, { ref: 'centre', closed: false })
+      if (!wd) continue
+      const sel = selectedId === el.id
+      const centre = el.points.map(p => `${p.x},${p.y}`).join(' ')
+      const a = el.points[0], b = el.points[el.points.length - 1]
+      const at = (f: number) => ({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f })
+      const midRole = first?.postRole === 'mid'
+      const fracs: number[] = posts <= 0 ? [] : midRole ? Array.from({ length: posts }, (_, i) => (i + 1) / (posts + 1)) : posts === 1 ? [0] : Array.from({ length: posts }, (_, i) => i / (posts - 1))
+      const postPx = Math.max(152 / (mpp * 1000), 7 / zoom)
+      const bays = midRole && posts > 0 ? posts + 1 : 1
+      const section = beams > 0 ? (typeof first?.section === 'string' && first.section !== 'auto' ? first.section : structuralBeamFor(lenM / bays, ((first?.loadAbove as 'light' | 'floor' | 'heavy') ?? 'floor')).section.label) : ''
+      const ref = typeof first?.ref === 'string' && first.ref ? first.ref : 'Opening'
+      const mid = centroid(el.points)
+      const text = `${ref} · ${lenM.toFixed(2)}m${section ? ' · ' + section : ''}${posts > 0 ? ` · ${posts} post${posts === 1 ? '' : 's'}` : ''}`
+      nodes.push(
+        <g key={'so-' + el.id} data-testid="struct-opening">
+          {wd.strips.map((st, i) => <path key={i} d={st.d} fillRule="evenodd" fill="#ffffff" stroke={sel ? SEL_COLOUR : '#111827'} strokeWidth={sw(1.6)} strokeLinejoin="miter" />)}
+          {beams > 0 && <polyline points={centre} fill="none" stroke={STEEL} strokeWidth={sw(beams > 1 ? 4 : 2.6)} strokeDasharray={`${sw(8)} ${sw(4)}`} strokeLinecap="butt" />}
+          {fracs.map((f, i) => { const p = at(f); return <rect key={i} x={p.x - postPx / 2} y={p.y - postPx / 2} width={postPx} height={postPx} fill={STEEL} stroke="#ffffff" strokeWidth={sw(1)} /> })}
+          {sel && wd.strips.map((st, i) => <path key={'s' + i} d={st.d} fillRule="evenodd" fill="none" stroke={SEL_COLOUR} strokeWidth={sw(2.5)} strokeDasharray={`${sw(6)} ${sw(3)}`} />)}
+          <text className="to-lbl" x={mid.x} y={mid.y - sw(10)} textAnchor="middle" fontSize={sw(10)} fontWeight={700} fill={STEEL} stroke="#fff" strokeWidth={sw(3)} paintOrder="stroke" fontFamily="monospace">{text}</text>
+        </g>,
+      )
+    }
+    return nodes.length > 0 ? <g style={{ pointerEvents: 'none' }}>{nodes}</g> : null
+  }
+
   function renderOpenings() {
     const mpp = project.calibration.mpp
     if (!(mpp > 0) || hiddenPhases.has('Windows & Doors')) return null
@@ -6757,7 +6803,7 @@ export default function TakeoffPage() {
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
-    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework'))
+    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework') || (item.phase === 'Structural Frame' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'sf-openings-calc'))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
     // Tiling Preparation: the drawing says what it is for (the floor, the walls, or both) before it is priced
@@ -7789,7 +7835,7 @@ export default function TakeoffPage() {
                     : _tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
                     : _structOpenCalc
-                    ? 'Priced opening by opening with its own calculator. The line drawn here is only a marker on the plan: add each opening, its wall, the beams or posts and the props in the calculator.'
+                    ? "Priced opening by opening with its own calculator. The line you draw along the wall IS the opening: it is drawn as an opening (a gap in the wall with the steel across it) and its length is the first opening's width. Add the wall, the beams or posts and the props, and any other openings, in the calculator."
                     : _secondFixCalc
                     ? 'Priced item by item with its own calculator. The area drawn here is only a marker on the plan: add the boxing, shelves and other items in the calculator.'
                     : _furnCalc
@@ -9748,6 +9794,7 @@ export default function TakeoffPage() {
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
               {renderOpenings()}
+              {renderStructuralOpenings()}
               {renderDimensions()}
               <g data-print-hide="1">{renderRoomEditors()}{renderJoinPick()}</g>
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}

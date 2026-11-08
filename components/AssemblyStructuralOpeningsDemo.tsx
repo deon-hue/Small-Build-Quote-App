@@ -24,6 +24,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the length of the line drawn on the wall in Take-off (mm): the width of the first opening, which follows the line until it is typed over */
+  externalLengthMm?: number
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -33,7 +35,7 @@ const LOADS = Object.keys(LOAD_LABEL) as LoadAbove[]
 const FINISHES = Object.keys(FINISH_LABEL) as SteelFinish[]
 const ROLES = Object.keys(POST_ROLE_LABEL) as PostRole[]
 
-export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const ID = 'AssemblyStructuralOpeningsDemo'
   // The job starts with no openings: you add the ones the job has
   const [openings, setOpenings] = useCalcState<StructuralOpening[]>(ID, 'openings', [])
@@ -43,6 +45,18 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
   const [dustProtection, setDustProtection] = useCalcState(ID, 'dustProtection', false)
 
   function addOpening() { setOpenings(p => [...p, newStructuralOpening('so-' + uid(), `SO${p.length + 1}`, addFormed)]) }
+  // the line drawn on the wall in Take-off IS the first opening: its length is the width, and the opening follows the line until a width is typed over it (one made by hand, or saved before this, is left alone)
+  React.useEffect(() => {
+    if (!(externalLengthMm != null && externalLengthMm > 0)) return
+    const w = Math.round(externalLengthMm)
+    setOpenings(p => {
+      if (p.length === 0) return [{ ...newStructuralOpening('so-' + uid(), 'SO1', addFormed), widthMm: w, planWidthMm: w }]
+      const f = p[0]
+      if (f.planWidthMm === undefined || f.planWidthMm === w) return p
+      return f.widthMm === f.planWidthMm ? [{ ...f, widthMm: w, planWidthMm: w }, ...p.slice(1)] : p
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalLengthMm])
   function update(id: string, patch: Partial<StructuralOpening>) { setOpenings(p => p.map(x => (x.id === id ? { ...x, ...patch } : x))) }
   /** a different kind of wall: its usual thickness and beams (the beam count only follows while it is still the usual for the old wall) */
   function changeWall(x: StructuralOpening, wall: OpeningWallKind) {

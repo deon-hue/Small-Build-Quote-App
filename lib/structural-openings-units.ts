@@ -135,6 +135,8 @@ export interface StructuralOpening {
   /** bricks, mortar and DPC to form the jambs, and the bricklayer to make good (a cut opening) */
   makeGood: boolean
   situationId?: string | null
+  /** the width last given to this opening by the line drawn in Take-off: it follows the line until a width is typed over it */
+  planWidthMm?: number
 }
 
 export function newStructuralOpening(id: string, ref: string, formed: OpeningFormed = 'cut-existing'): StructuralOpening {
