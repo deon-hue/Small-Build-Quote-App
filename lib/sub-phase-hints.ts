@@ -14,6 +14,7 @@ const HINTS: Record<string, string> = {
   'ew-parapet-wall': 'parapet wall at roof edge',
   'ew-solid-brick': 'solid brick external wall, 225mm thick',
   'ew-solid-brick-victorian': 'old-fashioned solid brick wall as on a Victorian house, one, one and a half or two bricks thick with no cavity, laid in lime or cement mortar (not a cavity wall)',
+  'ew-timber-frame-brick': "an external timber frame wall with a brick outer leaf (a timber frame extension or new house): half-brick facing brickwork with a cavity and ties, the timber stud frame with insulation between the studs, a vapour control layer and plasterboard inside, with steel lintels, cavity trays and cavity barriers over the openings. Use it for a timber frame wall faced in brick; not a cavity wall of brick and block, not a timber garden room clad in timber, not a solid brick wall",
   'ew-single-skin-brick-piers': 'single skin half-brick wall (102mm) built with brick piers, as a single skin garage, outbuilding, store, or a garden or boundary wall, not insulated and not a cavity wall',
   'ew-timber-frame': 'timber-frame external wall',
   // Foundations
@@ -74,7 +75,8 @@ const HINTS: Record<string, string> = {
   'sf-steelwork': 'structural steel beams (RSJs), columns and padstones',
   'sf-timber-frame': 'timber frame and studwork forming the structure',
   'sf-masonry': 'general structural masonry and repairs. Not a new external wall: use the External Walls calculators for that',
-  'sf-openings': 'forming openings in existing walls with propping and needles, for example a knock-through',
+  'sf-openings': 'a quick allowance for forming an opening in an existing wall with propping and needles, for example a knock-through, when the scope gives no sizes or steel; when it gives the opening sizes, the wall and the steel use Structural Openings (by opening) instead',
+  'sf-openings-calc': "openings cut through an existing wall, or formed in a new wall, priced one opening at a time with the steelwork over them: steel beams sized from the span and the load above, steel posts on concrete pads, padstones, needles and props, cutting out and rubble away, making good the jambs, fire protection to the steel, the structural engineer and the Building Control notice. Use it when the scope gives an opening's width (a knock-through, a new door or opening in a load-bearing wall, a steel beam). Not the door or window and its frame (Windows & Doors), taking out a whole wall (Demolition), or plastering the reveals",
   // Windows and doors
   'wd-upvc-windows': 'uPVC windows supplied and fitted',
   'wd-aluminium-windows': 'aluminium windows supplied and fitted',
