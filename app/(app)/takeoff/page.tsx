@@ -3464,7 +3464,31 @@ export default function TakeoffPage() {
     for (const el of elementsOnActiveSheet(project)) {
       if (el.phase !== 'Structural Frame' || el.type !== 'line' || el.points.length < 2) continue
       const it = project.items.find(i => i.elementId === el.id)
-      if (!it || it.notEstimated || boSubPhases.find(b => b.id === it.taskSubphaseId)?.canonical_id !== 'sf-openings-calc') continue
+      const canon = it && !it.notEstimated ? boSubPhases.find(b => b.id === it.taskSubphaseId)?.canonical_id : undefined
+      if (!it || (canon !== 'sf-openings-calc' && canon !== 'sf-steel-calc')) continue
+      if (canon === 'sf-steel-calc') {
+        // a steel beam on the plan: a dashed blue line with a short bearing mark at each end and a label with its section and length (the first member of the calculator, which follows the line)
+        const m0 = ((((it.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>).AssemblySteelworkDemo?.members ?? []) as Record<string, unknown>[])[0]
+        const lenM = polylineLength(el.points, mpp)
+        const sel = selectedId === el.id
+        const a = el.points[0], b = el.points[el.points.length - 1]
+        const dx = b.x - a.x, dy = b.y - a.y, dl = Math.hypot(dx, dy) || 1
+        const nx = -dy / dl, ny = dx / dl, tick = sw(7)
+        const centre = el.points.map(p => `${p.x},${p.y}`).join(' ')
+        const mid = centroid(el.points)
+        const ref = typeof m0?.ref === 'string' && m0.ref ? m0.ref : 'Beam'
+        const sec = typeof m0?.section === 'string' ? m0.section : ''
+        const text = `${ref} · ${lenM.toFixed(2)}m${sec ? ' · ' + sec : ''}`
+        nodes.push(
+          <g key={'sb-' + el.id} data-testid="steel-beam">
+            <polyline points={centre} fill="none" stroke="#ffffff" strokeWidth={sw(6)} strokeLinecap="butt" />
+            <polyline points={centre} fill="none" stroke={sel ? SEL_COLOUR : STEEL} strokeWidth={sw(3.2)} strokeDasharray={`${sw(9)} ${sw(4)}`} strokeLinecap="butt" />
+            {[a, b].map((p, i) => <line key={i} x1={p.x - nx * tick} y1={p.y - ny * tick} x2={p.x + nx * tick} y2={p.y + ny * tick} stroke={sel ? SEL_COLOUR : STEEL} strokeWidth={sw(2.4)} />)}
+            <text className="to-lbl" x={mid.x} y={mid.y - sw(10)} textAnchor="middle" fontSize={sw(10)} fontWeight={700} fill={STEEL} stroke="#fff" strokeWidth={sw(3)} paintOrder="stroke" fontFamily="monospace">{text}</text>
+          </g>,
+        )
+        continue
+      }
       const values = (it.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>
       const first = ((values.AssemblyStructuralOpeningsDemo?.openings ?? []) as Record<string, unknown>[])[0]
       const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
@@ -6803,7 +6827,7 @@ export default function TakeoffPage() {
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
-    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework') || (item.phase === 'Structural Frame' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'sf-openings-calc'))
+    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework') || (item.phase === 'Structural Frame' && ['sf-openings-calc', 'sf-steel-calc'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
     // Tiling Preparation: the drawing says what it is for (the floor, the walls, or both) before it is priced
@@ -6814,6 +6838,7 @@ export default function TakeoffPage() {
     const _stairCalc       = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-stairs-calc'
     const _kitchenCalc     = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-kitchen-fit'
     const _furnCalc        = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-furniture-calc'
+    const _steelCalc       = isDecoCalc && item.phase === 'Structural Frame' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'sf-steel-calc'
     const _structOpenCalc  = isDecoCalc && item.phase === 'Structural Frame' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'sf-openings-calc'
     const _secondFixCalc   = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-secondfix-calc'
     // chambers, manholes, gullies and connections are typed in the calculator, item by item (a drawing is only a marker until they can be placed on the plan)
@@ -7830,7 +7855,9 @@ export default function TakeoffPage() {
                   </select>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
-                  {_drainItemsCalc
+                  {_steelCalc
+                    ? "Priced member by member with its own calculator. The line you draw is the first beam: it is drawn as a steel beam on the plan and its length is the first member's length. Add the section, the other beams, columns and posts, and how each is held, in the calculator."
+                    : _drainItemsCalc
                     ? 'Priced item by item with its own calculator. What is drawn here is only a marker on the plan: add each inspection chamber, manhole, gully and connection in the calculator. The drain pipe between them is a line drawn as Underground Drainage (by run).'
                     : _tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'

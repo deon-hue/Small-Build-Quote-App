@@ -52,6 +52,7 @@ import AssemblyKitchenFitDemo from '@/components/AssemblyKitchenFitDemo'
 import AssemblyFurnitureDemo from '@/components/AssemblyFurnitureDemo'
 import AssemblySecondFixDemo from '@/components/AssemblySecondFixDemo'
 import AssemblyStructuralOpeningsDemo from '@/components/AssemblyStructuralOpeningsDemo'
+import AssemblySteelworkDemo from '@/components/AssemblySteelworkDemo'
 import AssemblyPipeworkDemo from '@/components/AssemblyPipeworkDemo'
 import AssemblyDrainageDemo from '@/components/AssemblyDrainageDemo'
 import AssemblySoakawayDemo from '@/components/AssemblySoakawayDemo'
@@ -81,7 +82,7 @@ import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'render-hackoff' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'drain-chambers' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix' | 'struct-opening'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'render-hackoff' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'drain-chambers' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix' | 'struct-opening' | 'steel-member'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -205,6 +206,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'wd-doors': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo scope="doors" onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'join-secondfix-calc': { icon: 'second-fix', render: opts => <AssemblySecondFixDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'sf-steel-calc': { icon: 'steel-member', render: opts => <AssemblySteelworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'sf-openings-calc': { icon: 'struct-opening', render: opts => <AssemblyStructuralOpeningsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'join-furniture-calc': { icon: 'furniture', render: opts => <AssemblyFurnitureDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'join-kitchen-fit': { icon: 'kitchen-fit', render: opts => <AssemblyKitchenFitDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
@@ -350,6 +352,17 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="4" y="9" width="6" height="6" fill="#ffffff" stroke="#2b6cb0" strokeWidth="1.3" />
           <path d="M4 12h6" stroke="#2b6cb0" strokeWidth="1" />
           <path d="M14 15V6M14 6A9 9 0 0 1 21.5 11" stroke="#7c3aed" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      )
+    case 'steel-member':
+      // An I-beam seen end-on sitting on a column: the flanges and web, and a post under it.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="4" width="18" height="3" fill="#bfdbfe" stroke="#1d4ed8" strokeWidth="1.3" />
+          <rect x="10.5" y="7" width="3" height="4" fill="#bfdbfe" stroke="#1d4ed8" strokeWidth="1.2" />
+          <rect x="3" y="11" width="18" height="3" fill="#bfdbfe" stroke="#1d4ed8" strokeWidth="1.3" />
+          <rect x="9" y="14" width="6" height="6" fill="#93c5fd" stroke="#1d4ed8" strokeWidth="1.3" />
+          <rect x="6" y="20" width="12" height="2" fill="#d6d3d1" stroke="#78716c" strokeWidth="1" />
         </svg>
       )
     case 'struct-opening':
