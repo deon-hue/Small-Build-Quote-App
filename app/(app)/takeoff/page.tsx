@@ -75,7 +75,7 @@ const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-pile
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
 /** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
-const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors', 'Joinery & Fixtures'])
+const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors', 'Joinery & Fixtures', 'Structural Frame'])
 /** calculators sized from an AREA drawn on the plan: picking one before drawing starts the Rectangle tool, not the Line tool a phase such as Plumbing & Heating starts with (its Line is a pipe) */
 const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms', 'join-skirting-rooms'])
 /** calculators priced from the DRAWING alone (a wall's length, height and openings, a roof's box, a floor's area, a foundation's length): an item of one of these that was never Saved & Priced is priced by the calculator itself when it is sent to a quote, so it never reaches the quote as the old build-up. The room-by-room and item-by-item calculators are NOT here: what they price is typed in them. */
@@ -1506,7 +1506,7 @@ export default function TakeoffPage() {
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
       const foundationFits = item.phase !== 'Foundations' || (el.type === 'line' ? FOUNDATION_LINE_CALCS.has(bo?.canonical_id ?? '') : FOUNDATION_SHAPE_CALCS.has(bo?.canonical_id ?? ''))
-      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && (!MARKER_CALC_PHASES.has(item.phase) || item.phase === 'Joinery & Fixtures')) || hasCalculator)) {
+      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && (!MARKER_CALC_PHASES.has(item.phase) || item.phase === 'Joinery & Fixtures' || item.phase === 'Structural Frame')) || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
         if (bo.canonical_id === 'tile-prep-rooms') item.prepScope = el.type === 'line' ? 'walls' : drawPrepScope
@@ -6764,6 +6764,7 @@ export default function TakeoffPage() {
     const _stairCalc       = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-stairs-calc'
     const _kitchenCalc     = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-kitchen-fit'
     const _furnCalc        = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-furniture-calc'
+    const _structOpenCalc  = isDecoCalc && item.phase === 'Structural Frame' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'sf-openings-calc'
     const _secondFixCalc   = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-secondfix-calc'
     // chambers, manholes, gullies and connections are typed in the calculator, item by item (a drawing is only a marker until they can be placed on the plan)
     const _drainItemsCalc  = isDecoCalc && item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-chambers-gullies'
@@ -6813,7 +6814,7 @@ export default function TakeoffPage() {
         name={item.name}
         lengthM={item.length ?? 0}
         measureLabel={isBoxShape ? 'Size' : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_drainItemsCalc ? 'chambers and gullies are set in the calculator' : _stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : _furnCalc ? 'fitted furniture is set in the calculator' : _secondFixCalc ? 'items are set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_drainItemsCalc ? 'chambers and gullies are set in the calculator' : _stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : _furnCalc ? 'fitted furniture is set in the calculator' : _structOpenCalc ? 'openings are set in the calculator' : _secondFixCalc ? 'items are set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -7783,6 +7784,8 @@ export default function TakeoffPage() {
                     ? 'Priced item by item with its own calculator. What is drawn here is only a marker on the plan: add each inspection chamber, manhole, gully and connection in the calculator. The drain pipe between them is a line drawn as Underground Drainage (by run).'
                     : _tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
+                    : _structOpenCalc
+                    ? 'Priced opening by opening with its own calculator. The line drawn here is only a marker on the plan: add each opening, its wall, the beams or posts and the props in the calculator.'
                     : _secondFixCalc
                     ? 'Priced item by item with its own calculator. The area drawn here is only a marker on the plan: add the boxing, shelves and other items in the calculator.'
                     : _furnCalc
