@@ -855,3 +855,11 @@ export function suggestSecondFixLabour(tasks: { key: string; trade: 'carpenter' 
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'secondfix-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Structural Openings calculator (Structural Frame → Structural Openings (by opening)): the bricklayer to cut or form each opening, set the steel and make good, the labourer to prop, break out, dig the
+ * pads and clear the rubble, and the carpenter to case the steel in fire-resisting board, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestStructuralOpeningsLabour(tasks: { key: string; trade: 'bricklayer' | 'labourer' | 'carpenter'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'structopen-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

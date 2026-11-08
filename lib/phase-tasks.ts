@@ -237,6 +237,15 @@ const structuralFrameSubphases: PhaseSubphase[] = [
       t('sf-op-block-up',           'Block up existing opening',             'nr',   2, 180,   85,    0,    0,   0,  'Build in, tie to existing, make good'),
     ],
   },
+  // Openings in walls with their steelwork, priced one opening at a time (assembly calculator). Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'sf-openings-calc',
+    phase: 'Structural Frame',
+    name: 'Structural Openings (by opening)',
+    markupPct: 20,
+    ukWarning: 'Every structural opening needs the structural engineer\'s design and calculations and a Building Control notice before work starts. The props go in before any cutting. A party wall needs a Party Wall Act notice first. Fire protection to the steel has a rating set by the engineer or Building Control.',
+    tasks: [],  // priced by the Structural Openings calculator (each opening: size, wall, beams or posts on pads, padstones, props and needles, cutting, rubble, make good, fire protection, engineer, Building Control)
+  },
 ]
 
 // ── 3. ROOF ───────────────────────────────────────────────────────────────────
