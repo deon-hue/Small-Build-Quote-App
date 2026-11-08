@@ -25,9 +25,11 @@ const label: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight:
 const pad = (n: number) => String(n).padStart(2, '0')
 const nowLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}` }
 
-export default function SentComposer({ store, target, companyName, mode, onClose, onSaved }: {
+export default function SentComposer({ store, target, companyName, mode, onClose, onSaved, ensureContact }: {
   store: SentStore
   target: SentTarget
+  /** for a lead who is not a contact yet: adds them to the contacts (so they can sign in to the portal) and gives back the contact's id, or null when it cannot (no email address) */
+  ensureContact?: () => Promise<string | null>
   companyName: string
   mode: ComposerMode
   onClose: () => void
@@ -87,15 +89,22 @@ export default function SentComposer({ store, target, companyName, mode, onClose
 
   const empty = !subject.trim() && !body.trim() && files.length === 0
 
+  /** something going to their portal needs them to be a contact (that is who the portal belongs to): a lead who is not one yet is added to the contacts first */
+  async function contactIdForPortal(): Promise<{ id: string | null; added: boolean }> {
+    if (target.clientId || !showInPortal || !ensureContact || !target.email.trim()) return { id: target.clientId, added: false }
+    try { const id = await ensureContact(); return { id, added: !!id } } catch { return { id: null, added: false } }
+  }
+
   async function sendEmail() {
     if (empty) { setNote('Write a message or add a file first.'); setNoteBad(true); return }
     setBusy(true); setNote(''); setNoteBad(false)
     try {
-      const res = await fetch('/api/sent-items/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: target.leadId, clientId: target.clientId, subject, body, files, showInPortal }) })
+      const who = await contactIdForPortal()
+      const res = await fetch('/api/sent-items/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: target.leadId, clientId: who.id, subject, body, files, showInPortal }) })
       const j = await res.json().catch(() => ({}))
       if (!res.ok || !j.ok) { setNote(j.error || 'The email could not be sent. Please try again.'); setNoteBad(true); setBusy(false); return }
       done.current = true
-      onSaved(j.item ?? null, j.warning || `Emailed to ${target.name || target.email}.`)
+      onSaved(j.item ?? null, j.warning || `Emailed to ${target.name || target.email}.${who.added ? ' They have been added to your contacts, so they can sign in to their portal.' : ''}`)
     } catch { setNote('The email could not be sent. Check your connection and try again.'); setNoteBad(true); setBusy(false) }
   }
 
@@ -103,13 +112,14 @@ export default function SentComposer({ store, target, companyName, mode, onClose
     if (empty) { setNote('Write the message or add a file first.'); setNoteBad(true); return }
     setBusy(true); setNote(''); setNoteBad(false)
     const at = kind === 'logged' && when ? new Date(when) : null
+    const who = await contactIdForPortal()
     const r = await store.add({
-      leadId: target.leadId, clientId: target.clientId, channel: ch, kind, subject, body, files,
+      leadId: target.leadId, clientId: who.id, channel: ch, kind, subject, body, files,
       toName: target.name, toEmail: target.email, toPhone: target.phone, showInPortal, ...(at && Number.isFinite(at.getTime()) ? { sentAt: at.toISOString() } : {}),
     })
     if ('error' in r) { setNote(r.error); setNoteBad(true); setBusy(false); return }
     done.current = true
-    onSaved(r.item, kind === 'logged' ? 'Added to what was sent.' : 'Recorded as sent by WhatsApp.')
+    onSaved(r.item, (kind === 'logged' ? 'Added to what was sent.' : 'Recorded as sent by WhatsApp.') + (who.added ? ' They have been added to your contacts, so they can sign in to their portal.' : ''))
   }
 
   async function shareFiles() {
@@ -199,8 +209,13 @@ export default function SentComposer({ store, target, companyName, mode, onClose
               <input type="checkbox" checked={showInPortal} onChange={e => setShowInPortal(e.target.checked)} style={{ width: 'auto' }} />
               Show this in their client portal
             </label>
+            {showInPortal && !target.clientId && ensureContact && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: -6 }}>
+                {target.email.trim() ? 'The portal belongs to a contact, so if they are not one yet they are added to your Contacts (as a lead) so they can sign in with their email address.' : 'They have no email address on file, so they cannot sign in to a portal yet. Add one to their lead first.'}
+              </div>
+            )}
             {noEmail && <div style={{ fontSize: 12.5, color: '#a93226' }}>There is no email address on file for them. Add one first, or use WhatsApp.</div>}
-            {mode === 'email' && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>It is emailed from your company, replies come to you, and a copy of the email comes to your own inbox. The files are attached and kept here.</div>}
+            {mode === 'email' && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>It is emailed from your company, replies come to you, and a copy of the email comes to your own inbox. The files are attached and kept here. If they are one of your contacts and the box above is ticked, the email also has a button to view it in their portal.</div>}
           </div>
 
           <div className="form-modal-ft" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', padding: '12px 20px', borderTop: '1px solid var(--border)' }}>

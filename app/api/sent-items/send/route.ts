@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { usageGuard } from '@/lib/usage'
 import { senderFrom, withPoweredBy } from '@/lib/email-brand'
 import { siteOrigin } from '@/lib/site-origin'
-import { checkSendInput, sentItemFromRow, firstNameOf, EMAIL_ATTACH_MAX_BYTES } from '@/lib/sent-items'
+import { checkSendInput, sentItemFromRow, firstNameOf, likeSafe, EMAIL_ATTACH_MAX_BYTES } from '@/lib/sent-items'
 import { buildSentEmail } from '@/lib/sent-items-email'
 
 export const maxDuration = 60
@@ -67,7 +67,16 @@ export async function POST(req: NextRequest) {
   const phone = ((st?.phone as string) || '').trim()
   const origin = siteOrigin(req).replace(/\/+$/, '')
   const hasLogo = /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test((st?.logo as string) || '')
-  const mail = buildSentEmail({ companyName, firstName: firstNameOf(toName), subject: v.subject, body: v.body, fileNames: v.files.map(f => f.name), phone, logoUrl: hasLogo && origin ? `${origin}/api/public/company-logo/${user.id}` : undefined })
+  // a link to the portal only for someone who can sign in to it: a client contact (the portal's sign-in code is only ever emailed to a contact's address), and only when the message is switched on for the portal
+  let canUsePortal = false
+  if (v.showInPortal && origin) {
+    if (v.clientId) canUsePortal = true
+    else {
+      const { data: same } = await sb.from('clients').select('client_type').ilike('email', likeSafe(toEmail))
+      canUsePortal = ((same ?? []) as { client_type: string | null }[]).some(r => r.client_type !== 'supplier' && r.client_type !== 'subcontractor')
+    }
+  }
+  const mail = buildSentEmail({ companyName, firstName: firstNameOf(toName), subject: v.subject, body: v.body, fileNames: v.files.map(f => f.name), phone, logoUrl: hasLogo && origin ? `${origin}/api/public/company-logo/${user.id}` : undefined, portalUrl: canUsePortal ? `${origin}/portal` : undefined })
 
   try {
     const res = await fetch('https://api.resend.com/emails', {

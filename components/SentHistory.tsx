@@ -11,9 +11,11 @@ import type { SentStore } from '@/lib/sent-items-store'
 
 const heading: React.CSSProperties = { fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)' }
 
-export default function SentHistory({ store, target, companyName, includeLeadsByEmail, onChanged }: {
+export default function SentHistory({ store, target, companyName, includeLeadsByEmail, onChanged, ensureContact }: {
   store: SentStore
   target: SentTarget
+  /** on a lead's window: adds them to the contacts when something is sent to their portal (see SentComposer) */
+  ensureContact?: () => Promise<string | null>
   companyName: string
   /** on a contact's card: also show what was sent to the leads that have the same email address (from before they were a contact) */
   includeLeadsByEmail?: boolean
@@ -114,7 +116,7 @@ export default function SentHistory({ store, target, companyName, includeLeadsBy
 
       {mode && (
         <SentComposer
-          store={store} target={target} companyName={companyName} mode={mode}
+          store={store} target={target} companyName={companyName} mode={mode} ensureContact={ensureContact}
           onClose={() => setMode(null)}
           onSaved={(item, msg) => { setMode(null); setNote(msg || ''); void load(); onChanged?.(); if (item) setItems(p => sortSent([item, ...p.filter(x => x.id !== item.id)])) }}
         />
