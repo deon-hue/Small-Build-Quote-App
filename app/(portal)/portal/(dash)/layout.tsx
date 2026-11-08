@@ -16,6 +16,13 @@ function PortalNav() {
   const visibleContracts = contracts.filter(c => c.status === 'sent' || c.status === 'signed')
   const awaitingContracts = contracts.filter(c => c.status === 'sent').length
   const [menuOpen, setMenuOpen] = useState(false)
+  // the 'Sent to you' tab only appears once the company has sent this client something
+  const [hasSent, setHasSent] = useState(false)
+  useEffect(() => {
+    let live = true
+    fetch('/api/portal/sent-items').then(r => (r.ok ? r.json() : { items: [] })).then(d => { if (live) setHasSent(Array.isArray(d.items) && d.items.length > 0) }).catch(() => { /* no tab */ })
+    return () => { live = false }
+  }, [])
 
   // Tab title shows the contractor's name once their settings have loaded
   useEffect(() => {
@@ -59,6 +66,7 @@ function PortalNav() {
           {visibleContracts.length > 0 && navLink('/portal/contracts', 'Contracts', awaitingContracts)}
           {navLink('/portal/build-plan', 'Work Schedule')}
           {clientSettings.showSelectionsTab !== false && jobs.length > 0 && navLink('/portal/selections', 'Selections')}
+          {hasSent && navLink('/portal/sent', 'Sent to you')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>
         <button
