@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T23:00:00+00:00',
+    title: 'The AI quote prices timber frame brick walls and structural openings',
+    detail: 'The AI quote now prices two more calculators from the written scope: Timber Frame with Brick Outer Leaf (a wall with a stated length, its frame, insulation and openings) and Structural Openings (an opening with a stated width, the wall, what is above it and the steel). Each is priced by its own calculator, anything the scope did not say takes the calculator usual setting and is listed in the review note, and nothing is invented.',
+  },
+  {
     at: '2026-11-08T21:00:00+00:00',
     title: 'Level names on the quote, and a timber frame with brick wall calculator',
     detail: 'When a take-off has two or more levels, each quote line now ends with the floor it was drawn on, such as External Cavity Wall – First floor, and the scope draft names the level too. External Walls has a new calculator, Timber Frame with Brick Outer Leaf: a brick leaf, cavity and ties, the stud frame with headers and trimmed studs, insulation, vapour control layer and plasterboard, with steel lintels, trays, weeps and cavity barriers over the openings. Open Back Office once so the new sub-phase appears.',

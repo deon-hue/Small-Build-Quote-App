@@ -20,6 +20,7 @@ import { decorationPromptGuide } from '@/lib/decoration-ai'
 import { solidBrickPromptGuide } from '@/lib/solid-brick-ai'
 import { floorRoofPromptGuide } from '@/lib/floor-roof-ai'
 import { joineryPromptGuide } from '@/lib/joinery-ai'
+import { structuralPromptGuide } from '@/lib/structural-ai'
 
 export const maxDuration = 300
 
@@ -35,6 +36,7 @@ const CALC_OBJECT_ASK_IDS = new Set([
   'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-insulated-concrete', 'fs-block-beam', 'fs-suspended-timber',
   'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
   'join-skirting-rooms', 'join-stairs-calc', 'join-kitchen-fit', 'join-furniture-calc', 'join-secondfix-calc', 'wd-windows', 'wd-doors',
+  'ew-timber-frame-brick', 'sf-openings-calc',
 ])
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 
@@ -331,6 +333,7 @@ Rules:
   - ${solidBrickPromptGuide()}
   - ${floorRoofPromptGuide()}
   - ${joineryPromptGuide()}
+  - ${structuralPromptGuide()}
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
 - Select enough tasks to fully represent each phase — don't under-select
