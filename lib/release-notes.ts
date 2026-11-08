@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T19:00:00+00:00',
+    title: 'Client portal dashboard shows Selections and Sent to you',
+    detail: 'The client portal dashboard now has two summary cards. Your selections shows how many items there are and where they stand, with a flag for anything needed soon or overdue. Sent to you shows how many messages and files have been sent and the latest one. The Your project portal box at the top lists Sent to you too, and your Preview of the portal shows the same.',
+  },
+  {
     at: '2026-11-08T18:00:00+00:00',
     title: 'Leads can have a client portal, and emails link to it',
     detail: 'The lead window now shows whether they are in your contacts, with an Add to my contacts button, so a lead can have a client portal before any quote exists. Sending something with the Show in their client portal tick on adds them to your contacts first if they are not one and have an email, and the email then has a View it in your portal button. Saving a quote later finds the same contact, so nothing is doubled.',
