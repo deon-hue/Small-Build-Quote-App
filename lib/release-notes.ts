@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T14:00:00+00:00',
+    title: 'Sent to them: a record of what you send leads and contacts',
+    detail: 'Leads and contacts now have a Sent to them box. Email design ideas, photographs, drawings or a scope straight from the app with the files attached, prepare a WhatsApp message, or log something you already sent another way, and the words and a copy of every file are kept. Each record has an In their portal tick, and clients get a Sent to you tab in their portal showing what you have sent them. Run supabase/sent-items.sql once to switch it on.',
+  },
+  {
     at: '2026-11-08T11:00:00+00:00',
     title: 'Structural Frame: a new Structural Openings calculator',
     detail: 'Structural Frame has a new calculator called Structural Openings (by opening). Add each opening, cut in an existing wall or formed in a new one, and it prices the steel over it: beams picked from the span and the load above, steel posts on concrete pads, padstones, props and needles, cutting and rubble, making good, fire protection, the engineer and the Building Control notice. Open Back Office once so the new sub-phase appears. The steel sizes are indicative and the engineer designs the real ones.',
