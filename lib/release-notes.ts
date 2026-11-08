@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T09:00:00+00:00',
+    title: 'Company Setup is now split into sections',
+    detail: 'Company Setup has a menu down the left with five sections: Company, Invoicing, Accounting, Quotes and website, and Alerts and email. Only the section you pick is shown, so there is no long scroll. Each section has its own Save button and only saves its own settings, and a small amber dot shows a section with changes you have not saved yet.',
+  },
+  {
     at: '2026-11-08T07:00:00+00:00',
     title: 'Windows and Doors: a lintel is no longer priced twice',
     detail: 'When a door or window is drawn on a wall whose own calculator already prices a lintel, Windows and Doors now has a choice called Already priced in the wall calculator for what goes over the top. It leaves out the lintel, tray and closers but still prices forming the opening, and for a drawn opening it starts on that choice. If a lintel is already chosen there is a warning and a Do that button to switch it over.',
