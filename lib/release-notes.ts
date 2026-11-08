@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T18:00:00+00:00',
+    title: 'Leads can have a client portal, and emails link to it',
+    detail: 'The lead window now shows whether they are in your contacts, with an Add to my contacts button, so a lead can have a client portal before any quote exists. Sending something with the Show in their client portal tick on adds them to your contacts first if they are not one and have an email, and the email then has a View it in your portal button. Saving a quote later finds the same contact, so nothing is doubled.',
+  },
+  {
     at: '2026-11-08T16:00:00+00:00',
     title: 'Make a lead from a contact',
     detail: 'A client contact card has a new + Lead button next to + Quote. It makes a lead from their details, with the source set to My contacts, and opens it on the Leads page. If they already have a lead it opens that one instead of making a second.',
