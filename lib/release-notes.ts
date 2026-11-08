@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-09T09:00:00+00:00',
+    title: 'Structural openings are drawn as openings in Take-off',
+    detail: 'A line drawn with the Structural Openings calculator now shows as an opening: a gap through the wall with its jambs, the steel beam dashed across it, a square for each steel post and a label with its width and beam. The length of the line is the width of the first opening in the calculator, and it follows the line until you type a width over it.',
+  },
+  {
     at: '2026-11-08T23:00:00+00:00',
     title: 'The AI quote prices timber frame brick walls and structural openings',
     detail: 'The AI quote now prices two more calculators from the written scope: Timber Frame with Brick Outer Leaf (a wall with a stated length, its frame, insulation and openings) and Structural Openings (an opening with a stated width, the wall, what is above it and the steel). Each is priced by its own calculator, anything the scope did not say takes the calculator usual setting and is listed in the review note, and nothing is invented.',
