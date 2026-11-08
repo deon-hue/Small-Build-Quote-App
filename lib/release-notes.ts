@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T16:00:00+00:00',
+    title: 'Make a lead from a contact',
+    detail: 'A client contact card has a new + Lead button next to + Quote. It makes a lead from their details, with the source set to My contacts, and opens it on the Leads page. If they already have a lead it opens that one instead of making a second.',
+  },
+  {
     at: '2026-11-08T14:00:00+00:00',
     title: 'Sent to them: a record of what you send leads and contacts',
     detail: 'Leads and contacts now have a Sent to them box. Email design ideas, photographs, drawings or a scope straight from the app with the files attached, prepare a WhatsApp message, or log something you already sent another way, and the words and a copy of every file are kept. Each record has an In their portal tick, and clients get a Sent to you tab in their portal showing what you have sent them. Run supabase/sent-items.sql once to switch it on.',
