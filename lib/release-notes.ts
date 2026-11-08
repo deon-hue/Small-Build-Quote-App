@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-09T17:00:00+00:00',
+    title: 'Welded load-spreading plates on steel beams',
+    detail: 'The Structural Openings and Steel Beams, Columns and Posts calculators can now add a steel plate welded to the bottom, the top or both faces of a beam to spread its load over the wall. Choose the thickness (6, 8, 10, 12, 15, 20mm or typed), the width to suit the wall or cavity (as wide as the wall, or 100 to 440mm or typed) and the length (the whole beam or typed). It is priced by weight at the steel rate plus the fabricator's cutting and welding by the hour, counts in the steel weight, and appears in the quote wording. In Take-off the selected structural opening has the same plate choice. Sizes and prices are samples; the engineer specifies the real plate.',
+  },
+  {
     at: '2026-11-09T15:00:00+00:00',
     title: 'Structural openings are placed on a wall like a window or door',
     detail: 'In Take-off, the Structural Openings sub-phase now has a Place Structural Opening tool. Click a wall and the opening snaps into it, the wall is cut and shown with its steel beam and posts, and the wall area is reduced, just like a window or door. With the opening selected you choose the beam from all the steel beam sections, set the number of beams and posts and what is above it, and add connections and fabrications (end plates, cleats, splice plates, stiffeners, cap plates, resin anchors, fabrication by the hour). The Structural Openings calculator picks each opening up with that steel already chosen and prices the connections. All sections and prices are samples to check; the engineer designs the real steel. Windows and doors are not affected.',
