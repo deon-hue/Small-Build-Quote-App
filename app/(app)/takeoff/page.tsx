@@ -4540,9 +4540,12 @@ export default function TakeoffPage() {
 
   // Tiling & Finishes starts on its by-room calculator. Its older task sub-phases (Wall Tiling, Floor Tiling, Surface Preparation) come first in the list, so an untouched list used to draw an area as a flat 'Wall Tiling' task
   // priced from the old task lines and never opened the calculator. The pick is only a starting point: any other sub-phase can be chosen in the Properties panel before drawing, and it starts again after each drawing.
+  // Structural Frame starts on the Steel Beams, Columns & Posts calculator the same way (its first sub-phase is the old flat Structural Steelwork task list, so a line drawn there was priced from flat task lines, not the calculator): a line drawn is the first beam.
+  // Structural Openings is chosen from the same list, or with the Place Structural Opening tool.
   useEffect(() => {
-    if (activePhase !== 'Tiling & Finishes' || selectedTaskSubphaseId || boSubPhases.length === 0) return
-    const calcSub = getAllSubphasesForPhase('Tiling & Finishes').find(s => boSubPhases.find(b => b.id === s.id)?.canonical_id === 'tile-floor-rooms')
+    const startOn = activePhase === 'Tiling & Finishes' ? 'tile-floor-rooms' : activePhase === 'Structural Frame' ? 'sf-steel-calc' : null
+    if (!startOn || selectedTaskSubphaseId || boSubPhases.length === 0) return
+    const calcSub = getAllSubphasesForPhase(activePhase).find(s => boSubPhases.find(b => b.id === s.id)?.canonical_id === startOn)
     if (calcSub) setSelectedTaskSubphaseId(calcSub.id)
   }, [activePhase, selectedTaskSubphaseId, boSubPhases])
 
