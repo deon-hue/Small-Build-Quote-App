@@ -14,9 +14,11 @@ export interface PortalIntroProps {
   showInvoices: boolean
   /** the Selections tab (the client's ideas board) is available to this client */
   showSelections?: boolean
+  /** the Sent to you tab (what the company has sent them) has something in it */
+  showSent?: boolean
 }
 
-export default function PortalIntro({ companyName, phone, email, showQuotes, showContracts, showVariations, showInvoices, showSelections }: PortalIntroProps) {
+export default function PortalIntro({ companyName, phone, email, showQuotes, showContracts, showVariations, showInvoices, showSelections, showSent }: PortalIntroProps) {
   const areas: [string, string][] = [
     ...(showQuotes ? [['Quotes', 'review your quote and approve it online']] as [string, string][] : []),
     ...(showContracts ? [['Contracts', 'read and sign your building contract, and keep the signed copy']] as [string, string][] : []),
@@ -24,6 +26,7 @@ export default function PortalIntro({ companyName, phone, email, showQuotes, sho
     ...(showVariations ? [['Variations', 'review and approve any changes to the agreed work']] as [string, string][] : []),
     ...(showInvoices ? [['Invoices', 'see what is due and what you have paid']] as [string, string][] : []),
     ...(showSelections ? [['Selections', 'add your ideas and web links for the things you want, such as skirting, lights and taps, so we know what to order and fit']] as [string, string][] : []),
+    ...(showSent ? [['Sent to you', 'find the designs, drawings, photographs and information we have sent you, kept in one place']] as [string, string][] : []),
   ]
   const contact = [phone ? `call ${phone}` : '', email ? `email ${email}` : ''].filter(Boolean).join(' or ')
 
