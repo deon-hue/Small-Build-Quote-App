@@ -8,7 +8,7 @@
 //
 // Every rate and hour is a SAMPLE, editable in the calculator, to be checked against real jobs. The sections' weights and surfaces are rounded catalogue values.
 
-import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, type StructuralSituation } from './structural-openings-units'
+import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
 
 export type MemberKind = 'beam' | 'column' | 'hollow' | 'lvl' | 'timber-post'
 export type MemberFinish = 'primed' | 'galvanised' | 'intumescent' | 'cased' | 'none'
@@ -110,6 +110,8 @@ export interface SteelMember {
   by: MemberBy
   /** needles and Acrow props while a beam is fixed */
   propped: boolean
+  /** a beam: a steel plate welded to the bottom, the top or both to spread its load over the wall it bears on (none to start) */
+  plate?: BeamPlate | null
   situationId?: string | null
   /** the length last given to this member by the line drawn in Take-off: it follows the line until a length is typed over it */
   planLengthMm?: number
@@ -166,6 +168,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
   const summaries: SteelSummary[] = []
   const warnings: string[] = []
   let totalKg = 0, totalHours = 0, totalMembers = 0
+  let anyPlate = false
   let anyHeavy = false, anySteel = false, anyBoard = false, anySub = false, anyBareSteel = false, anyPostNoPad = false, anyTimber = false
 
   for (const m of input.members) {
@@ -221,6 +224,20 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
           parts.push(`${countText}${sec.label} steel ${m.qty === 1 ? 'beam' : 'beams'}, ${n2(lengthM)}m long, bolted through end plates`)
         }
         if (m.by === 'us') { brickHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * qty; labourHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * qty * LABOURER_ON_STEEL }
+        // a plate welded to the beam to spread its load over the wall it bears on
+        if (m.plate) {
+          checkBeamPlate(m.plate, name)
+          const pl = beamPlateFor(m.plate, lengthM, DEFAULT_PLATE_WIDTH_MM)
+          const nPlates = pl.plates * qty
+          const plateKg = pl.kg * qty
+          kg += plateKg; totalKg += plateKg
+          if (m.by === 'us') add('plate', `${m.plate.thicknessMm}mm x ${Math.round(pl.widthMm)}mm steel plate, ${n2(pl.lengthM)}m, welded ${m.plate.position === 'bottom' ? 'to the underside' : m.plate.position === 'top' ? 'to the top' : 'top and underside'} (${nPlates} plate${nPlates === 1 ? '' : 's'}, ${Math.round(plateKg)}kg)`, 'kg', rate('steelPerKg'), plateKg)
+          if (m.by === 'sub') add('plate-sub', `steelwork contractor: the ${m.plate.thicknessMm}mm x ${Math.round(pl.widthMm)}mm load-spreading plate steel (${Math.round(plateKg)}kg)`, 'kg', rate('steelSubPerKg'), plateKg, 'subcontractors')
+          add('plate-weld', `cutting, drilling and welding the load-spreading plate${nPlates === 1 ? '' : 's'}`, 'h', rate('fabPerHour'), pl.hours * qty, 'subcontractors')
+          parts.push(beamPlateWords(m.plate, pl.widthMm, m.qty))
+          if (m.plate.thicknessMm < 5 || m.plate.thicknessMm > 25) warnings.push(`${label}: a ${m.plate.thicknessMm}mm welded plate is outside the usual 6 to 20mm: check it with the engineer.`)
+          anyPlate = true
+        }
         if (m.propped) { add('props', 'needles and Acrow props hired (a week)', 'nr', rate('propsHire') + rate('propsPerExtraM') * Math.max(0, lengthM - 1.5 - 0.3), qty, 'plant'); labourHours += (HOURS.props + HOURS.propsPerM * lengthM) * qty }
       } else {
         // a column or post: on a base plate, on a pad
@@ -288,6 +305,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
     warnings.push('Every structural member needs the structural engineer\'s design and calculations: the sections here are samples to price from, not a design.')
     if (anyHeavy) warnings.push(`A beam heavier than about ${LIGHT_LIFT_KG}kg needs a Hiab or crane, or a big team and needles to lift it: add a Hiab visit if one is coming.`)
     if (anyBoard) warnings.push('Fire protection to structural steel has a rating set by the engineer or Building Control: confirm the board, the layers and the fixings. If the Boxing-in calculator also cases a beam, count it in one place only.')
+    if (anyPlate) warnings.push(PLATE_RATE_NOTE)
     if (anyBareSteel) warnings.push('No finish is priced to some of the steel: confirm with the engineer and Building Control whether it needs fire protection or a paint system.')
     if (anyPostNoPad) warnings.push('A post or column with no pad priced stands on a foundation priced elsewhere: it must not bear on the floor slab alone.')
     if (anySub) warnings.push('A steelwork contractor\'s price covers supplying, delivering and fixing the steel: the pads, fire protection and lifting stay here.')

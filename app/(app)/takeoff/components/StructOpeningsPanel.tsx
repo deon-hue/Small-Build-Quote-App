@@ -11,7 +11,7 @@ import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import LocationInput from '@/components/LocationInput'
 import type { PlacedOpening, PlacedStruct } from '@/lib/wall-openings'
-import { BEAM_CHOICES, POST_SECTIONS, CONNECTION_KINDS, CONNECTION_BY_ID, LOAD_LABEL, POST_ROLE_LABEL, beamFor, usualConnections } from '@/lib/structural-openings-units'
+import { BEAM_CHOICES, POST_SECTIONS, PLATE_THICKNESSES, PLATE_WIDTHS, CONNECTION_KINDS, CONNECTION_BY_ID, LOAD_LABEL, POST_ROLE_LABEL, beamFor, usualConnections } from '@/lib/structural-openings-units'
 import type { CostedLine } from '@/lib/assembly-calc'
 
 interface Props {
@@ -31,7 +31,7 @@ interface Props {
   onMoveAlong: (id: string, mm: number) => void
   onCentre: (id: string) => void
   /** the steel the calculator holds for an opening: the beam section, how many beams and posts, how many connections */
-  steelOf: (id: string) => { section: string; beams: number; posts: number; postRole: 'ends' | 'mid'; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[] } | undefined
+  steelOf: (id: string) => { section: string; beams: number; posts: number; postRole: 'ends' | 'mid'; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<PlacedStruct['plate']> | null } | undefined
   /** a change to the steel chosen for an opening: the beam section, how many beams and posts, what is above, the connections */
   onSteel: (id: string, patch: PlacedStruct) => void
   /** the calculator's card: what it measures, its saved price, whether the plan has changed since, and the calculator itself */
@@ -127,6 +127,36 @@ export default function StructOpeningsPanel(p: Props) {
                 )}
                 {steel.posts > 0 && <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 4 }}>Post section ({POST_SECTIONS[0].label} to start), pads and the rest are in the calculator.</div>}
 
+                {steel.beams > 0 && (
+                  <>
+                    <div style={{ ...label, color: STEEL, marginTop: 10 }}>Welded plate (spreads the load over the wall)</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!steel.plate} onChange={e => p.onSteel(selected.id, { plate: e.target.checked ? { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } : null })} />
+                      Weld a plate to the beam
+                    </label>
+                    {steel.plate && (() => {
+                      const pl = steel.plate
+                      const setPl = (patch: Partial<typeof pl>) => p.onSteel(selected.id, { plate: { ...pl, ...patch } })
+                      return (
+                        <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+                          <div><div style={tiny}>Where it is welded</div>
+                            <select value={pl.position} onChange={e => setPl({ position: e.target.value as 'bottom' | 'top' | 'both' })} style={input}>
+                              <option value="bottom">The bottom of the beam</option><option value="top">The top of the beam</option><option value="both">The top and the bottom</option>
+                            </select></div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                            <div><div style={tiny}>Thickness (mm)</div>
+                              <input type="number" min={1} list="plate-thk" value={pl.thicknessMm} onChange={e => { const n = parseFloat(e.target.value); if (Number.isFinite(n) && n > 0) setPl({ thicknessMm: n }) }} style={input} />
+                              <datalist id="plate-thk">{PLATE_THICKNESSES.map(t => <option key={t} value={t} />)}</datalist></div>
+                            <div><div style={tiny}>Width (mm)</div>
+                              <input type="number" min={1} list="plate-wid" placeholder="the wall" value={pl.widthMm ?? ''} onChange={e => { const n = parseFloat(e.target.value); setPl({ widthMm: Number.isFinite(n) && n > 0 ? n : null }) }} style={input} />
+                              <datalist id="plate-wid">{PLATE_WIDTHS.map(w => <option key={w} value={w} />)}</datalist></div>
+                          </div>
+                          <div style={{ fontSize: 10.5, color: 'var(--to-muted)' }}>Leave the width empty for as wide as the wall; set it to suit the cavity (for example 300). Length: the whole beam (change it in the calculator).</div>
+                        </div>
+                      )
+                    })()}
+                  </>
+                )}
                 <div style={{ ...label, color: STEEL, marginTop: 10 }}>Connections and fabrications</div>
                 {steel.conns.length === 0 && <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 4 }}>None added.</div>}
                 {steel.conns.map((c, i) => {

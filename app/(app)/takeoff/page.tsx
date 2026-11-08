@@ -2682,7 +2682,7 @@ export default function TakeoffPage() {
   const wdItem = project.items.find(it => it.wdSummary)
   const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
   /** the steel the Structural Openings calculator holds for a placed structural opening (the calculator's opening that follows it): how many beams, how many posts and where, and the beam section */
-  const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[] } => {
+  const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null } => {
     // what the calculator holds for this opening (anything typed over there) while it is in step with the plan; once the steel has been changed on the plan since the calculator last followed it, what is chosen on the plan wins (the calculator takes it when it is next opened); else the usual
     const arr = (((structItem?.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>).AssemblyStructuralOpeningsDemo?.openings ?? []) as Record<string, unknown>[]
     const c = arr.find(x => x.planId === o.id)
@@ -2698,7 +2698,8 @@ export default function TakeoffPage() {
     const conns = pick('connections') as { kind?: string; qty?: number }[] | undefined
     const connections = Array.isArray(conns) ? conns.filter(q => q && q.kind !== 'fabrication').reduce((t, q) => t + (typeof q.qty === 'number' ? q.qty : 0), 0) : 0
     const list = Array.isArray(conns) ? conns.filter(q => q && typeof q.kind === 'string' && typeof q.qty === 'number').map(q => ({ kind: q.kind as string, qty: q.qty as number })) : []
-    return { beams, posts: Math.round(n(pick('posts'), 0)), postRole: pick('postRole') === 'mid' ? 'mid' : 'ends', section, connections, choice: typeof sec === 'string' ? sec : 'auto', load, conns: list }
+    const plate = (pick('plate') ?? null) as NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null
+    return { plate, beams, posts: Math.round(n(pick('posts'), 0)), postRole: pick('postRole') === 'mid' ? 'mid' : 'ends', section, connections, choice: typeof sec === 'string' ? sec : 'auto', load, conns: list }
   }
   // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
   const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))
@@ -3755,7 +3756,7 @@ export default function TakeoffPage() {
         onMoveAlong={moveOpeningAlong}
         onCentre={centreOpening}
         steelOf={id => { const o = livePlacedStruct.find(q => q.id === id); return o ? structSteelFor(o) : undefined }}
-        onSteel={(id, patch) => changePlaced(list => list.map(q => { if (q.id !== id) return q; const e = structSteelFor(q); return { ...q, struct: { ...q.struct, section: e.choice, beams: e.beams, posts: e.posts, postRole: e.postRole, loadAbove: e.load, connections: e.conns, ...patch } } }))}
+        onSteel={(id, patch) => changePlaced(list => list.map(q => { if (q.id !== id) return q; const e = structSteelFor(q); return { ...q, struct: { ...q.struct, section: e.choice, beams: e.beams, posts: e.posts, postRole: e.postRole, loadAbove: e.load, connections: e.conns, plate: e.plate, ...patch } } }))}
         card={{
           measureText: `${plan.length}${drawingOnly > 0 ? ` (and ${drawingOnly} drawing only)` : ''}`,
           saved: it?.assemblyResult, stale,

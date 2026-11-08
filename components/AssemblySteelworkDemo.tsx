@@ -20,6 +20,7 @@ import { suggestSteelworkLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
 import TilingCalcFrame, { TilingNumInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
+import BeamPlateFields from '@/components/BeamPlateFields'
 
 interface Props {
   onClose?: () => void
@@ -162,6 +163,12 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
                       </select>
                     </PropRow>
                   </div>
+                  {k.steel && !k.post && (
+                    <>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Welded plate (load spreader)</div>
+                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} />
+                    </>
+                  )}
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     {k.post && <TilingCheck label="A concrete pad under each (dug, poured and the soil away)" on={x.pad} set={b => update(x.id, { pad: b })} />}
                     {!k.post && <TilingCheck label="Needles and Acrow props while it is fixed" on={x.propped} set={b => update(x.id, { propped: b })} />}

@@ -120,6 +120,43 @@ export const CONNECTION_KINDS: ConnectionInfo[] = [
   { id: 'fabrication', label: 'Other fabrication by the hour (welding, cutting, drilling)', short: 'hour of fabrication', cost: 0, hours: 0, unit: 'h' },
 ]
 export const CONNECTION_BY_ID: Record<string, ConnectionInfo> = Object.fromEntries(CONNECTION_KINDS.map(c => [c.id, c]))
+/**
+ * A steel plate welded to the bottom, the top or both faces of a beam to spread its load over the wall it bears on (a flange plate: usually 6, 8, 10 or 12mm thick and as wide as the wall, or the cavity, needs).
+ * widthMm null = as wide as the wall (for a beam over an opening; 215mm for a beam on its own); lengthMm null = the whole beam. Priced by weight at the steel rate plus the fabricator's cutting and welding by the hour.
+ * The plate's size, steel grade and weld are the engineer's: these are samples to price from.
+ */
+export type PlatePosition = 'bottom' | 'top' | 'both'
+export interface BeamPlate { position: PlatePosition; thicknessMm: number; widthMm: number | null; lengthMm: number | null }
+export const PLATE_POSITION_LABEL: Record<PlatePosition, string> = { bottom: 'Welded to the bottom of the beam', top: 'Welded to the top of the beam', both: 'Welded to the top and the bottom' }
+export const PLATE_THICKNESSES = [6, 8, 10, 12, 15, 20]
+export const PLATE_WIDTHS = [100, 150, 215, 300, 330, 440]
+export const STEEL_KG_PER_M2_PER_MM = 7.85      // a steel plate weighs about 7.85 kg per m² for each mm of thickness
+export const PLATE_HOURS = { base: 0.5, perM: 0.6 }   // the fabricator's hours: cutting, drilling, and welding both edges, for each plate
+export const DEFAULT_PLATE_WIDTH_MM = 215
+export const newBeamPlate = (): BeamPlate => ({ position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null })
+export function checkBeamPlate(p: BeamPlate, name: string): void {
+  if (!(p.thicknessMm > 0)) throw new Error(`${name}: the thickness of the welded plate must be above zero.`)
+  if (p.widthMm !== null && !(p.widthMm > 0)) throw new Error(`${name}: the width of the welded plate must be above zero.`)
+  if (p.lengthMm !== null && !(p.lengthMm > 0)) throw new Error(`${name}: the length of the welded plate must be above zero.`)
+  if (p.position !== 'bottom' && p.position !== 'top' && p.position !== 'both') throw new Error(`${name}: the welded plate must go on the top, the bottom or both.`)
+}
+/** What a welded plate comes to for ONE beam: how many plates (two when on both faces), the size and the steel in them */
+export function beamPlateFor(p: BeamPlate, beamLengthM: number, fallbackWidthMm: number): { plates: number; widthMm: number; lengthM: number; eachKg: number; kg: number; hours: number } {
+  const widthMm = p.widthMm ?? fallbackWidthMm
+  const lengthM = p.lengthMm != null ? p.lengthMm / 1000 : beamLengthM
+  const plates = p.position === 'both' ? 2 : 1
+  const eachKg = p.thicknessMm * STEEL_KG_PER_M2_PER_MM * (widthMm / 1000) * lengthM
+  return { plates, widthMm, lengthM, eachKg, kg: eachKg * plates, hours: plates * (PLATE_HOURS.base + PLATE_HOURS.perM * lengthM) }
+}
+/** the words for a plate: 'a 10mm x 300mm steel plate welded to the underside of each beam' */
+export function beamPlateWords(p: BeamPlate, widthMm: number, beams: number): string {
+  const each = beams === 1 ? 'the beam' : 'each beam'
+  const where = p.position === 'bottom' ? `to the underside of ${each}` : p.position === 'top' ? `to the top of ${each}` : `to the top and the underside of ${each}`
+  const t = Math.round(p.thicknessMm * 10) / 10
+  return `${/^(8|11|18)/.test(String(t)) ? 'an' : 'a'} ${t}mm x ${Math.round(widthMm)}mm steel plate welded ${where} to spread the load over the wall`
+}
+export const PLATE_RATE_NOTE = 'The welded plate (its size, steel grade and weld) is for the engineer to specify: the figures here are samples to price from.'
+
 /** one kind of connection on an opening, and how many (for the fabrication: how many hours) */
 export interface OpeningConnection { kind: ConnectionKind; qty: number }
 /** The connections an opening usually has: an end plate at each end of each beam that is bolted to a post carrying it */
@@ -168,6 +205,8 @@ export interface StructuralOpening {
   situationId?: string | null
   /** the connections and fabrications that go with the steel (end plates, cleats, splices, stiffeners ...): none to start; an opening saved before this has none */
   connections?: OpeningConnection[]
+  /** a steel plate welded to the beams to spread their load over the wall: none to start */
+  plate?: BeamPlate | null
   /** the width last given to this opening by the line drawn in Take-off: it follows the line until a width is typed over it */
   planWidthMm?: number
   /** the structural opening placed on a wall in Take-off that this one follows (it keeps following until typed over), and what it was last fed from it */
@@ -190,16 +229,25 @@ export const usualBeams = (thicknessMm: number) => (thicknessMm >= 300 ? 2 : 1)
 export interface PlanStructural {
   id: string; ref: string; location?: string; widthMm: number; heightMm: number; thicknessMm: number
   /** the steel chosen for it on the plan (anything not given is left as the calculator has it) */
-  struct?: { section?: string; beams?: number; posts?: number; postRole?: PostRole; loadAbove?: LoadAbove; connections?: { kind: string; qty: number }[] }
+  struct?: { section?: string; beams?: number; posts?: number; postRole?: PostRole; loadAbove?: LoadAbove; connections?: { kind: string; qty: number }[]; plate?: BeamPlate | null }
 }
 /** the kind of wall a thickness reads as: 280mm or more is a cavity wall, 190mm or more a solid brick wall, less a block wall */
 export const wallKindFromThickness = (mm: number): OpeningWallKind => (mm >= 280 ? 'cavity' : mm >= 190 ? 'solid' : 'block')
 export const planStructuralSig = (p: PlanStructural) => [p.widthMm, p.heightMm, p.ref, p.location ?? '', p.thicknessMm, p.struct ? JSON.stringify(p.struct) : ''].join('|')
 const whole = (n: unknown, lo: number, hi: number): number | undefined => (typeof n === 'number' && Number.isFinite(n) && Math.round(n) === n && n >= lo && n <= hi ? n : undefined)
 /** the steel chosen on the plan, made safe: a section that is not in the list, a count out of range or a connection of a kind that does not exist is left out */
-export function steelFromPlan(s: PlanStructural['struct']): Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections'>> {
+export function steelFromPlan(s: PlanStructural['struct']): Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections' | 'plate'>> {
   if (!s) return {}
-  const out: Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections'>> = {}
+  const out: Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections' | 'plate'>> = {}
+  if (s.plate === null) out.plate = null
+  else if (s.plate && typeof s.plate === 'object') {
+    const q = s.plate
+    const t = typeof q.thicknessMm === 'number' && Number.isFinite(q.thicknessMm) && q.thicknessMm > 0 && q.thicknessMm <= 60 ? q.thicknessMm : undefined
+    const w = q.widthMm === null ? null : typeof q.widthMm === 'number' && Number.isFinite(q.widthMm) && q.widthMm > 0 && q.widthMm <= 1000 ? q.widthMm : undefined
+    const l = q.lengthMm === null ? null : typeof q.lengthMm === 'number' && Number.isFinite(q.lengthMm) && q.lengthMm > 0 && q.lengthMm <= 20000 ? q.lengthMm : undefined
+    const pos = q.position === 'bottom' || q.position === 'top' || q.position === 'both' ? q.position : undefined
+    if (t !== undefined && w !== undefined && l !== undefined && pos) out.plate = { position: pos, thicknessMm: t, widthMm: w, lengthMm: l }
+  }
   if (typeof s.section === 'string' && (s.section === 'auto' || BEAM_CHOICE_BY_LABEL[s.section])) out.section = s.section
   const b = whole(s.beams, 0, 4); if (b !== undefined) out.beams = b
   const p = whole(s.posts, 0, 6); if (p !== undefined) out.posts = p
@@ -285,7 +333,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
   const summaries: StructuralSummary[] = []
   const warnings: string[] = []
   let totalSteelKg = 0, totalHours = 0, totalOpenings = 0
-  let anyLoad = false, anyBoard = false, anyCut = false, anyNew = false, anyPost = false, anySub = false
+  let anyLoad = false, anyBoard = false, anyCut = false, anyNew = false, anyPost = false, anySub = false, anyPlate = false
 
   for (const o of input.openings) {
     const name = o.ref.trim() || 'Opening'
@@ -343,6 +391,20 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
         add('beam', `${sec.label} steel beam, ${n2(lengthM)}m with bearings (the section is the designer's)`, 'm', sec.kgPerM * rate('steelPerKg'), lengthM * o.beams * qty)
       }
       bits.push(`${countWord(o.beams)} ${sec.label} steel ${o.beams === 1 ? 'beam' : 'beams'}`)
+      // a plate welded to the beams to spread their load over the wall
+      if (o.plate) {
+        checkBeamPlate(o.plate, name)
+        const pl = beamPlateFor(o.plate, lengthM, o.thicknessMm)
+        const nPlates = pl.plates * o.beams
+        const plateKg = pl.kg * o.beams
+        openingKg += plateKg
+        if (o.steelBy === 'us') add('plate', `${o.plate.thicknessMm}mm x ${Math.round(pl.widthMm)}mm steel plate, ${n2(pl.lengthM)}m, welded ${o.plate.position === 'bottom' ? 'to the underside' : o.plate.position === 'top' ? 'to the top' : 'top and underside'} of the ${o.beams === 1 ? 'beam' : 'beams'} (${nPlates} plate${nPlates === 1 ? '' : 's'}, ${Math.round(plateKg)}kg)`, 'kg', rate('steelPerKg'), plateKg * qty)
+        add('plate-weld', `cutting, drilling and welding the load-spreading plate${nPlates === 1 ? '' : 's'}`, 'h', rate('fabPerHour'), pl.hours * o.beams * qty, 'subcontractors')
+        bits.push(beamPlateWords(o.plate, pl.widthMm, o.beams))
+        if (o.plate.thicknessMm < 5 || o.plate.thicknessMm > 25) warnings.push(`${label}: a ${o.plate.thicknessMm}mm welded plate is outside the usual 6 to 20mm: check it with the engineer.`)
+        if (pl.widthMm < o.thicknessMm * 0.9) warnings.push(`${label}: the welded plate is ${Math.round(pl.widthMm)}mm wide but the wall is ${o.thicknessMm}mm thick: a plate usually spans the whole bearing so the load spreads across the wall (the cavity too, if the beam bears over it).`)
+        anyPlate = true
+      }
     }
     let postKg = 0
     if (o.posts > 0) {
@@ -483,6 +545,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     if (anyCut) warnings.push('If the wall is a party wall, a Party Wall Act notice is needed before work starts: it is not priced here.')
     if (anyNew) warnings.push('A new wall\'s own calculator already prices a lintel over each opening drawn on it: use this for the steel beam over a wide opening in place of that lintel, not as well.')
     if (anyBoard) warnings.push('Fire protection to structural steel has a rating set by the engineer or Building Control: confirm the board, the layers and the fixings. If the Boxing-in calculator also casts this beam, count it in one place only.')
+    if (anyPlate) warnings.push(PLATE_RATE_NOTE)
     if (anyPost) warnings.push('A post stands on a concrete pad sized by the engineer for the ground and the load: the pad here is a sample size, and the ground must be checked.')
     if (anySub) warnings.push('A steelwork contractor\'s price covers supplying, delivering and fixing the steel: the cutting, props, make good and fire protection stay here.')
     warnings.push('Not included: the door or window and its frame (Windows & Doors), plastering the reveals, decorating, or making good the floor and ceiling.')

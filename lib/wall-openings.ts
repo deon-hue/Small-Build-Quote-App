@@ -21,6 +21,8 @@ export interface PlacedStruct {
   postRole?: 'ends' | 'mid'
   loadAbove?: 'light' | 'floor' | 'heavy'
   connections?: { kind: string; qty: number }[]
+  /** a plate welded to the beams to spread the load over the wall (null = none) */
+  plate?: { position: 'bottom' | 'top' | 'both'; thicknessMm: number; widthMm: number | null; lengthMm: number | null } | null
 }
 
 /** An opening placed on a wall of the drawing */
