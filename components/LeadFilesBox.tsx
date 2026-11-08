@@ -10,7 +10,9 @@ export interface FileTile { key: string; name: string; url: string; isImage: boo
 
 const heading: React.CSSProperties = { fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)' }
 
-export default function LeadFilesBox({ tiles, onFiles, onRemove, busy, note, noteIsError }: {
+export default function LeadFilesBox({ tiles, onFiles, onRemove, busy, note, noteIsError, heading: headingText = 'Plans & photos' }: {
+  /** the box's title (Plans & photos on a lead) */
+  heading?: string
   tiles: FileTile[]
   onFiles: (files: File[]) => void
   onRemove: (index: number) => void
@@ -54,7 +56,7 @@ export default function LeadFilesBox({ tiles, onFiles, onRemove, busy, note, not
       data-testid="lead-files-box"
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: tiles.length ? 10 : 4 }}>
-        <span style={heading}>Plans &amp; photos{tiles.length ? ` (${tiles.length})` : ''}</span>
+        <span style={heading}>{headingText}{tiles.length ? ` (${tiles.length})` : ''}</span>
         <div style={{ flex: 1 }} />
         <button type="button" className="btn-sm btn-outline" style={{ fontSize: 12 }} disabled={busy} onClick={() => pick.current?.click()}>＋ Add files</button>
         {phone && <button type="button" className="btn-sm btn-outline" style={{ fontSize: 12 }} disabled={busy} onClick={() => cam.current?.click()}>📷 Take a photo</button>}

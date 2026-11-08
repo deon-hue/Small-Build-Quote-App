@@ -17,6 +17,9 @@ import { signedAttachmentUrl } from '@/lib/job-attachments'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
+import PortalSentView from '@/components/PortalSentView'
+import { createSentStore } from '@/lib/sent-items-store'
+import { portalItemFrom, portalVisible, type PortalSentItem } from '@/lib/sent-items'
 
 // ── Types mirroring what the RPC returns ────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +51,7 @@ interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan' | 'selections'
+type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan' | 'selections' | 'sent'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -106,7 +109,22 @@ function PortalPreviewInner() {
 
   // Contracts and the job's plans/documents: read with the builder's own session (they own these rows), shaped exactly like what the
   // client's portal receives, and shown by the same component the real portal uses (components/PortalContractsView.tsx).
-  const { contracts: appContracts } = useApp()
+  const { contracts: appContracts, clients: appClients } = useApp()
+  // What has been sent to this client (the 'Sent to them' records the company has left switched on for the portal), read with the builder's own session and shown by the same component the real portal uses
+  const [previewSent, setPreviewSent] = useState<PortalSentItem[]>([])
+  useEffect(() => {
+    if (!clientId) return
+    let live = true
+    ;(async () => {
+      const store = createSentStore(supabase)
+      const email = appClients.find(c => c.id === clientId)?.email || ''
+      const r = await store.list({ clientId, email, leadIds: await store.leadIdsFor(email) })
+      const vis = portalVisible(r.items)
+      const urls = await store.sign(vis.flatMap(i => i.files))
+      if (live) setPreviewSent(vis.map(i => portalItemFrom(i, urls)))
+    })()
+    return () => { live = false }
+  }, [clientId, appClients]) // eslint-disable-line react-hooks/exhaustive-deps
   const [previewContracts, setPreviewContracts] = useState<PortalContract[]>([])
   // Selections: the client's items for their jobs, read with the builder's own session (they own the rows) and shown by the same component the real portal uses
   const [previewSelections, setPreviewSelections] = useState<Selection[]>([])
@@ -282,7 +300,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule', selections: 'Selections',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule', selections: 'Selections', sent: 'Sent to you',
   }
 
   return (
@@ -300,7 +318,7 @@ function PortalPreviewInner() {
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
           {/* Admin preview shows every tab, regardless of the client's hidden-tab settings */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan', 'selections'] as Tab[]).filter(t => t !== 'selections' || clientSettings.showSelectionsTab !== false).map(tab => (
+            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan', 'selections', 'sent'] as Tab[]).filter(t => (t !== 'selections' || clientSettings.showSelectionsTab !== false) && (t !== 'sent' || previewSent.length > 0)).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -659,6 +677,15 @@ function PortalPreviewInner() {
               items={previewSelections.filter(s => !selJobId || s.jobId === selJobId)} jobs={jobs.map(j => ({ id: j.id, title: j.client, type: j.type, address: j.address }))} jobId={selJobId} onJobChange={setSelJobId}
               missing={selectionsMissing} today={new Date().toISOString().slice(0, 10)} companyName={settings?.name} preview
             />
+          </>
+        )}
+
+        {activeTab === 'sent' && (
+          <>
+            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
+              👁 Preview mode — this is what the client sees. Tick or untick "In their portal" on each record to change it.
+            </div>
+            <PortalSentView items={previewSent} companyName={settings?.name} />
           </>
         )}
 

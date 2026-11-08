@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
@@ -15,6 +15,8 @@ import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import DeleteContactsDialog, { type DeleteTarget } from '@/components/DeleteContactsDialog'
 import ClientFilesSection from '@/components/ClientFilesSection'
+import SentHistory from '@/components/SentHistory'
+import { createSentStore } from '@/lib/sent-items-store'
 import { quotesForClient, jobsForClient } from '@/lib/client-match'
 import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
 import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
@@ -50,6 +52,7 @@ function fmtDateTime(iso: string | null | undefined) {
 function ClientsPageInner() {
   const { clients, quotes, jobs, settings, bills, invoices, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
   const supabase = createClient()
+  const sentStore = useMemo(() => createSentStore(createClient()), [])
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
   const [inviteClient, setInviteClient] = useState<Client | null>(null)
@@ -835,6 +838,11 @@ function ClientsPageInner() {
                       )
                     })
                 }
+              </div>
+
+              {/* What has been sent to them (email and WhatsApp), kept here with its files, and shown in their portal */}
+              <div style={{ marginTop: 20 }}>
+                <SentHistory key={selected.id} store={sentStore} includeLeadsByEmail companyName={settings.name || 'Your builder'} target={{ leadId: null, clientId: selected.id, name: selected.name, email: selected.email, phone: selected.phone }} />
               </div>
 
               {/* Files: the customer's own files, and the files on their quotes and jobs, with downloads */}

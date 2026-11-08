@@ -23,6 +23,8 @@ import { parsePastedMessage } from '@/lib/lead-from-message'
 import LeadFilesBox, { type FileTile } from '@/components/LeadFilesBox'
 import { cleanLeadFiles, addLeadFiles, removeLeadFile, nameForPasted, leadFileProblem, LEAD_FILES_MAX, type LeadFile } from '@/lib/lead-files'
 import { uploadLeadFile, signLeadFiles, removeLeadFiles } from '@/lib/lead-files-upload'
+import SentHistory from '@/components/SentHistory'
+import { createSentStore } from '@/lib/sent-items-store'
 import './touch.css'
 
 type ClientFile = LeadFile
@@ -89,7 +91,8 @@ function failText(error: { message?: string } | null): string {
 
 export default function LeadsPage() {
   const sb = createClient()
-  const { quotes, clients } = useApp()
+  const { quotes, clients, settings } = useApp()
+  const sentStore = useMemo(() => createSentStore(createClient()), [])
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -553,6 +556,9 @@ export default function LeadsPage() {
 
               {/* Client files */}
               <LeadFilesBox tiles={fileTiles} onFiles={files => addFiles(selected, files)} onRemove={i => removeFile(selected, i)} busy={fileBusy || saving} note={fileNote?.text} noteIsError={fileNote?.bad} />
+
+              {/* What has been sent to them (email and WhatsApp), kept here with its files */}
+              <SentHistory key={selected.id} store={sentStore} companyName={settings.name || 'Your builder'} target={{ leadId: selected.id, clientId: null, name: selected.client_name, email: selected.client_email, phone: selected.client_phone }} />
 
               {/* Notes */}
               <div style={{ marginBottom: 8 }}>
