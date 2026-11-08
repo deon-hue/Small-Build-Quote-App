@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-09T15:00:00+00:00',
+    title: 'Structural openings are placed on a wall like a window or door',
+    detail: 'In Take-off, the Structural Openings sub-phase now has a Place Structural Opening tool. Click a wall and the opening snaps into it, the wall is cut and shown with its steel beam and posts, and the wall area is reduced, just like a window or door. With the opening selected you choose the beam from all the steel beam sections, set the number of beams and posts and what is above it, and add connections and fabrications (end plates, cleats, splice plates, stiffeners, cap plates, resin anchors, fabrication by the hour). The Structural Openings calculator picks each opening up with that steel already chosen and prices the connections. All sections and prices are samples to check; the engineer designs the real steel. Windows and doors are not affected.',
+  },
+  {
     at: '2026-11-09T12:00:00+00:00',
     title: 'Structural Frame: a Steel Beams, Columns and Posts calculator',
     detail: 'Structural Frame has a new calculator called Steel Beams, Columns and Posts (by member). Add steel beams, columns, hollow section posts, engineered timber beams and timber posts, and it prices the steel by weight, the plates and padstones, the concrete pads, the fire protection, the Hiab, the labour, the engineer and the Building Control notice. In Take-off the line you draw is the first beam and is shown as a steel beam on the plan. Open Back Office once so the new sub-phase appears. The sections are samples and the engineer designs the real ones.',
