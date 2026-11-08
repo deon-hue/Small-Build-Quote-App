@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T11:00:00+00:00',
+    title: 'Structural Frame: a new Structural Openings calculator',
+    detail: 'Structural Frame has a new calculator called Structural Openings (by opening). Add each opening, cut in an existing wall or formed in a new one, and it prices the steel over it: beams picked from the span and the load above, steel posts on concrete pads, padstones, props and needles, cutting and rubble, making good, fire protection, the engineer and the Building Control notice. Open Back Office once so the new sub-phase appears. The steel sizes are indicative and the engineer designs the real ones.',
+  },
+  {
     at: '2026-11-08T09:00:00+00:00',
     title: 'Company Setup is now split into sections',
     detail: 'Company Setup has a menu down the left with five sections: Company, Invoicing, Accounting, Quotes and website, and Alerts and email. Only the section you pick is shown, so there is no long scroll. Each section has its own Save button and only saves its own settings, and a small amber dot shows a section with changes you have not saved yet.',
