@@ -319,6 +319,8 @@ export interface TakeoffItem {
   wdPricedKey?: string
   /** the Windows or the Doors calculator's own item: it holds that calculator's saved price and state (the placed openings themselves stay on the one wdSummary item), and the openings on the plan when it was last saved */
   wdScopeSummary?: 'windows' | 'doors'
+  /** the Structural Openings calculator's own item for the structural openings placed on the walls (kept in the same list of placed openings as the doors and windows, with kind 'structural'): made the first time its card is opened or saved */
+  structSummary?: boolean
 }
 
 // ── Construction Layer Cost Records ──────────────────────────────────────────

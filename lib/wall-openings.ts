@@ -6,6 +6,23 @@ import type { OpeningKind, WdSwing } from './wd-units'
 
 export interface Pt { x: number; y: number }
 
+/** the kind of a structural opening (a wall opening with a steel beam over it, from Structural Frame): drawn as an opening with its beam and posts, priced by the Structural Openings calculator, never given to the Windows & Doors calculators */
+export const STRUCTURAL_KIND = 'structural' as const
+export type PlacedKind = OpeningKind | typeof STRUCTURAL_KIND
+
+/** A placed door or window (not a structural opening): what the Windows & Doors screens and calculators work with */
+export type WdPlacedOpening = PlacedOpening & { kind: OpeningKind }
+
+/** What is chosen for a structural opening when it is placed: the steel beam section ('auto' or a section name), how many beams and posts, what is above it and the connections and fabrications: the Structural Openings calculator follows it until a value is typed over there */
+export interface PlacedStruct {
+  section?: string
+  beams?: number
+  posts?: number
+  postRole?: 'ends' | 'mid'
+  loadAbove?: 'light' | 'floor' | 'heavy'
+  connections?: { kind: string; qty: number }[]
+}
+
 /** An opening placed on a wall of the drawing */
 export interface PlacedOpening {
   id: string
@@ -13,7 +30,7 @@ export interface PlacedOpening {
   wallId: string
   /** how far along that wall's line its CENTRE is, in plan pixels from the wall's first point */
   distPx: number
-  kind: OpeningKind
+  kind: PlacedKind
   widthMm: number
   heightMm: number
   /** which way a door opens (seen from the side you push it open from), used by doors that swing */
@@ -31,6 +48,8 @@ export interface PlacedOpening {
   /** where the user dragged its name tag to, as a distance from where the tag sits by itself (plan pixels) */
   tagDx?: number
   tagDy?: number
+  /** a structural opening's steel: the beam section, posts and connections chosen for it */
+  struct?: PlacedStruct
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -102,6 +121,8 @@ export interface WallBand { lo: number; hi: number; inside: 1 | -1 }
 
 export type Prim =
   | { type: 'poly'; pts: Pt[]; style: 'gap' }
+  /** a steel post (a square), in plan pixels */
+  | { type: 'post'; centre: Pt; size: number; style: 'post' }
   | { type: 'line'; a: Pt; b: Pt; style: 'jamb' | 'frame' | 'glass' | 'leaf' | 'dash' }
   | { type: 'arc'; centre: Pt; r: number; from: Pt; to: Pt; sweep: 0 | 1; style: 'arc' }
 
@@ -119,11 +140,11 @@ export interface OpeningShape {
   gap: Pt[]
 }
 
-const isLeafDoor = (k: OpeningKind) => k === 'door-front' || k === 'door-back' || k === 'door-composite' || k === 'door-security' || k === 'door-int-single' || k === 'door-int-fire'
-const isDoublePair = (k: OpeningKind) => k === 'door-french' || k === 'door-int-double'
+const isLeafDoor = (k: PlacedKind) => k === 'door-front' || k === 'door-back' || k === 'door-composite' || k === 'door-security' || k === 'door-int-single' || k === 'door-int-fire'
+const isDoublePair = (k: PlacedKind) => k === 'door-french' || k === 'door-int-double'
 
 /** Does a kind of opening get a swing choice (a door leaf that hinges)? */
-export const hasSwing = (k: OpeningKind) => isLeafDoor(k) || isDoublePair(k)
+export const hasSwing = (k: PlacedKind) => isLeafDoor(k) || isDoublePair(k)
 
 /** How many panels a bi-fold of this width has (about 700mm each, at least two) */
 export const bifoldPanels = (widthMm: number) => Math.max(2, Math.round(widthMm / 700))
@@ -132,7 +153,7 @@ export const bifoldPanels = (widthMm: number) => Math.max(2, Math.round(widthMm 
  * How an opening is drawn. `path` is the wall's line, `band` its two faces, `mpp` the plan's metres per pixel, `labelGapPx` how far clear of the wall the label sits (a screen size divided by the zoom).
  * Returns null if the wall has no length. Coordinates are plan pixels; with `p(a, b)` = the point `a` along the wall and `b` across it from the line.
  */
-export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
+export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean; /** a structural opening's steel: how many beams, and how many posts and where */ beams?: number; posts?: number; postRole?: 'ends' | 'mid' }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
   if (!(mpp > 0)) return null
   const w = o.widthMm / (mpp * 1000)
   const half = w / 2
@@ -159,7 +180,14 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
   const hingeT = inside * inOut * left
   let labelSide: 1 | -1 = (-inside) as 1 | -1                       // outside, by default
 
-  if (kind.startsWith('win-')) {
+  if (kind === STRUCTURAL_KIND) {
+    // a structural opening: the gap and its jambs, the steel beam dashed across it (a pair of beams is two lines), and a square for each steel post (at the ends, or splitting the span)
+    const nBeams = Math.max(0, Math.round(o.beams ?? 1))
+    for (let i = 0; i < nBeams; i++) { const off = nBeams > 1 ? (i - (nBeams - 1) / 2) * Math.min(thick * 0.35, 6) : 0; prims.push({ type: 'line', a: p(-half, mid + off), b: p(half, mid + off), style: 'dash' }) }
+    const nPosts = Math.max(0, Math.round(o.posts ?? 0))
+    const fr = nPosts <= 0 ? [] : o.postRole === 'mid' ? Array.from({ length: nPosts }, (_, i) => (i + 1) / (nPosts + 1)) : nPosts === 1 ? [0] : Array.from({ length: nPosts }, (_, i) => i / (nPosts - 1))
+    for (const f of fr) prims.push({ type: 'post', centre: p(-half + w * f, mid), size: Math.max(152 / (mpp * 1000), thick * 0.7), style: 'post' })
+  } else if (kind.startsWith('win-')) {
     prims.push({ type: 'line', a: p(-half, lo), b: p(half, lo), style: 'frame' })
     prims.push({ type: 'line', a: p(-half, hi), b: p(half, hi), style: 'frame' })
     prims.push({ type: 'line', a: p(-half, mid - thick * 0.08), b: p(half, mid - thick * 0.08), style: 'glass' })
@@ -241,8 +269,8 @@ export function flippedSwing(swing: WdSwing): WdSwing {
 }
 
 /** The next reference for an opening of a kind among those already placed: W1, W2 (windows), D1, D2 (external doors), ID1, ID2 (internal doors). */
-export function nextOpeningRef(existing: { ref: string; kind: OpeningKind }[], kind: OpeningKind): string {
-  const group = (k: string) => (k.startsWith('win-') ? 'W' : k.startsWith('door-int-') ? 'ID' : 'D')
+export function nextOpeningRef(existing: { ref: string; kind: PlacedKind }[], kind: PlacedKind): string {
+  const group = (k: string) => (k === STRUCTURAL_KIND ? 'SO' : k.startsWith('win-') ? 'W' : k.startsWith('door-int-') ? 'ID' : 'D')
   const g = group(kind)
   const used = new Set(existing.map(o => o.ref.trim().toUpperCase()))
   let n = existing.filter(o => group(o.kind) === g).length + 1
@@ -253,7 +281,7 @@ export function nextOpeningRef(existing: { ref: string; kind: OpeningKind }[], k
 // ── What a wall takes from its openings ──────────────────────────────────────────────────────────────────────────────
 
 /** The kind of opening a wall's own opening list (Properties: window, door, bifold, French doors, garage door) calls it */
-export function wallOpeningTypeFor(kind: OpeningKind): 'window' | 'door' | 'bifold' | 'french_door' | 'garage_door' {
+export function wallOpeningTypeFor(kind: PlacedKind): 'window' | 'door' | 'bifold' | 'french_door' | 'garage_door' {
   if (kind.startsWith('win-')) return 'window'
   if (kind === 'door-bifold') return 'bifold'
   if (kind === 'door-french') return 'french_door'
@@ -270,7 +298,8 @@ export function planWallOpenings(placed: PlacedOpening[], wallId: string, mpp: n
   return placed.filter(o => o.wallId === wallId).sort((a, b) => a.distPx - b.distPx).map(o => ({
     id: o.id,
     ref: o.ref,
-    kind: o.kind.startsWith('win-') ? 'window' : o.kind === 'door-bifold' ? 'bifold' : o.kind === 'door-garage' ? 'custom' : 'door',
+    // (a structural opening is a custom opening to a wall's calculator: its steel beam is priced in Structural Openings, so the wall does not price a lintel of its own for it)
+    kind: o.kind.startsWith('win-') ? 'window' : o.kind === 'door-bifold' ? 'bifold' : o.kind === 'door-garage' || o.kind === STRUCTURAL_KIND ? 'custom' : 'door',
     widthMm: o.widthMm,
     heightMm: o.heightMm,
     offsetMm: Math.max(0, Math.round(o.distPx * mpp * 1000 - o.widthMm / 2)),

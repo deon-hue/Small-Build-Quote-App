@@ -43,6 +43,17 @@ export const POST_SECTIONS: PostSection[] = [
   { label: '203 × 203 UC 46', kgPerM: 46, surfaceM2PerM: 1.19, boxGirthMm: 900 },
 ]
 export const BEAM_BY_LABEL: Record<string, BeamSection> = Object.fromEntries(BEAM_SECTIONS.map(b => [b.label, b]))
+/** The bigger universal beams (the ones the Steel Beams calculator also has), for choosing by hand: the span chart here never picks them on its own, so a span beyond the table still says the engineer must specify. */
+export const EXTRA_BEAM_SECTIONS: BeamSection[] = [
+  { label: '305 × 127 UB 37', kgPerM: 37, surfaceM2PerM: 1.09, boxGirthMm: 837, maxSpanM: { light: 6.0, floor: 5.0, heavy: 4.2 } },
+  { label: '356 × 171 UB 45', kgPerM: 45, surfaceM2PerM: 1.38, boxGirthMm: 975, maxSpanM: { light: 8.0, floor: 6.8, heavy: 5.8 } },
+  { label: '406 × 178 UB 54', kgPerM: 54, surfaceM2PerM: 1.5, boxGirthMm: 1083, maxSpanM: { light: 9.2, floor: 8.0, heavy: 6.8 } },
+  { label: '457 × 191 UB 67', kgPerM: 67, surfaceM2PerM: 1.65, boxGirthMm: 1197, maxSpanM: { light: 10.6, floor: 9.2, heavy: 7.8 } },
+  { label: '533 × 210 UB 82', kgPerM: 82, surfaceM2PerM: 1.87, boxGirthMm: 1366, maxSpanM: { light: 12.0, floor: 10.6, heavy: 9.0 } },
+]
+/** every beam section that can be chosen by hand (the table first, then the bigger ones) */
+export const BEAM_CHOICES: BeamSection[] = [...BEAM_SECTIONS, ...EXTRA_BEAM_SECTIONS]
+export const BEAM_CHOICE_BY_LABEL: Record<string, BeamSection> = Object.fromEntries(BEAM_CHOICES.map(b => [b.label, b]))
 export const POST_BY_LABEL: Record<string, PostSection> = Object.fromEntries(POST_SECTIONS.map(p => [p.label, p]))
 
 /** The section for a clear span and a load: the lightest in the table that spans it (flagged when the span is beyond the table: the largest is then used and the engineer must specify) */
@@ -71,6 +82,7 @@ export const RATES = {
   engineer: 175,          // £ per opening: the structural engineer's calculations
   buildingControl: 280,   // £ per job: the Building Control notice and inspections
   dust: 60,               // £ per job: dust sheets and a temporary screen
+  fabPerHour: 55,         // £ per hour: a fabricator or welder for other fabrication
 } as const
 export type StructuralRateKey = keyof typeof RATES
 
@@ -94,6 +106,25 @@ export const DEFAULT_STRUCTURAL_SITUATIONS: StructuralSituation[] = [
   { id: 'occupied', label: 'Occupied house (dust and furniture to protect)', upliftPct: 15 },
   { id: 'hard', label: 'Awkward (upper floor, tight access, no room for steel)', upliftPct: 20 },
 ]
+
+/** The connections and fabrications that go with the steel of an opening (sample prices: the engineer's drawings say which are really needed) */
+export type ConnectionKind = 'end-plate' | 'cleat' | 'splice' | 'stiffener' | 'cap-plate' | 'anchors' | 'fabrication'
+export interface ConnectionInfo { id: ConnectionKind; label: string; short: string; cost: number; hours: number; unit: 'nr' | 'h' }
+export const CONNECTION_KINDS: ConnectionInfo[] = [
+  { id: 'end-plate', label: 'End plates, bolts and nuts (a beam end bolted to a post or to steel)', short: 'end plate', cost: 28, hours: 0.5, unit: 'nr' },
+  { id: 'cleat', label: 'Angle or web cleats (beam to beam, or to a post)', short: 'cleat connection', cost: 22, hours: 0.6, unit: 'nr' },
+  { id: 'splice', label: 'Splice plates (a long beam made up from two)', short: 'splice', cost: 85, hours: 1.5, unit: 'nr' },
+  { id: 'stiffener', label: 'Bearing stiffeners (web plates where the beam bears)', short: 'bearing stiffener', cost: 18, hours: 0.4, unit: 'nr' },
+  { id: 'cap-plate', label: 'Extra cap plates on a post', short: 'cap plate', cost: 30, hours: 0.4, unit: 'nr' },
+  { id: 'anchors', label: 'Resin or chemical anchors into masonry', short: 'resin anchor', cost: 14, hours: 0.25, unit: 'nr' },
+  { id: 'fabrication', label: 'Other fabrication by the hour (welding, cutting, drilling)', short: 'hour of fabrication', cost: 0, hours: 0, unit: 'h' },
+]
+export const CONNECTION_BY_ID: Record<string, ConnectionInfo> = Object.fromEntries(CONNECTION_KINDS.map(c => [c.id, c]))
+/** one kind of connection on an opening, and how many (for the fabrication: how many hours) */
+export interface OpeningConnection { kind: ConnectionKind; qty: number }
+/** The connections an opening usually has: an end plate at each end of each beam that is bolted to a post carrying it */
+export const usualConnections = (beams: number, posts: number, postRole: PostRole): OpeningConnection[] =>
+  beams > 0 && posts > 0 && postRole === 'ends' ? [{ kind: 'end-plate', qty: 2 * beams }] : []
 
 export interface StructuralOpening {
   id: string
@@ -135,8 +166,13 @@ export interface StructuralOpening {
   /** bricks, mortar and DPC to form the jambs, and the bricklayer to make good (a cut opening) */
   makeGood: boolean
   situationId?: string | null
+  /** the connections and fabrications that go with the steel (end plates, cleats, splices, stiffeners ...): none to start; an opening saved before this has none */
+  connections?: OpeningConnection[]
   /** the width last given to this opening by the line drawn in Take-off: it follows the line until a width is typed over it */
   planWidthMm?: number
+  /** the structural opening placed on a wall in Take-off that this one follows (it keeps following until typed over), and what it was last fed from it */
+  planId?: string
+  fromPlan?: string
 }
 
 export function newStructuralOpening(id: string, ref: string, formed: OpeningFormed = 'cut-existing'): StructuralOpening {
@@ -148,6 +184,63 @@ export function newStructuralOpening(id: string, ref: string, formed: OpeningFor
 }
 /** The usual number of beams for a wall of this thickness: one for a thin wall, a pair across 300mm or more (the engineer decides) */
 export const usualBeams = (thicknessMm: number) => (thicknessMm >= 300 ? 2 : 1)
+
+// ── Openings placed on the Take-off drawing ───────────────────────────────────────────────────────────────────────────
+/** A structural opening as the drawing knows it: placed on a wall, with the wall's thickness (read from how the wall is built) */
+export interface PlanStructural {
+  id: string; ref: string; location?: string; widthMm: number; heightMm: number; thicknessMm: number
+  /** the steel chosen for it on the plan (anything not given is left as the calculator has it) */
+  struct?: { section?: string; beams?: number; posts?: number; postRole?: PostRole; loadAbove?: LoadAbove; connections?: { kind: string; qty: number }[] }
+}
+/** the kind of wall a thickness reads as: 280mm or more is a cavity wall, 190mm or more a solid brick wall, less a block wall */
+export const wallKindFromThickness = (mm: number): OpeningWallKind => (mm >= 280 ? 'cavity' : mm >= 190 ? 'solid' : 'block')
+export const planStructuralSig = (p: PlanStructural) => [p.widthMm, p.heightMm, p.ref, p.location ?? '', p.thicknessMm, p.struct ? JSON.stringify(p.struct) : ''].join('|')
+const whole = (n: unknown, lo: number, hi: number): number | undefined => (typeof n === 'number' && Number.isFinite(n) && Math.round(n) === n && n >= lo && n <= hi ? n : undefined)
+/** the steel chosen on the plan, made safe: a section that is not in the list, a count out of range or a connection of a kind that does not exist is left out */
+export function steelFromPlan(s: PlanStructural['struct']): Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections'>> {
+  if (!s) return {}
+  const out: Partial<Pick<StructuralOpening, 'section' | 'beams' | 'posts' | 'postRole' | 'loadAbove' | 'connections'>> = {}
+  if (typeof s.section === 'string' && (s.section === 'auto' || BEAM_CHOICE_BY_LABEL[s.section])) out.section = s.section
+  const b = whole(s.beams, 0, 4); if (b !== undefined) out.beams = b
+  const p = whole(s.posts, 0, 6); if (p !== undefined) out.posts = p
+  if (s.postRole === 'ends' || s.postRole === 'mid') out.postRole = s.postRole
+  if (s.loadAbove === 'light' || s.loadAbove === 'floor' || s.loadAbove === 'heavy') out.loadAbove = s.loadAbove
+  if (Array.isArray(s.connections)) {
+    out.connections = s.connections
+      .filter(c => c && typeof c.kind === 'string' && CONNECTION_BY_ID[c.kind] && typeof c.qty === 'number' && Number.isFinite(c.qty) && c.qty > 0 && c.qty <= 99)
+      .map(c => ({ kind: c.kind as ConnectionKind, qty: CONNECTION_BY_ID[c.kind].unit === 'h' ? Math.round(c.qty * 2) / 2 : Math.round(c.qty) }))
+      .filter(c => c.qty > 0)
+  }
+  return out
+}
+
+/**
+ * The calculator's openings brought in step with the drawing: an opening placed on a wall is added (cut in an existing wall, load-bearing, with the usual steel for its wall), one already in the calculator follows the
+ * drawing when the drawing's opening changes (its width, height, reference, room and the wall's thickness) and is otherwise left as typed, and one whose drawing opening has been deleted goes. Openings typed in the
+ * calculator with no drawing opening are never touched.
+ */
+export function mergePlanStructural(existing: StructuralOpening[], plan: PlanStructural[]): StructuralOpening[] {
+  const byPlan = new Map(plan.map(p => [p.id, p]))
+  const out: StructuralOpening[] = []
+  const seen = new Set<string>()
+  const apply = (base: StructuralOpening, p: PlanStructural): StructuralOpening => {
+    const wall = wallKindFromThickness(p.thicknessMm)
+    return { ...base, ref: p.ref, location: p.location ?? base.location, widthMm: p.widthMm, heightMm: p.heightMm, wall, thicknessMm: Math.round(p.thicknessMm), ...steelFromPlan(p.struct), planId: p.id, fromPlan: planStructuralSig(p) }
+  }
+  for (const e of existing) {
+    if (!e.planId) { out.push(e); continue }
+    const p = byPlan.get(e.planId)
+    if (!p) continue
+    seen.add(p.id)
+    out.push(e.fromPlan === planStructuralSig(p) ? e : apply(e, p))
+  }
+  for (const p of plan) {
+    if (seen.has(p.id)) continue
+    const base = newStructuralOpening('so-' + p.id, p.ref)
+    out.push({ ...apply({ ...base, beams: usualBeams(Math.round(p.thicknessMm)) }, p) })
+  }
+  return out
+}
 
 export interface StructuralLine { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors' | 'other'; unit: string; unitCost: number; qty: number; roomId?: string }
 export interface StructuralLabourTask { key: string; roomId: string; trade: 'bricklayer' | 'labourer' | 'carpenter'; task: string; hours: number; basis: string }
@@ -232,9 +325,9 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     let openingKg = 0
     let beamLm = 0
     let boxGirthMm = 0, surfaceM2 = 0
-    const auto = o.section === 'auto' || !BEAM_BY_LABEL[o.section]
+    const auto = o.section === 'auto' || !BEAM_CHOICE_BY_LABEL[o.section]
     if (o.beams > 0) {
-      const picked = auto ? beamFor(spanM, o.loadAbove) : { section: BEAM_BY_LABEL[o.section], beyond: false }
+      const picked = auto ? beamFor(spanM, o.loadAbove) : { section: BEAM_CHOICE_BY_LABEL[o.section], beyond: false }
       const sec = picked.section
       beamLabel = sec.label
       if (auto && picked.beyond) { warnings.push(`${label}: a ${n2(spanM)}m span with ${LOAD_WORD[o.loadAbove]} is beyond the sample table: the largest section is priced, and the engineer must specify the real one.`) }
@@ -294,6 +387,22 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     }
     if (o.posts > 0 && o.steelBy === 'us') { brickHours += HOURS.post * o.posts; labourHours += HOURS.post * o.posts * LABOURER_ON_STEEL }
     if (o.hiab && openingKg > 0) { add('hiab', 'Hiab or lorry crane to lift the steel in', 'visit', rate('hiab'), qty, 'plant') }
+
+    // connections and fabrications that go with the steel
+    for (const c of o.connections ?? []) {
+      const info = CONNECTION_BY_ID[c.kind]
+      if (!info) continue
+      if (!(c.qty >= 0) || !Number.isFinite(c.qty)) throw new Error(`${name}: the number of ${info.short}s cannot be negative.`)
+      if (c.qty === 0) continue
+      if (info.unit === 'h') {
+        add('conn-fabrication', 'other fabrication: welding, cutting and drilling', 'h', rate('fabPerHour'), c.qty * qty, 'subcontractors')
+        bits.push(`${n1(c.qty)} hour${c.qty === 1 ? '' : 's'} of fabrication`)
+      } else {
+        add(`conn-${c.kind}`, info.label.split(' (')[0].replace(/^./, ch => ch.toLowerCase()), 'nr', info.cost, c.qty * qty, o.steelBy === 'sub' ? 'subcontractors' : 'materials')
+        if (o.steelBy === 'us') brickHours += info.hours * c.qty * qty
+        bits.push(`${n1(c.qty)} ${info.short}${c.qty === 1 ? '' : 's'}`)
+      }
+    }
 
     // fire protection to the steel
     if (openingKg > 0 && o.finish === 'board') {

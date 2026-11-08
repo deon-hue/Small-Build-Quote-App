@@ -11,7 +11,7 @@ import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import LocationInput from '@/components/LocationInput'
 import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, type OpeningKind, type WdSwing } from '@/lib/wd-units'
-import { hasSwing, type PlacedOpening } from '@/lib/wall-openings'
+import { hasSwing, type PlacedOpening, type WdPlacedOpening } from '@/lib/wall-openings'
 import type { CostedLine } from '@/lib/assembly-calc'
 
 const GROUPS = ['Windows', 'External doors', 'Internal doors'] as const
@@ -24,7 +24,7 @@ const modeOf = (k: OpeningKind): Mode => (kindInScope(k, 'windows') ? 'windows' 
 const MODE_LABEL: Record<Mode, string> = { windows: 'Windows', doors: 'Doors' }
 
 interface Props {
-  openings: PlacedOpening[]
+  openings: WdPlacedOpening[]
   placing: boolean
   onPlacing: (on: boolean) => void
   kind: OpeningKind
