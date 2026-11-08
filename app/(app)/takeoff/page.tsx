@@ -80,9 +80,9 @@ const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 
 const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms', 'join-skirting-rooms'])
 /** calculators priced from the DRAWING alone (a wall's length, height and openings, a roof's box, a floor's area, a foundation's length): an item of one of these that was never Saved & Priced is priced by the calculator itself when it is sent to a quote, so it never reaches the quote as the old build-up. The room-by-room and item-by-item calculators are NOT here: what they price is typed in them. */
 /** wall calculators that already price a lintel over each opening drawn on the wall (a door or window on one of these must not price a lintel again in Windows & Doors) */
-const WALL_LINTEL_CALCS = new Set(['iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-cav-partial', 'ew-cav-full'])
+const WALL_LINTEL_CALCS = new Set(['iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-timber-frame-brick', 'ew-cav-partial', 'ew-cav-full'])
 const AUTO_PRICE_CALCS = new Set([
-  'iw-stud-partition', 'iw-metal-stud', 'iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-garden-room-timber', 'ew-cav-partial', 'ew-cav-full', 'ew-dwarf-wall', 'ew-sleeper-wall', 'ew-parapet-wall',
+  'iw-stud-partition', 'iw-metal-stud', 'iw-block-masonry', 'ew-blockwork-100', 'ew-blockwork-215', 'ew-solid-brick-victorian', 'ew-single-skin-brick-piers', 'ew-timber-frame-brick', 'ew-garden-room-timber', 'ew-cav-partial', 'ew-cav-full', 'ew-dwarf-wall', 'ew-sleeper-wall', 'ew-parapet-wall',
   'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
   'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete',
   'fnd-strip', 'fnd-trench-fill', 'fnd-raft', 'fnd-piled', 'fnd-underpin',
@@ -96,7 +96,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
-import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -4696,7 +4696,10 @@ export default function TakeoffPage() {
     if (missingSub.length > 0 && !window.confirm(
       `Back Office does not have the sub-phase for ${[...new Set(missingSub)].map(n => '"' + n + '"').join(', ')} yet, so on the quote ${missingSub.length === 1 ? 'it' : 'they'} would not open ${missingSub.length === 1 ? 'its' : 'their'} calculator.\n\nOpen Back Office once so it adds the new sub-phases, then send again. Send anyway?`
     )) return
-    const data = { version: 1, ...rest, items: outItems }
+    // two or more levels: each item drawn on a level carries that level's name, so the quote says which floor it is (a one-level take-off is sent exactly as before)
+    const multiLevel = (project.levels?.length ?? 0) > 1
+    const outWithLevels = multiLevel ? outItems.map(it => { const lid = itemLevelId(it, project); const nm = lid ? levelName(project, lid) : ''; return nm ? { ...it, levelName: nm } : it }) : outItems
+    const data = { version: 1, ...rest, items: outWithLevels }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
     if (intoLinked && into) sessionStorage.setItem('sbc_takeoff_into_quote', into)
     else sessionStorage.removeItem('sbc_takeoff_into_quote')
@@ -5295,6 +5298,7 @@ export default function TakeoffPage() {
     else if (snap?.id === 'ew-blockwork-215') { const v = vals.AssemblySolidBlockWallDemo; if (v) spec = solidBlockSpec(v) }
     else if (snap?.id === 'ew-solid-brick-victorian') { const v = vals.AssemblySolidBrickWallDemo; if (v) spec = solidBrickSpec(v) }
     else if (snap?.id === 'ew-single-skin-brick-piers') { const v = vals.AssemblySingleSkinBrickWallDemo; if (v) spec = singleSkinBrickSpec(v) }
+    else if (snap?.id === 'ew-timber-frame-brick') { const v = vals.AssemblyTimberFrameBrickWallDemo; if (v) spec = timberFrameBrickSpec(v) }
     // a stud partition: plasterboard on one side or both and the insulation between the studs, as set in its calculator
     else if (snap?.id === 'iw-stud-partition' || snap?.id === 'iw-metal-stud') { const v = vals.AssemblyWallDemo; if (v) spec = studWallSpec(v, snap.id === 'iw-metal-stud' ? 'metal' : 'timber') }
     // a masonry block partition: bare block when its finish is set to No finish, else boarded both faces

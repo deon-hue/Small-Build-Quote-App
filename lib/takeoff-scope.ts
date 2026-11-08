@@ -14,6 +14,8 @@ export interface ScopeItem {
   subPhase?: string
   spec?: string
   roomName?: string
+  /** the level this item was drawn on, when the take-off has two or more */
+  levelName?: string
   qty: number
   unit: string
   length?: number
@@ -67,7 +69,8 @@ interface Bullet {
 
 /** What one item contributes: its calculator description, or its name and specification with the size measured */
 function bulletFor(it: ScopeItem, makeupName?: (id: string) => string | undefined): Bullet | null {
-  const room = (it.assemblyResult?.location || it.roomName || '').trim()
+  // the level leads the line when there are several ("First floor · Kitchen: ..."), so two floors' walls are never added into one line
+  const room = [(it.levelName || '').trim(), (it.assemblyResult?.location || it.roomName || '').trim()].filter(Boolean).join(' · ')
   const desc = (it.assemblyResult?.description || '').trim()
   if (desc) {
     const text = sentence(room && !desc.toLowerCase().includes(room.toLowerCase()) ? `${room}: ${desc}` : desc)

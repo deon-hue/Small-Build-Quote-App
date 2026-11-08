@@ -17,6 +17,7 @@ import AssemblyCavityWallDemo from '@/components/AssemblyCavityWallDemo'
 import AssemblySolidBlockWallDemo from '@/components/AssemblySolidBlockWallDemo'
 import AssemblySolidBrickWallDemo from '@/components/AssemblySolidBrickWallDemo'
 import AssemblySingleSkinBrickWallDemo from '@/components/AssemblySingleSkinBrickWallDemo'
+import AssemblyTimberFrameBrickWallDemo from '@/components/AssemblyTimberFrameBrickWallDemo'
 import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDemo'
 import AssemblyDwarfWallDemo from '@/components/AssemblyDwarfWallDemo'
 import AssemblySleeperWallDemo from '@/components/AssemblySleeperWallDemo'
@@ -160,6 +161,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-solid-brick-victorian': { icon: 'block-wall', render: opts => <AssemblySolidBrickWallDemo planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-timber-frame-brick': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameBrickWallDemo planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-single-skin-brick-piers': { icon: 'block-wall', render: opts => <AssemblySingleSkinBrickWallDemo planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo planOpenings={opts?.wallOpenings} initialHeightMm={opts?.initialHeightMm} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

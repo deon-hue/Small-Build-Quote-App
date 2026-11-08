@@ -13,6 +13,8 @@ export interface MergePhase {
   /** set on a sub-phase made from a take-off item: the item's id, so a second send can refresh it */
   takeoffItemId?: string
   boSubPhaseId?: string
+  /** the level a take-off sub-phase was drawn on: its name ends with ' – <level>' */
+  takeoffLevel?: string
 }
 export type MergeChoice = 'both' | 'replace'
 export interface MergePlan {
@@ -29,6 +31,16 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 /** a sub-phase's name without the "(from take-off)" mark a keep-both put on it */
 export const baseName = (s: string) => norm(s.endsWith(FROM_TAKEOFF_SUFFIX) ? s.slice(0, -FROM_TAKEOFF_SUFFIX.length) : s)
 
+/** the end a level puts on a sub-phase's name: "External Cavity Wall" on the first floor is "External Cavity Wall – First floor" */
+export const levelSuffix = (level: string) => ' – ' + level.trim()
+/** the name with the level's end and the keep-both mark taken off, so the same wall is found again even if its level was renamed, moved or added since the last send */
+export function nameWithoutLevel(p: { phase: string; takeoffLevel?: string }): string {
+  let n = p.phase.endsWith(FROM_TAKEOFF_SUFFIX) ? p.phase.slice(0, -FROM_TAKEOFF_SUFFIX.length) : p.phase
+  const lv = (p.takeoffLevel || '').trim()
+  if (lv && n.endsWith(levelSuffix(lv))) n = n.slice(0, -levelSuffix(lv).length)
+  return norm(n)
+}
+
 /** Works out what sending `incoming` into `existing` would do, without changing anything. */
 export function planTakeoffMerge(existing: MergePhase[], incoming: MergePhase[]): MergePlan {
   const usedExisting = new Set<number>()
@@ -37,7 +49,7 @@ export function planTakeoffMerge(existing: MergePhase[], incoming: MergePhase[])
   // 1. refresh: the same take-off item and the same sub-phase name, sent before
   incoming.forEach((inc, i) => {
     if (!inc.takeoffItemId) return
-    const j = existing.findIndex((ex, k) => !usedExisting.has(k) && ex.takeoffItemId === inc.takeoffItemId && baseName(ex.phase) === baseName(inc.phase))
+    const j = existing.findIndex((ex, k) => !usedExisting.has(k) && ex.takeoffItemId === inc.takeoffItemId && nameWithoutLevel(ex) === nameWithoutLevel(inc))
     if (j >= 0) { usedExisting.add(j); claimed.add(i); refresh.push({ incoming: i, existing: j }) }
   })
   // 2. conflicts: a sub-phase of the quote that did not come from the take-off and is the same sub-phase
@@ -45,7 +57,7 @@ export function planTakeoffMerge(existing: MergePhase[], incoming: MergePhase[])
   const fresh: number[] = []
   incoming.forEach((inc, i) => {
     if (claimed.has(i)) return
-    const j = existing.findIndex(ex => !ex.takeoffItemId && ((!!inc.boSubPhaseId && ex.boSubPhaseId === inc.boSubPhaseId) || baseName(ex.phase) === baseName(inc.phase)))
+    const j = existing.findIndex(ex => !ex.takeoffItemId && ((!!inc.boSubPhaseId && ex.boSubPhaseId === inc.boSubPhaseId) || nameWithoutLevel(ex) === nameWithoutLevel(inc)))
     if (j >= 0) byExisting.set(j, [...(byExisting.get(j) ?? []), i])
     else fresh.push(i)
   })
@@ -64,8 +76,8 @@ export function applyTakeoffMerge<P extends MergePhase>(existing: P[], incoming:
   existing.forEach((ex, j) => {
     const r = refreshedBy.get(j)
     if (r !== undefined) {
-      // brought up to date where it stands: it keeps the name and group it has in the quote
-      out.push({ ...incoming[r], phase: ex.phase, parentPhase: ex.parentPhase })
+      // brought up to date where it stands: it keeps the name and group it has in the quote (unless its level has changed: then the name takes the new level)
+      out.push({ ...incoming[r], phase: (ex.takeoffLevel ?? '') === (incoming[r].takeoffLevel ?? '') ? ex.phase : incoming[r].phase, parentPhase: ex.parentPhase })
       return
     }
     const group = conflictAt.get(j)

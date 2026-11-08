@@ -125,6 +125,8 @@ export interface QuotePhase {
   boSubPhaseId?: string
   /** The id of the Take-off item this sub-phase was made from, when it was sent from Take-off: a second send into the same quote refreshes it in place instead of doubling it */
   takeoffItemId?: string
+  /** The level ("First floor") this sub-phase's Take-off item was drawn on, when the take-off had two or more levels: the name of the sub-phase ends with it ("External Cavity Wall – First floor"), and this lets a second send tell the level apart from the name */
+  takeoffLevel?: string
   /** The assembly calculator's full costed-line snapshot, saved alongside the flattened
    * QuoteItem[] above — QuoteItem doesn't keep purchaseQty/unit/wastePct as separate
    * fields (they're folded into `notes` as text), so this is what a "print/download the

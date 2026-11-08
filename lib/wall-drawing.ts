@@ -115,6 +115,21 @@ export function singleSkinBrickSpec(v: Record<string, unknown>): WallSpec | null
   return make(layers)
 }
 
+/** A timber frame wall with a brick outer leaf from its saved calculator: from the outside, 102.5mm of brick, the clear cavity, any extra PIR over the sheathing, the sheathing, the studs (with insulation between when there is some) and the plasterboard inside. */
+export function timberFrameBrickSpec(v: Record<string, unknown>): WallSpec | null {
+  const cavity = typeof v.cavityMm === 'number' && v.cavityMm > 0 ? v.cavityMm : 50
+  const outer = typeof v.outerInsulationMm === 'number' && v.outerInsulationMm > 0 ? v.outerInsulationMm : 0
+  const studKey = typeof v.studKey === 'string' ? v.studKey : '38x140'
+  const depth = Number((/x(\d+)/.exec(studKey) ?? [])[1]) || 140
+  const layers: WallLayer[] = [{ kind: 'brick', mm: 102.5 }, { kind: 'cavity', mm: cavity }]
+  if (outer > 0) layers.push({ kind: 'insulation', mm: outer })
+  layers.push({ kind: 'timber', mm: v.sheathing === 'ply' ? 9 : 11 })
+  layers.push({ kind: v.insulation === 'none' ? 'timber' : 'insulation', mm: depth })
+  if (v.lining === 'two') layers.push({ kind: 'board', mm: 25 })
+  else if (v.lining !== 'none') layers.push({ kind: 'board', mm: 12.5 })
+  return make(layers)
+}
+
 /** A wall from its build-up type's layers (the Back Office wall type): every layer with a thickness, in the order listed. A partial-fill layer with no air gap listed gets the 25mm gap a real partial-fill cavity has. */
 export function specFromMakeupLayers(layers: { name: string; thickness: number }[]): WallSpec | null {
   const out: WallLayer[] = []
@@ -157,6 +172,7 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
     // (a Victorian solid brick wall with nothing saved is drawn the way the calculator starts: one and a half bricks)
     case 'ew-solid-brick-victorian': return solidBrickSpec({})
     case 'ew-single-skin-brick-piers': return singleSkinBrickSpec({})
+    case 'ew-timber-frame-brick': return timberFrameBrickSpec({})
     // (a stud partition with nothing saved is drawn the way the calculator starts: boarded both sides, 50mm of acoustic mineral wool between the studs)
     case 'iw-stud-partition': return studWallSpec({}, 'timber')
     case 'iw-metal-stud': return studWallSpec({}, 'metal')

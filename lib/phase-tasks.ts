@@ -1460,6 +1460,18 @@ const externalWallsSubphases: PhaseSubphase[] = [
     ],
   },
   {
+    id: 'ew-timber-frame-brick',
+    phase: 'External Walls',
+    name: 'Timber Frame with Brick Outer Leaf',
+    markupPct: 20,
+    ukWarning: 'Timber frame needs a competent design: studs, headers, bracing, the brick ties and the fire and movement detailing are the designer\'s. Keep the cavity at least 50mm, clear and ventilated, with cavity barriers at the openings and ends and a tray and weeps over every opening. The sole plate sits on a DPC clear of the ground; breather membrane on the cold side, vapour control layer on the warm side.',
+    tasks: [
+      t('ew-tfb-frame',         'Timber frame, sheathing and membrane',  'm²', 20, 0, 0, 0, 0, 0, 'Labour and materials – timber stud frame with sheathing and breather membrane'),
+      t('ew-tfb-brick',         'Brick outer leaf',                      'm²', 20, 0, 0, 0, 0, 0, 'Half-brick facing leaf with ties, cavity barriers, trays and weep vents'),
+      t('ew-tfb-insulation',    'Insulation and lining',                 'm²', 20, 0, 0, 0, 0, 0, 'Insulation between the studs, vapour control layer and plasterboard inside'),
+    ],
+  },
+  {
     id: 'ew-single-skin-brick-piers',
     phase: 'External Walls',
     name: 'Single Skin Brick Wall with Piers (garage / outbuilding)',
