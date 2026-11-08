@@ -18,6 +18,8 @@ import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
 import PortalSentView from '@/components/PortalSentView'
+import PortalGlanceCards from '@/components/PortalGlanceCards'
+import { selectionsGlance, sentGlance } from '@/lib/portal-glance'
 import { createSentStore } from '@/lib/sent-items-store'
 import { portalItemFrom, portalVisible, type PortalSentItem } from '@/lib/sent-items'
 
@@ -379,6 +381,7 @@ function PortalPreviewInner() {
               showQuotes={clientSettings.showQuotesTab !== false} showVariations={clientSettings.showVariationsTab !== false} showInvoices={clientSettings.showInvoicesTab !== false}
               showContracts={previewContracts.length > 0}
               showSelections={clientSettings.showSelectionsTab !== false && jobs.length > 0}
+              showSent={previewSent.length > 0}
             />
 
             {/* Welcome strip */}
@@ -420,6 +423,12 @@ function PortalPreviewInner() {
                 </div>
               </div>
             </div>
+
+            <PortalGlanceCards
+              selections={clientSettings.showSelectionsTab !== false && jobs.length > 0 ? selectionsGlance(previewSelections, new Date().toISOString().slice(0, 10)) : null}
+              sent={previewSent.length > 0 ? sentGlance(previewSent) : null}
+              onOpenSelections={() => setActiveTab('selections')} onOpenSent={() => setActiveTab('sent')}
+            />
 
             {clientSettings.showDashboardProgress !== false && (
               <PortalDashboardCards

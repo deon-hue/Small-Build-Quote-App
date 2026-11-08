@@ -2,6 +2,9 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import PortalGlanceCards from '@/components/PortalGlanceCards'
+import { selectionsGlance, sentGlance, type GlanceSelection, type GlanceSent } from '@/lib/portal-glance'
 import PortalDashboardCards from '@/components/PortalDashboardCards'
 import PortalIntro from '@/components/PortalIntro'
 import { usePortal } from '@/contexts/PortalContext'
@@ -70,6 +73,23 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 
 export default function PortalDashboard() {
   const { invoices, variations, jobs, payments, contracts, ganttStates, clientSettings, settings, userEmail, loading, error, reload } = usePortal()
+  // what the Selections and Sent to you tabs hold, for the two summary cards (each is fetched the same way its own tab fetches it; a failure just leaves its card out)
+  const [sentItems, setSentItems] = useState<GlanceSent[]>([])
+  const [selItems, setSelItems] = useState<GlanceSelection[]>([])
+  const jobIdsKey = jobs.map(j => j.id).join(',')
+  useEffect(() => {
+    let live = true
+    fetch('/api/portal/sent-items').then(r => (r.ok ? r.json() : { items: [] })).then(d => { if (live) setSentItems(Array.isArray(d.items) ? d.items : []) }).catch(() => { /* no card */ })
+    return () => { live = false }
+  }, [])
+  useEffect(() => {
+    if (clientSettings.showSelectionsTab === false || !jobIdsKey) return
+    let live = true
+    Promise.all(jobIdsKey.split(',').map(id => fetch(`/api/portal/selections?jobId=${encodeURIComponent(id)}`).then(r => (r.ok ? r.json() : { items: [] })).catch(() => ({ items: [] }))))
+      .then(all => { if (live) setSelItems(all.flatMap(d => (Array.isArray(d.items) ? d.items : [])).map((s: { status?: string; neededBy?: string }) => ({ status: String(s.status ?? ''), neededBy: String(s.neededBy ?? '') }))) })
+    return () => { live = false }
+  }, [jobIdsKey, clientSettings.showSelectionsTab])
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const router = useRouter()
 
   if (loading) {
@@ -126,6 +146,7 @@ export default function PortalDashboard() {
         showQuotes={clientSettings.showQuotesTab} showVariations={clientSettings.showVariationsTab} showInvoices={clientSettings.showInvoicesTab}
         showContracts={contracts.some(c => c.status === 'sent' || c.status === 'signed')}
         showSelections={clientSettings.showSelectionsTab !== false && jobs.length > 0}
+        showSent={sentItems.length > 0}
       />
 
       {/* ── Financial snapshot ── */}
@@ -172,6 +193,12 @@ export default function PortalDashboard() {
         </div>
 
       </div>
+
+      <PortalGlanceCards
+        selections={clientSettings.showSelectionsTab !== false && jobs.length > 0 ? selectionsGlance(selItems, todayStr) : null}
+        sent={sentItems.length > 0 ? sentGlance(sentItems) : null}
+        onOpenSelections={() => router.push('/portal/selections')} onOpenSent={() => router.push('/portal/sent')}
+      />
 
       {clientSettings.showDashboardProgress !== false && (
         <PortalDashboardCards jobs={jobs} ganttStates={ganttStates} invoices={invoices} onViewInvoices={() => router.push('/portal/invoices')} />
