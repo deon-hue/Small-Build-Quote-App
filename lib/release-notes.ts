@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-08T21:00:00+00:00',
+    title: 'Level names on the quote, and a timber frame with brick wall calculator',
+    detail: 'When a take-off has two or more levels, each quote line now ends with the floor it was drawn on, such as External Cavity Wall – First floor, and the scope draft names the level too. External Walls has a new calculator, Timber Frame with Brick Outer Leaf: a brick leaf, cavity and ties, the stud frame with headers and trimmed studs, insulation, vapour control layer and plasterboard, with steel lintels, trays, weeps and cavity barriers over the openings. Open Back Office once so the new sub-phase appears.',
+  },
+  {
     at: '2026-11-08T19:00:00+00:00',
     title: 'Client portal dashboard shows Selections and Sent to you',
     detail: 'The client portal dashboard now has two summary cards. Your selections shows how many items there are and where they stand, with a flag for anything needed soon or overdue. Sent to you shows how many messages and files have been sent and the latest one. The Your project portal box at the top lists Sent to you too, and your Preview of the portal shows the same.',

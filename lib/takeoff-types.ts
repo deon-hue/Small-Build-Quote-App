@@ -269,6 +269,8 @@ export interface TakeoffItem {
   assemblyCalcState?: CalcStateSnapshot
   /** Set only on the copy sent to a quote: this item is drawn as a calculator (picked after it was drawn, so it still carries the Build-up Type it started with) but was never Saved & Priced, so the quote makes an unpriced line for that calculator instead of pricing the old Build-up Type */
   unpricedCalc?: { canonicalId: string; name: string }
+  /** set only on the copy sent to a quote, and only when the take-off has two or more levels: the name of the level this item was drawn on ("Ground floor"), so the quote's sub-phase says which floor it is */
+  levelName?: string
   electricsSummary?: boolean
   electricPoints?: ElectricPoint[]
   electricsState?: unknown

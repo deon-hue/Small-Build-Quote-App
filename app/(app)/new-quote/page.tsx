@@ -52,7 +52,7 @@ import { priceSolidBrickCalcFromScope, SOLID_BRICK_AI_IDS } from '@/components/a
 import { priceFloorRoofPhases, FLOOR_ROOF_AI_IDS } from '@/components/ai-floor-roof-pricing'
 import type { PricedCalc } from '@/components/ai-drainage-pricing'
 import { prepSpecWithWallTilingAreas, ufhSpecWithPrepMembrane } from '@/lib/tiling-ai'
-import { planTakeoffMerge, applyTakeoffMerge, type MergeChoice } from '@/lib/takeoff-merge'
+import { planTakeoffMerge, applyTakeoffMerge, levelSuffix, type MergeChoice } from '@/lib/takeoff-merge'
 import { listTakeoffsForQuote, type TakeoffSummary } from '@/lib/takeoff-sync'
 import type { QuoteLink } from '@/lib/takeoff-link'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
@@ -1191,7 +1191,8 @@ export default function NewQuotePage() {
         // every sub-phase made from a take-off item carries that item's id, so a second send into the same quote refreshes it in place
         let tagStart = 0
         let tagItem: TakeoffItem | null = null
-        const tagPending = () => { if (tagItem) for (let k = tagStart; k < newPhases.length; k++) newPhases[k] = { ...newPhases[k], takeoffItemId: tagItem.id } }
+        // (and, on a take-off with two or more levels, the level the item was drawn on: the name ends with it, "External Cavity Wall – First floor")
+        const tagPending = () => { if (tagItem) { const lvl = (tagItem.levelName || '').trim(); for (let k = tagStart; k < newPhases.length; k++) newPhases[k] = { ...newPhases[k], takeoffItemId: tagItem.id, ...(lvl ? { phase: newPhases[k].phase + levelSuffix(lvl), takeoffLevel: lvl } : {}) } } }
 
         for (const item of data.items as TakeoffItem[]) {
           tagPending(); tagStart = newPhases.length; tagItem = item
