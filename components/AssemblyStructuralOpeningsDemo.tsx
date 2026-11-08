@@ -19,6 +19,7 @@ import { suggestStructuralOpeningsLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
 import TilingCalcFrame, { TilingNumInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
+import BeamPlateFields from '@/components/BeamPlateFields'
 
 interface Props {
   onClose?: () => void
@@ -210,6 +211,12 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
                       </select>
                     </PropRow>
                   </div>
+                  {x.beams > 0 && (
+                    <>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Welded plate (load spreader)</div>
+                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} wallMm={x.thicknessMm} beamLengthM={x.widthMm / 1000 + 0.3} beams={x.beams} />
+                    </>
+                  )}
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Connections and fabrications</div>
                   <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6, padding: '6px 8px' }}>
                     {(x.connections ?? []).length === 0 && <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 4 }}>None. Add the end plates, cleats, splices, stiffeners or fabrication this steel needs: the engineer&apos;s drawings say which.</div>}
