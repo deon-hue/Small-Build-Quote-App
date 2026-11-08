@@ -200,7 +200,7 @@ export default function SentComposer({ store, target, companyName, mode, onClose
               Show this in their client portal
             </label>
             {noEmail && <div style={{ fontSize: 12.5, color: '#a93226' }}>There is no email address on file for them. Add one first, or use WhatsApp.</div>}
-            {mode === 'email' && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>It is emailed from your company, replies come to you, and a copy of the email comes to your own inbox. The files are attached and kept here.</div>}
+            {mode === 'email' && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>It is emailed from your company, replies come to you, and a copy of the email comes to your own inbox. The files are attached and kept here. If they are one of your contacts and the box above is ticked, the email also has a button to view it in their portal.</div>}
           </div>
 
           <div className="form-modal-ft" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
