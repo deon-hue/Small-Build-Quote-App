@@ -9,21 +9,61 @@ import NotificationSettings from '@/components/NotificationSettings'
 import MailAddresses from '@/components/MailAddresses'
 import XeroAccountMapping from '@/components/XeroAccountMapping'
 import './touch.css'
+import './sections.css'
+
+/** The sections of Company Setup, and which saved settings each one owns (a section's Save writes only these). Sections with no keys (alerts, accounting) save themselves. */
+type SectionId = 'company' | 'invoicing' | 'accounting' | 'quotes' | 'alerts'
+const SECTIONS: { id: SectionId; label: string; icon: string; hint: string; keys: (keyof Settings)[] }[] = [
+  { id: 'company', label: 'Company', icon: '🏢', hint: 'Logo, name, contact details', keys: ['logo', 'name', 'tagline', 'contact', 'phone', 'email', 'website', 'vatNumber', 'companyNumber', 'address'] },
+  { id: 'invoicing', label: 'Invoicing', icon: '🧾', hint: 'Terms, invoice defaults, bank details', keys: ['terms', 'extra', 'invoicePaymentDays', 'invoiceVatDefault', 'invoicePaymentMethods', 'invoiceAccountName', 'invoiceBankName', 'invoiceSortCode', 'invoiceAccountNumber', 'invoiceDefaultNotes'] },
+  { id: 'accounting', label: 'Accounting', icon: '🧮', hint: 'Xero connection and accounts', keys: [] },
+  { id: 'quotes', label: 'Quotes and website', icon: '🌐', hint: 'Get-a-Quote page estimate', keys: ['defaultMarkup', 'vatRate', 'vatRegistered'] },
+  { id: 'alerts', label: 'Alerts and email', icon: '🔔', hint: 'Notifications, email addresses', keys: [] },
+]
+const SECTION_KEY = 'sbc_settings_section'
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 export default function SettingsPage() {
   const { settings, saveSettings, loading } = useApp()
   const [form, setForm] = useState<Settings>(settings)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [section, setSection] = useState<SectionId>('company')
+  const [savedSection, setSavedSection] = useState<SectionId | null>(null)
+  // remember the last section opened on this computer
+  useEffect(() => {
+    try { const v = localStorage.getItem(SECTION_KEY) as SectionId | null; if (v && SECTIONS.some(x => x.id === v)) setSection(v) } catch { /* private window */ }
+  }, [])
+  function chooseSection(id: SectionId) {
+    setSection(id)
+    try { localStorage.setItem(SECTION_KEY, id) } catch { /* private window */ }
+  }
   const logoInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setForm(settings) }, [settings])
+  // When the saved settings change (after a save), take them in for every setting EXCEPT ones being edited and not saved yet, so saving one section never throws away another section's typing
+  const lastSaved = useRef<Settings>(settings)
+  useEffect(() => {
+    const prev = lastSaved.current
+    lastSaved.current = settings
+    setForm(cur => {
+      const next: Settings = { ...settings }
+      for (const sec of SECTIONS) for (const k of sec.keys) if (!sameValue(cur[k], prev[k])) (next as unknown as Record<string, unknown>)[k] = cur[k]
+      return next
+    })
+  }, [settings])
 
+  /** the section's own settings that have been changed and not saved */
+  const changedKeys = (id: SectionId) => (SECTIONS.find(x => x.id === id)?.keys ?? []).filter(k => !sameValue(form[k], settings[k]))
+  /** Save ONE section: only its own settings are written (on top of what is already saved), so another section's half-typed changes are never saved by accident */
   async function handleSave() {
+    const sec = SECTIONS.find(x => x.id === section)
+    if (!sec || sec.keys.length === 0) return
     setSaving(true)
     try {
-      await saveSettings(form)
-      setSaved(true)
+      const patch: Partial<Settings> = {}
+      for (const k of sec.keys) (patch as Record<string, unknown>)[k] = form[k]
+      await saveSettings({ ...settings, ...patch })
+      setSaved(true); setSavedSection(sec.id)
       setTimeout(() => setSaved(false), 2500)
     } finally {
       setSaving(false)
@@ -47,7 +87,7 @@ export default function SettingsPage() {
   })
 
   return (
-    <div className="st-page" style={{ maxWidth: 720 }}>
+    <div className="st-page st-shell" style={{ maxWidth: 1040 }}>
       {/* Touch header (phone/tablet only) */}
       <div className="tp-head">
         <div>
@@ -56,13 +96,28 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Alerts on your phone and tablet */}
-      <NotificationSettings />
+      <div className="st-layout">
+        <nav className="st-nav" aria-label="Company setup sections">
+          {SECTIONS.map(x => (
+            <button key={x.id} type="button" className={'st-nav-item' + (section === x.id ? ' on' : '')} onClick={() => chooseSection(x.id)} aria-current={section === x.id ? 'page' : undefined}>
+              <span className="st-nav-ic" aria-hidden="true">{x.icon}</span>
+              <span className="st-nav-tx"><span className="st-nav-lb">{x.label}</span><span className="st-nav-hint">{x.hint}</span></span>
+              {changedKeys(x.id).length > 0 && <span className="st-dot" title="Changes not saved yet" />}
+            </button>
+          ))}
+        </nav>
+        <div className="st-body">
 
-      {/* This company's own addresses for supplier quotes and documents */}
-      <MailAddresses />
+      {section === 'alerts' && (<>
+        {/* Alerts on your phone and tablet */}
+        <NotificationSettings />
+
+        {/* This company's own addresses for supplier quotes and documents */}
+        <MailAddresses />
+      </>)}
 
       {/* Company logo */}
+      {section === 'company' && (<>
       <div className="card">
         <div className="card-hd">Company Logo</div>
         <div className="st-logo" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -109,7 +164,10 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      </>)}
+
       {/* Public Get-a-Quote estimate */}
+      {section === 'quotes' && (<>
       <div className="card">
         <div className="card-hd">Get-a-Quote Page Estimate</div>
         <div style={{ padding: '18px 20px' }}>
@@ -144,7 +202,17 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <div className="card">
+        <div className="card-hd">Enquiry form</div>
+        <div style={{ padding: '18px 20px', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+          The public enquiry form, its link, QR code and embed code are set up from the Leads page (the Enquiry form button).{' '}
+          <a href="/quote-requests" style={{ color: 'var(--moss)', fontWeight: 600 }}>Open Leads</a>
+        </div>
+      </div>
+      </>)}
+
       {/* Terms */}
+      {section === 'invoicing' && (<>
       <div className="card">
         <div className="card-hd">Payment Terms</div>
         <div style={{ padding: '18px 20px' }}>
@@ -280,17 +348,28 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="st-save" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : '💾 Save Settings'}
-        </button>
-        {saved && <span style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 500 }}>✓ Saved</span>}
-      </div>
+      </>)}
+
+      {/* Save: only the section on screen, and only when it has settings of its own */}
+      {SECTIONS.find(x => x.id === section)!.keys.length > 0 && (
+        <div className="st-save" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : `💾 Save ${SECTIONS.find(x => x.id === section)!.label.toLowerCase()}`}
+          </button>
+          {saved && savedSection === section
+            ? <span style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 500 }}>✓ Saved</span>
+            : changedKeys(section).length > 0 && <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>Changes in this section are not saved yet</span>}
+        </div>
+      )}
 
       {/* Xero accounting integration */}
-      <div style={{ marginTop: 16 }}>
-        <XeroConnectionCard />
-        <XeroAccountMapping />
+      {section === 'accounting' && (
+        <div>
+          <XeroConnectionCard />
+          <XeroAccountMapping />
+        </div>
+      )}
+        </div>
       </div>
     </div>
   )
