@@ -16,6 +16,7 @@ import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import DeleteContactsDialog, { type DeleteTarget } from '@/components/DeleteContactsDialog'
 import ClientFilesSection from '@/components/ClientFilesSection'
 import SentHistory from '@/components/SentHistory'
+import { addDays, todayUk, findSamePerson, leadStatusOf, LEAD_STATUS_LABEL } from '@/lib/leads'
 import { createSentStore } from '@/lib/sent-items-store'
 import { quotesForClient, jobsForClient } from '@/lib/client-match'
 import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
@@ -53,6 +54,31 @@ function ClientsPageInner() {
   const { clients, quotes, jobs, settings, bills, invoices, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
   const supabase = createClient()
   const sentStore = useMemo(() => createSentStore(createClient()), [])
+  const [makingLead, setMakingLead] = useState(false)
+
+  /** Make a lead out of a contact (someone already in the contacts list who has no lead yet): the same lead row the Add a lead window makes, from their details, then open it on the Leads page. If they already have a lead it is opened instead, never a second one by accident. */
+  async function makeLeadFrom(c: Client) {
+    if (makingLead) return
+    if (!c.phone.trim() && !c.email.trim()) { window.alert('Add a phone number or an email address to this contact first, so you can get back to them.'); return }
+    setMakingLead(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { window.alert('You are not signed in: please refresh and try again.'); return }
+      const { data: rows } = await supabase.from('quote_requests').select('id, client_name, client_email, client_phone, status').order('created_at', { ascending: false }).limit(500)
+      const same = findSamePerson({ email: c.email, phone: c.phone }, ((rows ?? []) as { id: string; client_name: string; client_email: string; client_phone: string; status: string }[]).map(l => ({ ...l, email: l.client_email, phone: l.client_phone })))
+      if (same) {
+        if (window.confirm(`There is already a lead for ${same.client_name} (${LEAD_STATUS_LABEL[leadStatusOf(same.status)]}). Open it?`)) { setSelected(null); router.push('/quote-requests?lead=' + same.id) }
+        return
+      }
+      const { data, error } = await supabase.from('quote_requests').insert({
+        user_id: user.id, client_name: c.name.trim(), client_phone: c.phone.trim(), client_email: c.email.trim().toLowerCase(), project_address: (c.address || '').trim(),
+        project_type: '', scope_text: '', source: 'My contacts', status: 'pending', chase_on: addDays(todayUk(), 1),
+      }).select('id').single()
+      if (error || !data) { window.alert(/column|schema cache|policy|row-level/i.test(error?.message || '') ? 'That could not be saved. If this is the first time you are using Leads, the database update (supabase/leads.sql) still needs to be run.' : 'The lead could not be made: ' + (error?.message || 'try again')); return }
+      setSelected(null)
+      router.push('/quote-requests?lead=' + (data as { id: string }).id)
+    } finally { setMakingLead(false) }
+  }
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
   const [inviteClient, setInviteClient] = useState<Client | null>(null)
@@ -679,6 +705,9 @@ function ClientsPageInner() {
                   <a className="btn-sm btn-outline" href={'mailto:' + selected.email} title="Email this supplier">✉ Email</a>
                 )}
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
+                {selected.clientType === 'client' && (
+                  <button className="btn-sm btn-outline" title="Make a lead from this contact, so you can track the enquiry, book a site visit and chase it" disabled={makingLead} onClick={() => makeLeadFrom(selected)}>+ Lead</button>
+                )}
                 {selected.clientType === 'client' && (
                   <button className="btn-sm btn-gold" title="Start a new quote for this contact" onClick={() => {
                     sessionStorage.setItem('sbc_prefill_client', selected.id)
