@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-09T12:00:00+00:00',
+    title: 'Structural Frame: a Steel Beams, Columns and Posts calculator',
+    detail: 'Structural Frame has a new calculator called Steel Beams, Columns and Posts (by member). Add steel beams, columns, hollow section posts, engineered timber beams and timber posts, and it prices the steel by weight, the plates and padstones, the concrete pads, the fire protection, the Hiab, the labour, the engineer and the Building Control notice. In Take-off the line you draw is the first beam and is shown as a steel beam on the plan. Open Back Office once so the new sub-phase appears. The sections are samples and the engineer designs the real ones.',
+  },
+  {
     at: '2026-11-09T09:00:00+00:00',
     title: 'Structural openings are drawn as openings in Take-off',
     detail: 'A line drawn with the Structural Openings calculator now shows as an opening: a gap through the wall with its jambs, the steel beam dashed across it, a square for each steel post and a label with its width and beam. The length of the line is the width of the first opening in the calculator, and it follows the line until you type a width over it.',

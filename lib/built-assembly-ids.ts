@@ -70,6 +70,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'join-furniture-calc',
   'join-secondfix-calc',
   'sf-openings-calc',
+  'sf-steel-calc',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/

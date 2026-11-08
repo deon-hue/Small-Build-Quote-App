@@ -237,6 +237,15 @@ const structuralFrameSubphases: PhaseSubphase[] = [
       t('sf-op-block-up',           'Block up existing opening',             'nr',   2, 180,   85,    0,    0,   0,  'Build in, tie to existing, make good'),
     ],
   },
+  // Steel beams, columns and posts priced one member at a time (assembly calculator). Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'sf-steel-calc',
+    phase: 'Structural Frame',
+    name: 'Steel Beams, Columns & Posts (by member)',
+    markupPct: 15,
+    ukWarning: 'All structural steelwork requires the structural engineer\'s design and calculations and a Building Control notice. Fire protection to Part B and CE marking are required. Columns and posts stand on a pad foundation sized by the engineer.',
+    tasks: [],  // priced by the Steel Beams, Columns & Posts calculator (each member: kind and section, length, finish, how its ends are held, base plate and pad, supply and fit)
+  },
   // Openings in walls with their steelwork, priced one opening at a time (assembly calculator). Listed last so a new line in Take-off still starts on a task.
   {
     id: 'sf-openings-calc',
