@@ -205,7 +205,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'wd-doors': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo scope="doors" onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'join-secondfix-calc': { icon: 'second-fix', render: opts => <AssemblySecondFixDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'sf-openings-calc': { icon: 'struct-opening', render: opts => <AssemblyStructuralOpeningsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'sf-openings-calc': { icon: 'struct-opening', render: opts => <AssemblyStructuralOpeningsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'join-furniture-calc': { icon: 'furniture', render: opts => <AssemblyFurnitureDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'join-kitchen-fit': { icon: 'kitchen-fit', render: opts => <AssemblyKitchenFitDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'join-stairs-calc': { icon: 'stairs', render: opts => <AssemblyStairsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
