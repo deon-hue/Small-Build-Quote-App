@@ -89,10 +89,50 @@ function failText(error: { message?: string } | null): string {
   return 'That could not be saved: ' + (m || 'unknown error')
 }
 
+/** The contact (a client, not a supplier or subcontractor) this lead already is: the same email or phone number, or the same name (a quote saved for them matches a contact by name) */
+function contactForLead<C extends { name?: string; email?: string; phone?: string; clientType?: string }>(lead: { client_name: string; client_email: string; client_phone: string }, contacts: C[]): C | null {
+  const clients = contacts.filter(c => (c.clientType ?? 'client') === 'client')
+  const byPerson = findSamePerson({ email: lead.client_email, phone: lead.client_phone }, clients)
+  if (byPerson) return byPerson
+  const n = (lead.client_name || '').trim().toLowerCase()
+  return n ? clients.find(c => (c.name || '').trim().toLowerCase() === n) ?? null : null
+}
+
+/** Whether this lead is already one of the contacts (so they can have a client portal), with a button to add them when they are not */
+function ContactRow({ lead, contacts, onAdd }: { lead: { client_name: string; client_email: string; client_phone: string }; contacts: { name?: string; email?: string; phone?: string; clientType?: string }[]; onAdd: () => Promise<string | null> }) {
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const c = contactForLead(lead, contacts)
+  const box: React.CSSProperties = { marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', background: '#fff', fontSize: 12.5, lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
+  if (c) return <div style={box} data-testid="lead-contact-row">👤 <span>In your contacts as <strong>{c.name}</strong>. They have a client portal: they sign in with {c.email || 'their email address'} to see quotes and what you send them.</span></div>
+  const hasEmail = !!lead.client_email.trim()
+  return (
+    <div style={box} data-testid="lead-contact-row">
+      <span style={{ flex: 1, minWidth: 220 }}>👤 Not in your contacts yet. {hasEmail ? 'Add them to give them a client portal (they sign in with their email address) where they can see quotes, design ideas and, if the job goes ahead, the rest.' : 'Add an email address to this lead first, so they can have a client portal.'}</span>
+      {hasEmail && <button type="button" className="btn-sm btn-outline" style={{ fontSize: 12 }} disabled={busy} onClick={async () => { setBusy(true); setNote(''); try { const id = await onAdd(); setNote(id ? 'Added to your contacts.' : 'They could not be added just now.') } catch { setNote('They could not be added just now.') } setBusy(false) }}>{busy ? 'Adding…' : '＋ Add to my contacts'}</button>}
+      {note && <span role="status" style={{ color: 'var(--muted)' }}>{note}</span>}
+    </div>
+  )
+}
+
 export default function LeadsPage() {
   const sb = createClient()
-  const { quotes, clients, settings } = useApp()
+  const { quotes, clients, settings, addClient } = useApp()
   const sentStore = useMemo(() => createSentStore(createClient()), [])
+  const contactFor = (l: Lead) => contactForLead(l, clients)
+  /** Makes this lead a contact (if they are not one already) so they can sign in to the client portal, and gives back the contact's id. A quote saved for them later finds the same contact by name, so nothing is doubled. */
+  async function ensureContactFor(l: Lead): Promise<string | null> {
+    const have = contactFor(l)
+    if (have) return have.id
+    const email = (l.client_email || '').trim().toLowerCase()
+    if (!email) return null
+    const parts = (l.client_name || '').trim().split(/\s+/)
+    const made = await addClient({
+      name: l.client_name.trim(), first: parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] || '', last: parts.length > 1 ? parts[parts.length - 1] : '',
+      phone: (l.client_phone || '').trim(), email, address: (l.project_address || '').trim(), notes: '', paymentTerms: 'Payment on receipt', clientType: 'client', addedFrom: 'lead',
+    })
+    return made.id
+  }
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -558,7 +598,8 @@ export default function LeadsPage() {
               <LeadFilesBox tiles={fileTiles} onFiles={files => addFiles(selected, files)} onRemove={i => removeFile(selected, i)} busy={fileBusy || saving} note={fileNote?.text} noteIsError={fileNote?.bad} />
 
               {/* What has been sent to them (email and WhatsApp), kept here with its files */}
-              <SentHistory key={selected.id} store={sentStore} companyName={settings.name || 'Your builder'} target={{ leadId: selected.id, clientId: null, name: selected.client_name, email: selected.client_email, phone: selected.client_phone }} />
+              <ContactRow lead={selected} contacts={clients} onAdd={() => ensureContactFor(selected)} />
+              <SentHistory key={selected.id} store={sentStore} companyName={settings.name || 'Your builder'} ensureContact={() => ensureContactFor(selected)} target={{ leadId: selected.id, clientId: contactFor(selected)?.id ?? null, name: selected.client_name, email: selected.client_email, phone: selected.client_phone }} />
 
               {/* Notes */}
               <div style={{ marginBottom: 8 }}>
