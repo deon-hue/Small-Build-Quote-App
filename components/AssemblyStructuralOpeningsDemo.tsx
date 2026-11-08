@@ -11,8 +11,8 @@ import React, { useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
-  calculateStructuralOpenings, newStructuralOpening, usualBeams, beamFor, BEAM_SECTIONS, POST_SECTIONS, WALL_LABEL, WALL_THICKNESS, FORMED_LABEL, LOAD_LABEL, FINISH_LABEL, POST_ROLE_LABEL, DEFAULT_STRUCTURAL_SITUATIONS,
-  type StructuralOpening, type StructuralResult, type OpeningFormed, type OpeningWallKind, type LoadAbove, type SteelFinish, type SteelBy, type PostRole,
+  calculateStructuralOpenings, newStructuralOpening, usualBeams, beamFor, mergePlanStructural, planStructuralSig, BEAM_CHOICES, POST_SECTIONS, CONNECTION_KINDS, CONNECTION_BY_ID, usualConnections, WALL_LABEL, WALL_THICKNESS, FORMED_LABEL, LOAD_LABEL, FINISH_LABEL, POST_ROLE_LABEL, DEFAULT_STRUCTURAL_SITUATIONS,
+  type StructuralOpening, type StructuralResult, type PlanStructural, type OpeningFormed, type OpeningWallKind, type LoadAbove, type SteelFinish, type SteelBy, type PostRole,
 } from '@/lib/structural-openings-units'
 import { describeStructuralOpenings, describeStructuralOpeningsShort, type StructuralDescriptionInput } from '@/lib/structural-openings-description'
 import { suggestStructuralOpeningsLabour } from '@/lib/flat-roof-labour'
@@ -26,6 +26,8 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** the length of the line drawn on the wall in Take-off (mm): the width of the first opening, which follows the line until it is typed over */
   externalLengthMm?: number
+  /** the structural openings placed on the walls in Take-off: added here, and followed until typed over */
+  planOpenings?: PlanStructural[]
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -35,7 +37,7 @@ const LOADS = Object.keys(LOAD_LABEL) as LoadAbove[]
 const FINISHES = Object.keys(FINISH_LABEL) as SteelFinish[]
 const ROLES = Object.keys(POST_ROLE_LABEL) as PostRole[]
 
-export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labourTrades = [], externalLengthMm, planOpenings }: Props) {
   const ID = 'AssemblyStructuralOpeningsDemo'
   // The job starts with no openings: you add the ones the job has
   const [openings, setOpenings] = useCalcState<StructuralOpening[]>(ID, 'openings', [])
@@ -45,6 +47,12 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
   const [dustProtection, setDustProtection] = useCalcState(ID, 'dustProtection', false)
 
   function addOpening() { setOpenings(p => [...p, newStructuralOpening('so-' + uid(), `SO${p.length + 1}`, addFormed)]) }
+  // the openings placed on the walls in Take-off: added here with the steel their wall usually needs, and kept in step with the drawing until a value is typed over
+  const planKey = planOpenings ? planOpenings.map(planStructuralSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
+  React.useEffect(() => {
+    if (planOpenings) setOpenings(p => mergePlanStructural(p, planOpenings))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey])
   // the line drawn on the wall in Take-off IS the first opening: its length is the width, and the opening follows the line until a width is typed over it (one made by hand, or saved before this, is left alone)
   React.useEffect(() => {
     if (!(externalLengthMm != null && externalLengthMm > 0)) return
@@ -155,7 +163,7 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
                       <PropRow label="Beam section">
                         <select value={x.section} onChange={e => update(x.id, { section: e.target.value })} style={propInput}>
                           <option value="auto">{suggested ? `Pick from the span: ${suggested.section.label}${suggested.beyond ? ' (beyond the table)' : ''}` : 'Pick from the span'}</option>
-                          {BEAM_SECTIONS.map(b => <option key={b.label} value={b.label}>{b.label}</option>)}
+                          {BEAM_CHOICES.map(b => <option key={b.label} value={b.label}>{b.label} ({b.kgPerM} kg/m)</option>)}
                         </select>
                       </PropRow>
                     )}
@@ -201,6 +209,30 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
                         {DEFAULT_STRUCTURAL_SITUATIONS.map(o => <option key={o.id} value={o.id}>{o.label.split(' (')[0]}</option>)}
                       </select>
                     </PropRow>
+                  </div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Connections and fabrications</div>
+                  <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6, padding: '6px 8px' }}>
+                    {(x.connections ?? []).length === 0 && <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 4 }}>None. Add the end plates, cleats, splices, stiffeners or fabrication this steel needs: the engineer&apos;s drawings say which.</div>}
+                    {(x.connections ?? []).map((c, i) => {
+                      const info = CONNECTION_BY_ID[c.kind]
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, flex: 1, minWidth: 200 }}>{info?.label ?? c.kind}</span>
+                          <div style={{ width: 80 }}><TilingNumInput v={c.qty} set={n => update(x.id, { connections: (x.connections ?? []).map((q, j) => (j === i ? { ...q, qty: Math.max(0, info?.unit === 'h' ? Math.round(n * 2) / 2 : Math.round(n)) } : q)) })} min={0} step={info?.unit === 'h' ? 0.5 : 1} /></div>
+                          <span style={{ fontSize: 11, color: '#64748b', width: 56 }}>{info?.unit === 'h' ? 'hours' : 'each'}</span>
+                          <button type="button" onClick={() => update(x.id, { connections: (x.connections ?? []).filter((_, j) => j !== i) })} title="Remove" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                        </div>
+                      )
+                    })}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <select value="" onChange={e => { const k = e.target.value; if (!k) return; const have = (x.connections ?? []).some(c => c.kind === k); if (!have) update(x.id, { connections: [...(x.connections ?? []), { kind: k as typeof CONNECTION_KINDS[number]['id'], qty: k === 'fabrication' ? 2 : Math.max(1, x.beams * 2) }] }) }} style={{ ...tilingSmall, minWidth: 260 }}>
+                        <option value="">+ Add a connection or fabrication…</option>
+                        {CONNECTION_KINDS.filter(k => !(x.connections ?? []).some(c => c.kind === k.id)).map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
+                      </select>
+                      {x.beams > 0 && x.posts > 0 && x.postRole === 'ends' && (x.connections ?? []).length === 0 && (
+                        <button type="button" onClick={() => update(x.id, { connections: usualConnections(x.beams, x.posts, x.postRole) })} style={{ ...tilingSmall, cursor: 'pointer' }}>Add the usual: an end plate at each beam end</button>
+                      )}
+                    </div>
                   </div>
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     <TilingCheck label="It carries load (needles and props, and the engineer)" on={x.loadBearing} set={b => update(x.id, { loadBearing: b, engineer: b && cut })} />

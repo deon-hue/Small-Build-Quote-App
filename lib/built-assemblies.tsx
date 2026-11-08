@@ -114,6 +114,8 @@ export interface AssemblyRenderOpts {
   externalWidthMm?: number
   /** The joists added by hand on the drawn roof in Take-off (a flat roof's structure counts them). */
   extraJoists?: number
+  /** the structural openings placed on the walls in Take-off, for the Structural Openings calculator */
+  structPlan?: import('./structural-openings-units').PlanStructural[]
   /** where each added joist stands, mm along the roof's length from its start (for the calculator's plan) */
   extraJoistAt?: number[]
   /** The way the fall runs on the drawn roof in Take-off ('along' the joists or 'across' them; a flat roof's structure). */
@@ -207,7 +209,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'join-secondfix-calc': { icon: 'second-fix', render: opts => <AssemblySecondFixDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'sf-steel-calc': { icon: 'steel-member', render: opts => <AssemblySteelworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'sf-openings-calc': { icon: 'struct-opening', render: opts => <AssemblyStructuralOpeningsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'sf-openings-calc': { icon: 'struct-opening', render: opts => <AssemblyStructuralOpeningsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} planOpenings={opts?.structPlan} /> },
   'join-furniture-calc': { icon: 'furniture', render: opts => <AssemblyFurnitureDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'join-kitchen-fit': { icon: 'kitchen-fit', render: opts => <AssemblyKitchenFitDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'join-stairs-calc': { icon: 'stairs', render: opts => <AssemblyStairsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },

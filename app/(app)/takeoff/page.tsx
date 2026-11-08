@@ -32,6 +32,7 @@ import { printLayout, printFileName, printDate, rasterLongSide, stripPrices } fr
 import { buildTakeoffScope } from '@/lib/takeoff-scope'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
 import OpeningsPanel, { type OpeningsCard } from './components/OpeningsPanel'
+import StructOpeningsPanel from './components/StructOpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
 import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
@@ -63,9 +64,13 @@ const DRAIN_ITEM_ID = 'drain-summary'
 /** the Windows and the Doors calculators each keep their saved price on an item of their own (the placed openings stay on the one above) */
 const WD_WINDOWS_ID = 'wd-windows-summary'
 const WD_DOORS_ID = 'wd-doors-summary'
+/** the Structural Openings calculator's own item: it holds that calculator's saved price and state (the structural openings placed on the walls stay on the one wdSummary list, with kind 'structural') */
+const STRUCT_ITEM_ID = 'struct-summary'
 /** A selected drawing is shown in this blue (it used to be white, which cannot be seen on a white sheet) */
 const SEL_COLOUR = '#1565c0'
 const OPENING_COLOUR = { win: '#2b6cb0', ext: '#7c3aed', int: '#b45309' }
+/** a structural opening's steel on the plan */
+const STEEL_BLUE = '#1d4ed8'
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
 const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', piled: 'piled_found', underpin: 'underpin', other: null }
@@ -86,6 +91,8 @@ const AUTO_PRICE_CALCS = new Set([
   'roof-structure', 'roof-covering', 'roof-rainwater', 'roof-fascia-soffit', 'roof-flat',
   'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete',
   'fnd-strip', 'fnd-trench-fill', 'fnd-raft', 'fnd-piled', 'fnd-underpin',
+  // structural openings placed on the walls: priced from the plan by the calculator itself
+  'sf-openings-calc',
 ])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
@@ -99,7 +106,7 @@ import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
@@ -129,7 +136,7 @@ import {
   WALL_CONSTRUCTION_LABELS, WALL_FINISH_LABELS,
   type WallConstructionType, type WallFinishType, type CalculatedMaterial,
 } from '@/lib/material-recipes'
-import { beamFor as structuralBeamFor } from '@/lib/structural-openings-units'
+import { beamFor as structuralBeamFor, planStructuralSig, type PlanStructural } from '@/lib/structural-openings-units'
 
 // ── Smart Draw Mode: phase → default tool mapping ─────────────────────────────
 // When the user selects a phase, the draw tool auto-resets to this default.
@@ -831,6 +838,8 @@ export default function TakeoffPage() {
   // Windows & Doors: the kind, size and swing of the next opening, the placed opening that is selected, and where the pointer is (unsnapped) for the ghost
   const [openingKind, setOpeningKind] = useState<OpeningKind>('win-casement')
   const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
+  // the size the next structural opening is placed at (a doorway-sized knock-through to start)
+  const [structNext, setStructNext] = useState<{ widthMm: number; heightMm: number }>({ widthMm: 2400, heightMm: 2100 })
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(null)
   // the little information pop-up when the mouse rests on a name tag (quick reference): which tag, and where the mouse was
   const [tagTip, setTagTip] = useState<{ id: string; x: number; y: number } | null>(null)
@@ -2070,7 +2079,7 @@ export default function TakeoffPage() {
       return
     }
     if (tool === 'opening') {
-      placeOpening(svgCoords(e))
+      if (activePhase === 'Structural Frame') placeStructuralOpening(svgCoords(e)); else placeOpening(svgCoords(e))
       return
     }
     if (tool === 'join') {
@@ -2331,6 +2340,7 @@ export default function TakeoffPage() {
     if (it.plumbSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-install']
     if (it.drainSummary) return BUILT_ASSEMBLY_CANON_IDS['drain-chambers-gullies']
     if (it.boilerSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-heating-plant']
+    if (it.structSummary) return BUILT_ASSEMBLY_CANON_IDS['sf-openings-calc']
     if (it.wdSummary) return BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
     if (it.wdScopeSummary) return BUILT_ASSEMBLY_CANON_IDS[it.wdScopeSummary === 'windows' ? 'wd-windows' : 'wd-doors']
     const demoCalc = demoCalcSub(it)
@@ -2671,14 +2681,38 @@ export default function TakeoffPage() {
   // The Windows & Doors calculator is fed them (PlanOpening) and keeps its own openings in step with the plan until one is typed over.
   const wdItem = project.items.find(it => it.wdSummary)
   const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
+  /** the steel the Structural Openings calculator holds for a placed structural opening (the calculator's opening that follows it): how many beams, how many posts and where, and the beam section */
+  const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[] } => {
+    // what the calculator holds for this opening (anything typed over there) while it is in step with the plan; once the steel has been changed on the plan since the calculator last followed it, what is chosen on the plan wins (the calculator takes it when it is next opened); else the usual
+    const arr = (((structItem?.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>).AssemblyStructuralOpeningsDemo?.openings ?? []) as Record<string, unknown>[]
+    const c = arr.find(x => x.planId === o.id)
+    const pe = c ? structPlanList().find(q => q.id === o.id) : undefined
+    const inStep = !!c && !!pe && c.fromPlan === planStructuralSig(pe)   // the calculator has followed the plan as it is now, so whatever is typed there is what counts
+    const s = o.struct as Record<string, unknown> | undefined
+    const pick = (k: string): unknown => (!c ? s?.[k] : inStep ? c[k] : (s?.[k] !== undefined ? s[k] : c[k]))
+    const n = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
+    const beams = Math.round(n(pick('beams'), 1))
+    const sec = pick('section')
+    const load = (pick('loadAbove') as 'light' | 'floor' | 'heavy' | undefined) ?? 'floor'
+    const section = beams > 0 ? (typeof sec === 'string' && sec !== 'auto' ? sec : structuralBeamFor(o.widthMm / 1000, load).section.label) : ''
+    const conns = pick('connections') as { kind?: string; qty?: number }[] | undefined
+    const connections = Array.isArray(conns) ? conns.filter(q => q && q.kind !== 'fabrication').reduce((t, q) => t + (typeof q.qty === 'number' ? q.qty : 0), 0) : 0
+    const list = Array.isArray(conns) ? conns.filter(q => q && typeof q.kind === 'string' && typeof q.qty === 'number').map(q => ({ kind: q.kind as string, qty: q.qty as number })) : []
+    return { beams, posts: Math.round(n(pick('posts'), 0)), postRole: pick('postRole') === 'mid' ? 'mid' : 'ends', section, connections, choice: typeof sec === 'string' ? sec : 'auto', load, conns: list }
+  }
   // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
   const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))
+  // the doors and windows, and the structural openings (a wall opening with a steel beam over it, from Structural Frame), are placed the same way and kept in the same list: the walls, the drawing and the tags use them all, the Windows & Doors screens only the doors and windows
+  const livePlacedWd: WdPlacedOpening[] = livePlaced.filter((o): o is WdPlacedOpening => o.kind !== STRUCTURAL_KIND)
+  const livePlacedStruct = livePlaced.filter(o => o.kind === STRUCTURAL_KIND)
+  const structItem = project.items.find(it => it.structSummary)
   // The Windows and Doors items (the older combined one, the Windows one and the Doors one) are made the first time an opening is placed and hold what is on the plan: once every opening is deleted and nothing was priced,
   // there is nothing to list in the schedule or send to the quote (a priced one stays, so its price is not lost without the estimator seeing it).
   const wdItemEmpty = (it: TakeoffItem): boolean => {
-    if ((!it.wdSummary && !it.wdScopeSummary) || it.assemblyResult) return false
+    if ((!it.wdSummary && !it.wdScopeSummary && !it.structSummary) || it.assemblyResult) return false
+    if (it.structSummary) return livePlacedStruct.length === 0
     const scope = it.wdScopeSummary
-    return (scope ? livePlaced.filter(o => kindInScope(o.kind, scope)) : livePlaced).length === 0
+    return (scope ? livePlacedWd.filter(o => kindInScope(o.kind, scope)) : livePlacedWd).length === 0
   }
 
   // ── Rooms made from the walls ─────────────────────────────────────────────
@@ -3337,6 +3371,27 @@ export default function TakeoffPage() {
       return { ...p, items: items.map(it => it.wdSummary ? fn(it) : it) }
     })
   }
+  function newStructItem(): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === 'sf-openings-calc')
+    return { id: STRUCT_ITEM_ID, name: 'Structural openings', phase: 'Structural Frame', qty: 1, unit: 'item', structSummary: true, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+  /** the Structural Openings calculator's own item: made the first time a structural opening is placed or its card is opened or saved */
+  function changeStructItem(fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.structSummary) ? p.items : [...p.items, newStructItem()]
+      return { ...p, items: items.map(it => it.structSummary ? fn(it) : it) }
+    })
+  }
+  /** the structural openings on the plan as the calculator is fed them: each with the thickness of the wall it is in (read from how that wall is built, 215mm when it is not drawn at a real thickness) and the steel chosen for it */
+  function structPlanList(): PlanStructural[] {
+    const mpp = project.calibration.mpp
+    return livePlacedStruct.filter(o => !o.notEstimated).map(o => {
+      const el = project.elements.find(e => e.id === o.wallId)
+      const g = el ? wallGeometry(el) : null
+      const thick = el && g && mpp > 0 && wallSpecFor(el) ? Math.max(50, Math.round((g.band.hi - g.band.lo) * mpp * 1000 / 5) * 5) : 215
+      return { id: o.id, ref: o.ref, location: o.location, widthMm: o.widthMm, heightMm: o.heightMm, thicknessMm: thick, struct: o.struct }
+    })
+  }
   function changePlaced(fn: (list: PlacedOpening[]) => PlacedOpening[]) {
     setProject(p => {
       const base = p.items.some(it => it.wdSummary) ? p.items : [...p.items, newWdItem()]
@@ -3402,6 +3457,21 @@ export default function TakeoffPage() {
     setSelectedOpeningId(id)
   }
 
+  /** puts a structural opening in the wall clicked: the wall is cut and drawn with its steel beam and posts, and its area reduced like a window or door; the steel and connections are chosen in the panel and the Structural Openings calculator */
+  function placeStructuralOpening(pt: TakeoffPoint) {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) { showToast('Set the scale of the plan first, so the openings are the right size'); return }
+    const hit = nearestWall(pt)
+    if (!hit) { showToast('Click on a wall to put the structural opening in it (draw the walls first in External Walls or Internal Walls & Partitions)'); return }
+    const half = structNext.widthMm / (mpp * 1000) / 2
+    const id = uid()
+    const ref = nextOpeningRef(allPlaced, STRUCTURAL_KIND)
+    const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, half)
+    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: STRUCTURAL_KIND, widthMm: structNext.widthMm, heightMm: structNext.heightMm, swing: 'in-left', ref, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
+    changeStructItem(x => x)
+    setSelectedOpeningId(id)
+  }
+
   function deleteOpening(id: string) {
     changePlaced(list => list.filter(o => o.id !== id))
     setSelectedOpeningId(null)
@@ -3437,7 +3507,7 @@ export default function TakeoffPage() {
     setSelectedOpeningId(o.id)
     setSelectedId(null); setEditingElement(null)
     setPanelMode('properties')
-    setEditingItem(wdItem ?? null)
+    setEditingItem((o.kind === STRUCTURAL_KIND ? structItem : wdItem) ?? null)
     const rect = svgRef.current!.getBoundingClientRect()
     const pan = panOffset, z = zoom
     const mpp = project.calibration.mpp
@@ -3525,14 +3595,17 @@ export default function TakeoffPage() {
 
   function renderOpenings() {
     const mpp = project.calibration.mpp
-    if (!(mpp > 0) || hiddenPhases.has('Windows & Doors')) return null
+    if (!(mpp > 0)) return null
+    const wdHidden = hiddenPhases.has('Windows & Doors'), structHidden = hiddenPhases.has('Structural Frame')
+    if (wdHidden && structHidden) return null
     const els = elementsOnActiveSheet(project)
-    const colourOf = (k: OpeningKind) => (k.startsWith('win-') ? OPENING_COLOUR.win : k.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext)
+    const colourOf = (k: PlacedKind) => (k === STRUCTURAL_KIND ? STEEL_BLUE : k.startsWith('win-') ? OPENING_COLOUR.win : k.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext)
     const sw = (n: number) => n / zoom
     const draw = (shape: NonNullable<ReturnType<typeof openingShape>>, colour: string, key: string, text: string | null, picked: boolean) => (
       <g key={key}>
         {shape.prims.map((pr, i) => {
           if (pr.type === 'poly') return <polygon key={i} points={pr.pts.map(q => q.x + ',' + q.y).join(' ')} fill="#ffffff" stroke="none" />
+          if (pr.type === 'post') { const s = Math.max(pr.size, 7 / zoom); return <rect key={i} x={pr.centre.x - s / 2} y={pr.centre.y - s / 2} width={s} height={s} fill={colour} stroke="#ffffff" strokeWidth={sw(1)} /> }
           if (pr.type === 'arc') return <path key={i} d={`M${pr.from.x} ${pr.from.y}A${pr.r} ${pr.r} 0 0 ${pr.sweep} ${pr.to.x} ${pr.to.y}`} fill="none" stroke={colour} strokeWidth={sw(1)} strokeDasharray={`${sw(4)} ${sw(3)}`} />
           const st = pr.style
           return <line key={i} x1={pr.a.x} y1={pr.a.y} x2={pr.b.x} y2={pr.b.y} stroke={st === 'jamb' ? '#222' : st === 'glass' ? colour : colour} strokeWidth={sw(st === 'jamb' ? 1.6 : st === 'leaf' ? 2.2 : st === 'frame' ? 1.4 : 1.1)} strokeDasharray={st === 'dash' ? `${sw(5)} ${sw(3)}` : undefined} strokeLinecap="round" />
@@ -3542,14 +3615,16 @@ export default function TakeoffPage() {
       </g>
     )
     const placed = allPlaced.map(o => {
+      if (o.kind === STRUCTURAL_KIND ? structHidden : wdHidden) return null
       const el = els.find(e => e.id === o.wallId)
       const g = el && wallGeometry(el)
-      const shape = g ? openingShape(g.path, g.closed, o, mpp, g.band, sw(10)) : null
+      const steel = o.kind === STRUCTURAL_KIND ? structSteelFor(o) : undefined
+      const shape = g ? openingShape(g.path, g.closed, steel ? { ...o, beams: steel.beams, posts: steel.posts, postRole: steel.postRole } : o, mpp, g.band, sw(10)) : null
       if (!shape) return null
       return (
         <g key={'op-' + o.id} opacity={o.notEstimated ? 0.55 : 1} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
           style={{ cursor: tool === 'select' ? 'move' : 'inherit', pointerEvents: tool === 'select' ? undefined : 'none', filter: o.notEstimated ? 'grayscale(1)' : undefined }}>
-          {draw(shape, colourOf(o.kind), 'd', o.ref, o.id === selectedOpeningId)}
+          {draw(shape, colourOf(o.kind), 'd', o.kind === STRUCTURAL_KIND ? `${o.ref} · ${(o.widthMm / 1000).toFixed(2)}m${steel?.section ? ' · ' + steel.section : ''}` : o.ref, o.id === selectedOpeningId)}
           <polygon points={shape.gap.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" stroke="none" />
         </g>
       )
@@ -3558,9 +3633,12 @@ export default function TakeoffPage() {
     if (tool === 'opening' && rawMouse) {
       const hit = nearestWall(rawMouse)
       if (hit) {
-        const half = openingNext.widthMm / (mpp * 1000) / 2
-        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind: openingKind, widthMm: openingNext.widthMm, swing: openingNext.swing }, mpp, hit.g.band, sw(10))
-        if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(openingKind), 'g', nextOpeningRef(allPlaced, openingKind), false)}</g>
+        const structural = activePhase === 'Structural Frame'
+        const wMm = structural ? structNext.widthMm : openingNext.widthMm
+        const half = wMm / (mpp * 1000) / 2
+        const kind: PlacedKind = structural ? STRUCTURAL_KIND : openingKind
+        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind, widthMm: wMm, swing: openingNext.swing }, mpp, hit.g.band, sw(10))
+        if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(kind), 'g', nextOpeningRef(allPlaced, kind), false)}</g>
       }
     }
     return <g>{placed}{ghost}</g>
@@ -3577,7 +3655,7 @@ export default function TakeoffPage() {
       const c = e ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === e) : undefined
       return !!c && WALL_LINTEL_CALCS.has(c)
     }
-    const plan: PlanOpening[] = livePlaced.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing, wallPricesLintel: wallPricesLintel(o.wallId) }))
+    const plan: PlanOpening[] = livePlacedWd.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing, wallPricesLintel: wallPricesLintel(o.wallId) }))
     const planKey = plan.map(planOpeningSig).join(';') + '#' + plan.map(o => o.id).join(',')
     const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
     // the Windows card and the Doors card: each is fed only the openings that belong to it (a window or bi-fold or sliding door system to Windows, any other door to Doors) and has its own saved price
@@ -3587,7 +3665,7 @@ export default function TakeoffPage() {
       const sit = project.items.find(i => i.wdScopeSummary === scope)
       const sPlan = plan.filter(o => kindInScope(o.kind, scope))
       const sKey = sPlan.map(planOpeningSig).join(';') + '#' + sPlan.map(o => o.id).join(',')
-      const drawingOnly = livePlaced.filter(o => o.notEstimated && kindInScope(o.kind, scope)).length
+      const drawingOnly = livePlacedWd.filter(o => o.notEstimated && kindInScope(o.kind, scope)).length
       return {
         key: sid, scope, name: scope === 'windows' ? 'Windows' : 'Doors',
         measureText: `${sPlan.length}${drawingOnly > 0 ? ` (and ${drawingOnly} drawing only)` : ''}`,
@@ -3612,7 +3690,7 @@ export default function TakeoffPage() {
     // the older calculator with both in one is only shown when a quote already priced from it (so nothing already priced changes, and the two new ones are not counted twice)
     const legacyCard: OpeningsCard[] = it?.assemblyResult || it?.assemblyCalcState ? [{
       key: WD_ITEM_ID, name: 'Windows and doors (older, both together)',
-      measureText: `${livePlaced.filter(o => !o.notEstimated).length}${livePlaced.some(o => o.notEstimated) ? ` (and ${livePlaced.filter(o => o.notEstimated).length} drawing only)` : ''}`,
+      measureText: `${livePlacedWd.filter(o => !o.notEstimated).length}${livePlacedWd.some(o => o.notEstimated) ? ` (and ${livePlacedWd.filter(o => o.notEstimated).length} drawing only)` : ''}`,
       saved: it?.assemblyResult, stale,
       open: assemblyWindowItemId === WD_ITEM_ID,
       onOpen: () => { changeWdItem(x => x); setAssemblyWindowItemId(WD_ITEM_ID) },
@@ -3629,12 +3707,12 @@ export default function TakeoffPage() {
         },
       }),
     }] : []
-    const sel = livePlaced.find(o => o.id === selectedOpeningId)
+    const sel = livePlacedWd.find(o => o.id === selectedOpeningId)
     const selEl = sel ? project.elements.find(e => e.id === sel.wallId) : undefined
     const selGeo = selEl ? wallGeometry(selEl) : null
     return (
       <OpeningsPanel
-        openings={livePlaced}
+        openings={livePlacedWd}
         placing={tool === 'opening'}
         onPlacing={on => { setTool(on ? 'opening' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false); setRawMouse(null) } }}
         kind={openingKind} onKind={pickOpeningKind}
@@ -3648,6 +3726,54 @@ export default function TakeoffPage() {
         onCentre={centreOpening}
         onFlip={flipOpening}
         cards={[...scopeCards, ...legacyCard]}
+      />
+    )
+  }
+
+  function renderStructPanel() {
+    const mpp = project.calibration.mpp
+    const it = structItem
+    const built = BUILT_ASSEMBLY_CANON_IDS['sf-openings-calc']
+    const plan = structPlanList()
+    const planKey = plan.map(planStructuralSig).join(';') + '#' + plan.map(o => o.id).join(',')
+    const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
+    const sel = livePlacedStruct.find(o => o.id === selectedOpeningId)
+    const selEl = sel ? project.elements.find(e => e.id === sel.wallId) : undefined
+    const selGeo = selEl ? wallGeometry(selEl) : null
+    const drawingOnly = livePlacedStruct.filter(o => o.notEstimated).length
+    return (
+      <StructOpeningsPanel
+        openings={livePlacedStruct}
+        placing={tool === 'opening'}
+        onPlacing={on => { setTool(on ? 'opening' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false); setRawMouse(null) } }}
+        widthMm={structNext.widthMm} heightMm={structNext.heightMm}
+        onNext={patch => setStructNext(n => ({ ...n, ...patch }))}
+        selectedId={selectedOpeningId} onSelect={setSelectedOpeningId}
+        onUpdate={(id, patch) => changePlaced(list => list.map(q => q.id === id ? { ...q, ...patch } : q))}
+        onDelete={deleteOpening}
+        selectedAlong={sel && selGeo && mpp > 0 ? { mm: sel.distPx * mpp * 1000, wallMm: pathLength(selGeo.path, selGeo.closed) * mpp * 1000 } : undefined}
+        onMoveAlong={moveOpeningAlong}
+        onCentre={centreOpening}
+        steelOf={id => { const o = livePlacedStruct.find(q => q.id === id); return o ? structSteelFor(o) : undefined }}
+        onSteel={(id, patch) => changePlaced(list => list.map(q => { if (q.id !== id) return q; const e = structSteelFor(q); return { ...q, struct: { ...q.struct, section: e.choice, beams: e.beams, posts: e.posts, postRole: e.postRole, loadAbove: e.load, connections: e.conns, ...patch } } }))}
+        card={{
+          measureText: `${plan.length}${drawingOnly > 0 ? ` (and ${drawingOnly} drawing only)` : ''}`,
+          saved: it?.assemblyResult, stale,
+          open: assemblyWindowItemId === STRUCT_ITEM_ID,
+          onOpen: () => { changeStructItem(x => x); setAssemblyWindowItemId(STRUCT_ITEM_ID) },
+          onClose: () => setAssemblyWindowItemId(null),
+          calculator: built?.render({
+            labourTrades,
+            calcState: it?.assemblyCalcState,
+            structPlan: plan,
+            onSave: result => {
+              const { calcState, state: _state, size: _size, ...res } = result
+              const sub = boSubPhases.find(sp => sp.canonical_id === 'sf-openings-calc')
+              changeStructItem(x => ({ ...x, assemblyResult: res, assemblyCalcState: calcState, wdPricedKey: planKey, name: result.name, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }))
+              setAssemblyWindowItemId(null)
+            },
+          }),
+        }}
       />
     )
   }
@@ -4696,6 +4822,7 @@ export default function TakeoffPage() {
       externalPerimeterM: ap?.perimeterM,
       variant: it.floorMakeupId === 'cold_flat_roof' && !it.taskSubphaseId ? 'cold' : undefined,
       wallOpenings: isWall && it.elementId ? planWallOpenings(livePlaced, it.elementId, project.calibration.mpp) : undefined,
+      structPlan: it.structSummary ? structPlanList() : undefined,
       noSampleOpenings: it.elementId ? true : undefined,
       initialHeightMm: isWall && (it.wallHeight ?? 0) > 0 ? Math.round((it.wallHeight ?? 0) * 1000) : undefined,
       basics: it.phase === 'Foundations' && el?.type === 'line' ? { widthMm: it.foundationWidth ?? 600, depthMm: it.foundationDepth ?? 1000 } : undefined,
@@ -5934,7 +6061,7 @@ export default function TakeoffPage() {
     if (id.startsWith('op:')) {
       const o = allPlaced.find(q => 'op:' + q.id === id)
       if (!o) return null
-      const k = WD_KIND_BY_ID[o.kind]
+      const k = o.kind === STRUCTURAL_KIND ? undefined : WD_KIND_BY_ID[o.kind]
       const wallEl = project.elements.find(e => e.id === o.wallId)
       rows.push(['Size', `${o.widthMm} × ${o.heightMm} mm`])
       if (hasSwing(o.kind)) rows.push(['Opens', WD_SWING_LABEL[o.swing] ?? o.swing])
@@ -5943,13 +6070,18 @@ export default function TakeoffPage() {
       const lv = levelOf(wallEl?.levelId); if (lv) rows.push(['Level', lv])
       let note: string | undefined
       if (o.notEstimated) note = 'Drawing only: not priced and not sent to the quote.'
-      else {
+      else if (o.kind === STRUCTURAL_KIND) {
+        const st = structSteelFor(o)
+        if (st?.section) rows.push(['Steel', `${st.beams} × ${st.section}${st.posts > 0 ? `, ${st.posts} post${st.posts === 1 ? '' : 's'}` : ''}`])
+        const t = sum(structItem)
+        rows.push(['Priced in', `The Structural Openings calculator${t !== null ? ' (card total ' + money(t) + ')' : ': not priced yet'}`])
+      } else {
         const scope = kindInScope(o.kind, 'windows') ? 'windows' : 'doors'
         const card = project.items.find(i => i.wdScopeSummary === scope)
         const t = sum(card)
         rows.push(['Priced in', `The ${scope === 'windows' ? 'Windows' : 'Doors'} calculator${t !== null ? ' (card total ' + money(t) + ')' : ': not priced yet'}`])
       }
-      return { title: `${o.ref} · ${k?.label ?? 'Opening'}`, color: o.notEstimated ? NOT_ESTIMATED_FILL : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext, rows, note }
+      return { title: `${o.ref} · ${o.kind === STRUCTURAL_KIND ? 'Structural opening' : (k?.label ?? 'Opening')}`, color: o.notEstimated ? NOT_ESTIMATED_FILL : o.kind === STRUCTURAL_KIND ? STEEL_BLUE : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext, rows, note }
     }
     const el = project.elements.find(e => e.id === id)
     if (!el) return null
@@ -6013,13 +6145,13 @@ export default function TakeoffPage() {
     })
     // each placed door and window gets a tag too (its reference, kind and size), laid out with the others so they do not sit on each other
     const wallEls = elementsOnActiveSheet(project)
-    const openingInputs: TagInput[] = hiddenPhases.has('Windows & Doors') || !(mpp > 0) ? [] : allPlaced.flatMap(o => {
+    const openingInputs: TagInput[] = !(mpp > 0) ? [] : allPlaced.filter(o => !hiddenPhases.has(o.kind === STRUCTURAL_KIND ? 'Structural Frame' : 'Windows & Doors')).flatMap(o => {
       const wallEl = wallEls.find(e => e.id === o.wallId)
       const g = wallEl && wallGeometry(wallEl)
       const at = g && pointAtDist(g.path, g.closed, clampDist(g.path, g.closed, o.distPx, o.widthMm / (mpp * 1000) / 2))
       if (!at) return []
       const size = `${(o.widthMm / 1000).toFixed(1)} × ${(o.heightMm / 1000).toFixed(1)}m`
-      return [{ id: 'op:' + o.id, text: tagText(`${o.ref} · ${WD_KIND_BY_ID[o.kind]?.label ?? 'Opening'}`, size + (o.notEstimated ? ' · drawing only' : ''), 30), ax: at.x, ay: at.y, dx: o.tagDx, dy: o.tagDy }]
+      return [{ id: 'op:' + o.id, text: tagText(`${o.ref} · ${o.kind === STRUCTURAL_KIND ? 'Structural opening' : (WD_KIND_BY_ID[o.kind]?.label ?? 'Opening')}`, size + (o.notEstimated ? ' · drawing only' : ''), 30), ax: at.x, ay: at.y, dx: o.tagDx, dy: o.tagDy }]
     })
     const boxes = layoutTags([...inputs, ...openingInputs], zoom)
     const tagNodes = boxes.map(t => {
@@ -6027,10 +6159,10 @@ export default function TakeoffPage() {
         // a door's or window's tag: its kind's colour, click to pick the opening, drag to move the tag out of the way
         const o = allPlaced.find(q => 'op:' + q.id === t.id)!
         const sel = selectedOpeningId === o.id
-        const fillC = o.notEstimated ? NOT_ESTIMATED_FILL : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext
+        const fillC = o.notEstimated ? NOT_ESTIMATED_FILL : o.kind === STRUCTURAL_KIND ? STEEL_BLUE : o.kind.startsWith('win-') ? OPENING_COLOUR.win : o.kind.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext
         const interactive = tool === 'select'
         const fromYo = t.y + t.h / 2 < t.ay ? t.y + t.h : t.y
-        const pickOpening = () => { setSelectedOpeningId(o.id); setSelectedId(null); setEditingElement(null); setPanelMode('properties'); setEditingItem(wdItem ?? null) }
+        const pickOpening = () => { setSelectedOpeningId(o.id); setSelectedId(null); setEditingElement(null); setPanelMode('properties'); setEditingItem((o.kind === STRUCTURAL_KIND ? structItem : wdItem) ?? null) }
         return (
           <g key={'tag-' + t.id} style={{ pointerEvents: interactive ? undefined : 'none', cursor: interactive ? (tagDragRef.current?.id === t.id ? 'grabbing' : 'grab') : 'default' }}
             onMouseEnter={e => tipEnter(t.id, e)} onMouseMove={e => { tagTipPos.current = { x: e.clientX, y: e.clientY } }} onMouseLeave={tipLeave}
@@ -8624,6 +8756,7 @@ export default function TakeoffPage() {
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
     if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary || item?.boilerSummary) return renderPlumbingPanel()
     if ((activePhase === 'Drainage & Services' && tool === 'drain') || item?.drainSummary) return renderDrainPanel()
+    if ((activePhase === 'Structural Frame' && tool === 'opening') || item?.structSummary) return renderStructPanel()
     if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary || item?.wdScopeSummary) return renderOpeningsPanel()
     if (tool === 'room') return renderRoomsPanel()
     if (!item) {
@@ -8671,6 +8804,8 @@ export default function TakeoffPage() {
                     // A calculator sub-phase is drawn as a line, whatever the last task's tool was.
                     const canon = boSubPhases.find(b => b.id === e.target.value)?.canonical_id
                     if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(FOUNDATION_SHAPE_CALCS.has(canon) || AREA_DRAWN_CALCS.has(canon) ? 'rect' : (PHASE_DEFAULT_TOOL[activePhase] ?? 'line'))
+                    // Structural Openings are placed on a wall like a window or door (click a wall), not drawn as a line
+                    if (canon === 'sf-openings-calc') chooseTool('opening')
                   }}>
                   {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
@@ -9017,6 +9152,7 @@ export default function TakeoffPage() {
     { t: 'guide',    icon: '┼',  label: 'Guides (lines to snap to)', pinned: true,  show: true },
     { t: 'join',     icon: '⌐',  label: 'Join Corner (or select a wall, Shift-click another and press Join)', pinned: true, show: true },
     { t: 'opening',  icon: '🪟', label: 'Place Window / Door',     pinned: true,  show: activePhase === 'Windows & Doors' },
+    { t: 'opening',  icon: '⊞',  label: 'Place Structural Opening (steel beam over an opening in a wall)', pinned: true,  show: activePhase === 'Structural Frame' },
     { t: 'electric', icon: '⚡', label: 'Place Electrical Point',  pinned: true,  show: activePhase === 'Electrics' },
     { t: 'plumb',    icon: '🚿', label: 'Place Plumbing Fitting',  pinned: true,  show: activePhase === 'Plumbing & Heating' },
     { t: 'drain',    icon: '🕳', label: 'Place Chamber / Manhole / Gully', pinned: true, show: activePhase === 'Drainage & Services' },
@@ -10121,7 +10257,7 @@ export default function TakeoffPage() {
               tool === 'electric' ? 'Place electrical points' :
               tool === 'plumb' ? 'Place plumbing fittings and radiators' :
               tool === 'drain' ? 'Place drainage chambers, manholes and gullies' :
-              tool === 'opening' ? 'Place windows and doors (click a wall)' :
+              tool === 'opening' ? (activePhase === 'Structural Frame' ? 'Place a structural opening (click a wall)' : 'Place windows and doors (click a wall)') :
               tool === 'room' ? 'Rooms (click a room to name it)' :
               tool === 'join' ? (joinFirst ? 'Join Corner: now click the other wall' : 'Join Corner: click one wall near the corner') :
               tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
