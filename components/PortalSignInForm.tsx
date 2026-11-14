@@ -6,12 +6,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 const COOLDOWN_SECS = 30
 
 export default function PortalSignInForm({ kind, next, initialEmail, notice }: { kind: 'sub' | 'client'; next: string; initialEmail?: string; notice?: string }) {
-  const supabase = createClient()
   const cooldownKey = `portal_code_cooldown_${kind}`
   const [email, setEmail] = useState(initialEmail ?? '')
   const [code, setCode] = useState('')
@@ -58,16 +56,17 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
   async function verify(token: string) {
     setError(''); setBusy(true)
     try {
-      let { error: vErr } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' })
-      if (vErr) ({ error: vErr } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'magiclink' }))
-      if (vErr) {
-        fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'sign_in_failed', details: 'code' }) }).catch(() => {})
-        setError('That code is not right, or it has run out. Check the newest email, or send a new code.')
+      // The code is checked on the SERVER, which sets the sign-in cookies itself (a cookie written by this page's own script is one iPhone Safari deletes after about a week)
+      const res = await fetch('/api/portal/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim(), token }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        setError(data?.error || 'That code is not right, or it has run out. Check the newest email, or send a new code.')
         setCode('')
         return
       }
-      fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'sign_in' }) }).catch(() => {})
       window.location.href = next   // a full page load, so the new session is picked up everywhere
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
     } finally {
       setBusy(false)
     }

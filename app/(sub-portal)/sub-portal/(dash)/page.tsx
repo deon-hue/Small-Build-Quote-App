@@ -7,6 +7,7 @@ import { useSubPortal } from '@/contexts/SubPortalContext'
 import { SubNextDaysCard } from '@/components/SubScheduleView'
 import SubHomeTiles, { type SubTileKey } from '@/components/SubHomeTiles'
 import { useSubLook } from '@/contexts/SubLookContext'
+import SubInstallGuide from '@/components/SubInstallGuide'
 import { expandSchedule } from '@/lib/task-days'
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -137,6 +138,9 @@ export default function SubPortalDashboard() {
           {contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here&apos;s your overview
         </p>
       </div>
+
+      {/* Until the portal is opened from the home-screen icon: how to put it there (it keeps them signed in and is one tap to open) */}
+      <div style={{ marginBottom: 18 }}><SubInstallGuide /></div>
 
       {/* The big tiles: each opens its own page (Add my time is the one they use most) */}
       <SubHomeTiles style={look.style} calendarLabel={companyCalendarStatus === 'off' ? 'Calendar' : 'Company calendar'} onSelect={k => router.push(TILE_ROUTES[k])} />
