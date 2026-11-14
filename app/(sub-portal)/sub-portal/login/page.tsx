@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import PortalSignInForm from '@/components/PortalSignInForm'
+import SubInstallGuide from '@/components/SubInstallGuide'
 
 function SubPortalLoginForm() {
   const searchParams = useSearchParams()
@@ -29,6 +30,7 @@ function SubPortalLoginForm() {
           View your jobs, log timesheets and track your payments — all in one place.
         </p>
         <PortalSignInForm kind="sub" next="/sub-portal" initialEmail={email} notice={notice} />
+        <SubInstallGuide />
       </div>
     </div>
   )
