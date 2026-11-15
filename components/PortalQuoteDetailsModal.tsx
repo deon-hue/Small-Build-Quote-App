@@ -4,6 +4,7 @@ import { showHtmlDocument } from '@/lib/open-document'
 import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt, phaseMarkup } from '@/lib/utils'
 import { clientRows } from '@/lib/client-items'
+import { clientPhaseRows } from '@/lib/client-phase-groups'
 import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
 import PortalQuoteAttachments from './PortalQuoteAttachments'
@@ -97,9 +98,11 @@ export default function PortalQuoteDetailsModal({
     const phaseContent = quote.phases.length > 0 ? `
       <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 700;">Breakdown</h3>
       <table style="width: 100%; border-collapse: collapse;">
-        ${quote.phases.map((phase, pi) => `
+        ${clientPhaseRows(quote.phases).map(row => { const phase = row.phase; return `
+          ${row.mainHeading ? `<tr style="background: #dfe5d6;"><td style="padding: 10px; font-weight: 700; border: 1px solid #ddd; text-transform: uppercase; letter-spacing: 0.4px;">${row.mainHeading.number}. ${escHtml(row.mainHeading.name)}</td>${printOptions.includeCosts ? `<td style="padding: 10px; text-align: right; font-weight: 700; border: 1px solid #ddd;">${fmt(row.mainHeading.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0))}</td>` : ''}</tr>` : ''}
+          ${row.roomHeading ? `<tr style="background: #f6f8f3;"><td colspan="${printOptions.includeCosts ? 2 : 1}" style="padding: 6px 10px; font-weight: 600; color: #16a34a; border: 1px solid #ddd;">&#128205; ${escHtml(row.roomHeading)}</td></tr>` : ''}
           <tr style="background: #f0f2ee;">
-            <td style="padding: 10px; font-weight: 700; border: 1px solid #ddd;">${pi + 1}. ${phase.phase}</td>
+            <td style="padding: 10px; font-weight: 700; border: 1px solid #ddd;">${row.number}. ${phase.phase}</td>
             ${printOptions.includeCosts ? `<td style="padding: 10px; text-align: right; font-weight: 700; border: 1px solid #ddd;">${fmt(calcPhaseSell(phase, quote.markup))}</td>` : ''}
           </tr>
           ${phaseDescriptionRow(phase)}
@@ -109,7 +112,7 @@ export default function PortalQuoteDetailsModal({
               ${printOptions.includeCosts ? `<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${fmt(sell)}</td>` : ''}
             </tr>
           `).join('') : ''}
-        `).join('')}
+        ` }).join('')}
       </table>
     ` : ''
 
@@ -367,17 +370,29 @@ export default function PortalQuoteDetailsModal({
           {/* ── Phases & line items ─────────────────── */}
           {quote.phases.length > 0 && quoteView !== 'total_only' && (
             <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-              {quote.phases.map((phase, pi) => (
+              {clientPhaseRows(quote.phases).map((row, pi) => { const phase = row.phase; return (
                 <div key={phase.id}>
+                  {/* The main phase heading, then the room or area, then the sub-phase: the way the quote is built */}
+                  {row.mainHeading && (
+                    <div style={{ background: '#2f353b', color: '#fff', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>{row.mainHeading.number}. {row.mainHeading.name}</div>
+                      {(quoteView === 'full' || quoteView === 'phase_totals') && (
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700 }}>{fmt(row.mainHeading.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0))}</div>
+                      )}
+                    </div>
+                  )}
+                  {row.roomHeading && (
+                    <div style={{ background: '#f6f8f3', padding: '6px 16px', fontSize: 12, fontWeight: 700, color: '#16a34a', borderTop: '1px solid var(--border)' }}>📍 {row.roomHeading}</div>
+                  )}
                   {/* Phase heading */}
                   <div style={{
                     background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4',
                     padding: '10px 16px', display: 'flex',
                     justifyContent: 'space-between', alignItems: 'center',
-                    borderTop: pi > 0 ? '2px solid var(--border)' : undefined,
+                    borderTop: pi > 0 && !row.mainHeading && !row.roomHeading ? '2px solid var(--border)' : undefined,
                   }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
-                      {pi + 1}. {phase.phase}
+                      {row.number}. {phase.phase}
                       {!isPreview && <AskAboutButton label={phase.phase} onAsk={ask} />}
                     </div>
                     {/* Phase total — 'full' and 'phase_totals' (each phase with its total); 'phases' is "list of phases, no amounts" (the totals at the foot are shown) */}
@@ -440,7 +455,7 @@ export default function PortalQuoteDetailsModal({
                     )
                   })}
                 </div>
-              ))}
+              )})}
             </div>
           )}
 

@@ -2,6 +2,7 @@ import type { Quote } from './types'
 import type { Settings } from './types'
 import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell, phaseMarkup } from './utils'
 import { clientRows } from './client-items'
+import { clientPhaseRows } from './client-phase-groups'
 import { getPhaseVisual } from './phase-visuals'
 import { companyLegalParts } from './company-legal'
 import { scopeToHtml } from './scope-format'
@@ -90,7 +91,8 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
     </div>`
   }
 
-  const phaseRows = q.phases.map(p => {
+  const phaseRows = clientPhaseRows(q.phases).map(row => {
+    const p = row.phase
     const phaseTotal = calcPhaseSell(p, qMkp)
     const itemRows = clientRows(p.items.filter(i => calcItemSell(i, phaseMarkup(p, qMkp)) > 0), i => calcItemSell(i, phaseMarkup(p, qMkp)))
       .map(c => itemRow(getItemDesc(c.item), c.item.qty, c.item.unit, c.notes, c.sell)).join('')
@@ -101,10 +103,12 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
     const miscRows = (p.miscItems ?? []).filter(mi => mi.enabled !== false)
       .map(mi => itemRow(mi.desc || 'Item', undefined, undefined, mi.notes, calcMiscItemSell(mi))).join('')
     return `
+      ${row.mainHeading ? `<div style="display:flex;justify-content:space-between;align-items:center;margin:26px 0 10px;padding:10px 14px;background:#2f353b;color:#fff;border-radius:4px;font-weight:700;font-size:13px;letter-spacing:.5px;text-transform:uppercase"><span>${row.mainHeading.number}. ${esc(row.mainHeading.name)}</span><span style="font-family:'DM Mono',monospace">£${row.mainHeading.phases.reduce((s, x) => s + calcPhaseSell(x, qMkp), 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span></div>` : ''}
+      ${row.roomHeading ? `<div style="margin:4px 0 8px;font-size:12px;font-weight:700;color:#16a34a">&#128205; ${esc(row.roomHeading)}</div>` : ''}
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${p.taskName ? '4px' : '12px'}">
           <div style="font-size:14px;font-weight:600;color:#1e293b">
-            ${p.roomLabel ? `<span style="font-size:11px;font-weight:700;color:#16a34a;margin-right:6px">📍 ${esc(p.roomLabel)}</span>` : ''}${esc(p.phase)}
+            ${esc(p.phase)}
           </div>
           <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:'DM Mono',monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
         </div>
@@ -247,7 +251,8 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
   const total = sub + vat
 
   // Build phase card rows — behaviour depends on quoteView
-  const phaseRows = quoteView === 'total_only' ? '' : q.phases.map(p => {
+  const phaseRows = quoteView === 'total_only' ? '' : clientPhaseRows(q.phases).map(row => {
+    const p = row.phase
     const sell    = calcPhaseSell(p, qMkp)
     const vatAmt  = qVat ? sell * VAT : 0
     // Use AI-assigned image if available; fall back to the static mapping
@@ -309,12 +314,14 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
       </div>`
     }).join('')
 
-    return `<div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;border-radius:4px;overflow:hidden">
+    const mainTotal = (quoteView === 'full' || quoteView === 'phase_totals') && row.mainHeading ? row.mainHeading.phases.reduce((s, x) => s + calcPhaseSell(x, qMkp), 0) : null
+    return `${row.mainHeading ? `<div style="display:flex;justify-content:space-between;align-items:center;margin:26px 0 10px;padding:10px 14px;background:#2f353b;color:#fff;border-radius:4px;font-weight:700;font-size:13px;letter-spacing:.5px;text-transform:uppercase"><span>${row.mainHeading.number}. ${esc(row.mainHeading.name)}</span>${mainTotal !== null ? `<span style="font-family:'DM Mono',monospace">£${mainTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}</div>` : ''}
+    ${row.roomHeading ? `<div style="margin:4px 0 8px;font-size:12px;font-weight:700;color:#16a34a">&#128205; ${esc(row.roomHeading)}</div>` : ''}<div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;border-radius:4px;overflow:hidden">
       <div style="display:flex;align-items:center;padding:12px 14px">
         ${photoHtml}
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:13px;color:#1e293b">
-            ${p.roomLabel ? `<span style="font-size:11px;font-weight:700;color:#16a34a;margin-right:6px">📍 ${esc(p.roomLabel)}</span>` : ''}${esc(p.phase)}
+            ${esc(p.phase)}
           </div>
           ${p.taskName ? `<div style="font-size:11px;color:#64748b;margin-top:2px;white-space:pre-line">${esc(p.taskName)}</div>` : ''}
         </div>
