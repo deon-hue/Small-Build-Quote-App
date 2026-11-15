@@ -6,7 +6,8 @@ import { useApp } from '@/contexts/AppContext'
 import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
 import VaultedCeilingReminder from '@/components/VaultedCeilingReminder'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
-import { statusAfterUpdate, draftWouldHideFromClient } from '@/lib/portal-visibility'
+import { statusAfterUpdate, draftWouldHideFromClient, isQuoteVisibleToClient } from '@/lib/portal-visibility'
+import { unpublishedSignature, unpublishedDraftKey, parseUnpublishedDraft, serialiseUnpublishedDraft, shouldOfferUnpublishedDraft, draftValues, type QuoteEditValues } from '@/lib/unpublished-quote'
 import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem, Client } from '@/lib/types'
 import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
@@ -351,6 +352,11 @@ export default function NewQuotePage() {
   const [lastSaved,   setLastSaved]   = useState<Date | null>(null)
   const [autoSaveFailed, setAutoSaveFailed] = useState(false)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A quote the client can already see is not autosaved: edits wait on this computer until Update Quote. `baselineRef` is what the quote looked like when it was opened or last published,
+  // `unpublished` says the screen now differs from it, and `draftOfferedFor` makes sure a leftover safety copy is offered back once per opening.
+  const baselineRef = useRef<{ id: string | null; sig: string }>({ id: null, sig: '' })
+  const draftOfferedFor = useRef<string | null>(null)
+  const [unpublished, setUnpublished] = useState(false)
   // Guards the one-shot init effect below against running twice for the same
   // mount. Must be a ref, not state — a second invocation can happen before
   // React has re-rendered with state set by the first, so a state-based guard
@@ -596,6 +602,45 @@ export default function NewQuotePage() {
   useEffect(() => {
     if (!editingId || isLockedQuote || loading) return
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    // A quote that is already with the client (sent, approved or declined) is NOT saved while it is being edited: the client's portal reads the saved quote, so half-typed changes would show there.
+    // The edits are kept on this computer (a safety copy) and reach the client when Update Quote is pressed.
+    const existingNow = quotes.find(q => q.id === editingId)
+    if (existingNow && isQuoteVisibleToClient(existingNow.status)) {
+      const values = (): QuoteEditValues => ({ phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo })
+      if (baselineRef.current.id !== editingId) { baselineRef.current = { id: editingId, sig: unpublishedSignature(values()) }; setUnpublished(false) }
+      // A safety copy left from an earlier visit that was never published is offered back, once for each time the quote is opened
+      if (draftOfferedFor.current !== editingId) {
+        draftOfferedFor.current = editingId
+        try {
+          const key = unpublishedDraftKey(editingId)
+          const draft = parseUnpublishedDraft(localStorage.getItem(key))
+          if (draft && shouldOfferUnpublishedDraft(values(), draft)) {
+            const when = new Date(draft.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+            const changedSince = existingNow.lastEdited && new Date(existingNow.lastEdited).getTime() > new Date(draft.at).getTime()
+            if (confirm('You have changes to this quote from ' + when + ' that were never published to your client.' + (changedSince ? '\n\nThe saved quote has been changed since then, so these would replace those changes.' : '') + '\n\nPut those changes back on screen? (Your client does not see them until you press Update.)')) {
+              const v = draftValues(values(), draft)
+              setCustName(v.custName); setCustAddr(v.custAddr); setCustEmail(v.custEmail); setCustPhone(v.custPhone)
+              setJobType(v.jobType); setJobTitle(v.jobTitle); setMarkup(v.markup); setVatOn(v.vatOn); setScope(v.scope); setPhoto(v.photo)
+              setPhases((v.phases as QuotePhase[]).map(p => ({ ...p, id: ++phaseCounter, items: (p.items ?? []).map(i => ({ ...i, id: ++itemCounter })) })))
+              if (quoteSource === 'quick') { const misc = (v.phases as QuotePhase[])[0]?.miscItems; if (misc) setQuickItems(misc) }
+              return   // the change of state runs this effect again and marks the quote as having unpublished changes
+            }
+            localStorage.removeItem(key)
+          }
+        } catch { /* storage unavailable: nothing to offer */ }
+      }
+      autoSaveTimer.current = setTimeout(() => {
+        const differs = unpublishedSignature(values()) !== baselineRef.current.sig
+        setUnpublished(differs)
+        try {
+          const key = unpublishedDraftKey(editingId)
+          if (differs) localStorage.setItem(key, serialiseUnpublishedDraft(values()))
+          else localStorage.removeItem(key)
+        } catch { /* storage full or blocked: the warning below still protects the screen */ }
+      }, 800)
+      return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+    }
+    setUnpublished(false)
     autoSaveTimer.current = setTimeout(async () => {
       const existing = quotes.find(q => q.id === editingId)
       if (!existing) return
@@ -629,6 +674,29 @@ export default function NewQuotePage() {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, editingId])
+
+  // ── Leaving a quote that has edits not yet published to the client ───────────
+  // Closing or reloading the tab asks first (the browser's own question), and so does clicking a link to another page of the app. The edits are also kept on this computer
+  // (the safety copy above), so even leaving anyway loses nothing: they are offered back the next time the quote is opened.
+  useEffect(() => {
+    if (!unpublished) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return
+      let url: URL
+      try { url = new URL(a.href, window.location.href) } catch { return }
+      if (url.origin !== window.location.origin) return
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return
+      if (!confirm('This quote has changes that are NOT published to your client yet.\n\nLeave without pressing Update? (The changes are kept on this computer and offered back when you open the quote again, but your client will not see them.)')) {
+        e.preventDefault(); e.stopPropagation()
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('click', onClick, true)
+    return () => { window.removeEventListener('beforeunload', onBeforeUnload); document.removeEventListener('click', onClick, true) }
+  }, [unpublished])
 
   /** Phases & Tasks rows -> quote phases (one per sub-phase, five typed rows per task, stamped so the quote can save back to Back Office). A sub-phase with no tasks still gets its five empty rows. */
   function phasesFromBORows(defaults: Awaited<ReturnType<typeof fetchAllQuoteDefaults>>): QuotePhase[] {
@@ -912,10 +980,16 @@ export default function NewQuotePage() {
           : [])
       }
     }
-    setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
+    const loadedPhases: QuotePhase[] = JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
       ...p, id: ++phaseCounter,
       items: toTypedItems(p.items).map((i: Omit<QuoteItem,'id'>) => ({ ...i, id: ++itemCounter })),
-    })))
+    }))
+    setPhases(loadedPhases)
+    // What the quote looked like when it was opened: for a quote the client can already see, anything different on screen is an edit that is not published yet
+    baselineRef.current = { id: q.id, sig: unpublishedSignature({
+      phases: loadedPhases, custName: q.customer.name || '', custAddr: q.customer.address || '', custEmail: q.customer.email || '', custPhone: q.customer.phone || '',
+      jobType: q.jobType || 'Rear Extension', jobTitle: q.title || '', markup: q.markup || 15, vatOn: q.vatIncluded !== false, scope: q.scope || '', photo: q.photo || '',
+    }) }
     setEditingId(q.id)
     setIsLockedQuote(q.status === 'accepted')
   }
@@ -990,6 +1064,7 @@ export default function NewQuotePage() {
           } else if (!(e instanceof QuoteGoneError)) alert(quoteSaveMessage(e))
           return
         }
+        clearUnpublished(editingId)   // saved as a draft: it is no longer visible to the client, so nothing is waiting to be published
         alert('Draft updated.')
       } else {
         const newQuote = await addQuote(qData)
@@ -1748,6 +1823,7 @@ export default function NewQuotePage() {
           } else if (!(e instanceof QuoteGoneError)) alert(quoteSaveMessage(e))
           return
         }
+        clearUnpublished(editingId)   // published: the safety copy is no longer needed
         setEditingId(null)
         alert(statusBefore === 'sent' ? 'Quote updated. It has already been sent, so your client sees the changes in their portal now. Use Send Quote if you also want to email them to say it has changed.' : 'Quote updated successfully.')
       } else {
@@ -1807,7 +1883,17 @@ export default function NewQuotePage() {
     setScopeNotes(prev => ((prev ?? '').trim() ? (prev ?? '').trimEnd() + '\n\n' : '') + d + ' — ')
   }
 
+  /** Forgets the safety copy and the 'not published yet' state of a quote (it was published, saved as a draft, or its edits were thrown away). */
+  function clearUnpublished(id: string | null) {
+    if (id) { try { localStorage.removeItem(unpublishedDraftKey(id)) } catch { /* nothing stored */ } }
+    baselineRef.current = { id: null, sig: '' }
+    draftOfferedFor.current = null
+    setUnpublished(false)
+  }
+
   function cancelEdit() {
+    if (unpublished && !confirm('This quote has changes that are not published to your client yet. Cancel the edit and throw them away?')) return
+    clearUnpublished(editingId)
     setEditingId(null)
     setIsLockedQuote(false)
     setScopeNotes(undefined)
@@ -1967,7 +2053,12 @@ export default function NewQuotePage() {
             {!autoSaving && autoSaveFailed && (
               <span style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700 }} title="The last automatic save did not go through. Press Save to try again: your changes are still on this screen.">⚠ Not saved</span>
             )}
-            {!autoSaving && !autoSaveFailed && lastSaved && (
+            {isQuoteVisibleToClient(quotes.find(q => q.id === editingId)?.status) && (
+              unpublished
+                ? <span style={{ fontSize: 11, color: '#b45309', fontWeight: 700 }} title="Your client sees the quote as it was when you opened it. These changes are kept on this computer and reach their portal when you press Update.">● Changes not published to your client yet: press Update</span>
+                : <span style={{ fontSize: 11, color: '#64748b' }} title="This quote is already with your client. Changes you make are not shown to them until you press Update.">Your client sees this version</span>
+            )}
+            {!isQuoteVisibleToClient(quotes.find(q => q.id === editingId)?.status) && !autoSaving && !autoSaveFailed && lastSaved && (
               <span style={{ fontSize: 11, color: '#64748b' }}>
                 ✓ Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
               </span>
