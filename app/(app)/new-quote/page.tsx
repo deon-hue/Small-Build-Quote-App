@@ -6,6 +6,7 @@ import { useApp } from '@/contexts/AppContext'
 import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
 import VaultedCeilingReminder from '@/components/VaultedCeilingReminder'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
+import { statusAfterUpdate, draftWouldHideFromClient } from '@/lib/portal-visibility'
 import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem, Client } from '@/lib/types'
 import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
@@ -979,6 +980,7 @@ export default function NewQuotePage() {
           alert('This quote currently has no lines — refusing to overwrite the saved version, which still has data. Reload the page before continuing.')
           return
         }
+        if (draftWouldHideFromClient(existing.status) && !confirm('This quote has already been sent to your client, so they can see it in their portal.\n\nSaving it as a draft takes it out of their portal until you send it again. Save as a draft anyway?\n\n(To keep it visible to them, use Update Quote instead.)')) return
         try { await updateQuote({ ...existing, ...qData }) }
         catch (e) {
           if (e instanceof QuoteGoneError && confirm(quoteSaveMessage(e) + '\n\nSave what is on screen as a NEW draft quote instead?')) {
@@ -1730,7 +1732,9 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'pending' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined,
+      // A quote that is already out with the client stays 'sent' when it is updated, so they see the update in their portal (it used to go back to 'pending' and vanish from the portal until it was sent again)
+      const statusBefore = editingId ? quotes.find(q => q.id === editingId)?.status : undefined
+      const qData = { status: (editingId ? statusAfterUpdate(statusBefore) : 'pending') as 'sent' | 'pending', jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined,
         ...(editingId && scopeNotes !== undefined ? { scopeNotes } : {}) }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
@@ -1745,7 +1749,7 @@ export default function NewQuotePage() {
           return
         }
         setEditingId(null)
-        alert('Quote updated successfully.')
+        alert(statusBefore === 'sent' ? 'Quote updated. It has already been sent, so your client sees the changes in their portal now. Use Send Quote if you also want to email them to say it has changed.' : 'Quote updated successfully.')
       } else {
         const newQuote = await addQuote(qData)
         await upsertClientFromQuote(customer)
