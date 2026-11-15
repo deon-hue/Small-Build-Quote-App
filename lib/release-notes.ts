@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T12:00:00+00:00',
+    title: 'The client quote shows main phases and rooms',
+    detail: 'A quote sent to a client now shows the same structure it is built in: the main phase as a heading (with its total where the client can see amounts), then the room or area, then the sub-phases under it, numbered 1.1, 1.2, 2.1. This applies to the client portal, the printed and emailed PDF and the online quote. Before, these listed every sub-phase in one flat list, and the portal and PDF left out the main phase and the room. What amounts the client sees is still set by the Quote Display setting on their contact.',
+  },
+  {
     at: '2026-11-14T12:00:00+00:00',
     title: 'Subcontractor portal: stays signed in, and an easy home-screen install',
     detail: 'The sign-in code for the subcontractor and client portals is now checked on the server, so the stay-signed-in cookie is set properly and should no longer be cleared by iPhone Safari after about a week. The portal home-screen app settings file now loads correctly (it was being sent to the sign-in page), and the sub portal sign-in page and home screen show a big plain guide to putting the portal on the phone home screen: Share, Add to Home Screen, Add, then open the icon and sign in there once on an iPhone, or one Install button on Android. It disappears once the portal is opened from the icon.',

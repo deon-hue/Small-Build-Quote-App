@@ -11,6 +11,7 @@ import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, calcItemSell, VAT, phaseMarkup } from './utils'
 import { clientRows } from './client-items'
+import { clientPhaseRows } from './client-phase-groups'
 import { PRODUCT_NAME } from './product-config'
 import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
@@ -338,10 +339,31 @@ export async function buildQuotePdf(
 
     // ── Phase rows — the phase total only for 'full' ────────────────────────
     let rowAlt = false
-    for (const p of quote.phases) {
+    for (const row of clientPhaseRows(quote.phases)) {
+      const p = row.phase
       const phaseSell = calcPhaseSell(p, qMkp)
       const phaseVat  = qVat ? phaseSell * VAT : 0
-      const phaseLabel = p.parentPhase ? `${p.parentPhase} — ${p.phase}` : p.phase
+      const phaseLabel = `${row.number}. ${p.phase}`
+
+      // The main phase, then the room or area, above the sub-phase: the way the quote is built
+      if (row.mainHeading) {
+        const mainSell = row.mainHeading.phases.reduce((s, x) => s + calcPhaseSell(x, qMkp), 0)
+        ensureSpace(TABLE_ROW_H * 3 + 4)
+        drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.charcoal)
+        drawText(page, safe(`${row.mainHeading.number}. ${row.mainHeading.name}`.toUpperCase()), COL.desc + 4, y - 10, 7.5, fontBold, C.white, showPhasePrices ? COL.descW - 120 : COL.descW - 8)
+        if (showPhasePrices) {
+          const s = fmtGBP(mainSell)
+          drawText(page, s, COL.amt + 2, y - 10, 7.5, fontBold, C.white, COL.amtW - 4)
+          if (qVat) drawText(page, fmtGBP(qVat ? mainSell * VAT : 0), COL.vat + 2, y - 10, 7.5, fontBold, C.white, COL.vatW - 4)
+        }
+        y -= TABLE_ROW_H
+      }
+      if (row.roomHeading) {
+        ensureSpace(TABLE_ROW_H * 2 + 4)
+        drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.cream)
+        drawText(page, safe(row.roomHeading), COL.desc + 4, y - 10, 7.5, fontBold, C.body, COL.descW - 8)
+        y -= TABLE_ROW_H
+      }
 
       ensureSpace(TABLE_ROW_H + 2)
       drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.lightBlue)
