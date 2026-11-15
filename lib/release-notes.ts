@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T21:00:00+00:00',
+    title: 'The client portal quote folds away',
+    detail: 'In the client portal, a quote now starts folded: the client sees the main phases with their totals, and can click a main phase to open its sub-phases, and a sub-phase to open its description and lines, without scrolling through everything. There are Expand all and Collapse all buttons. The printout, the PDF and the online quote link are not folded.',
+  },
+  {
     at: '2026-11-15T19:00:00+00:00',
     title: 'A bar tells you when a new version of the app is available',
     detail: 'A page left open across an update keeps running the old version until it is reloaded, which could undo fixes. The app now checks, shortly after a page opens, every 5 minutes and whenever you come back to the tab, whether a newer version is live. If it is, a bar appears at the bottom saying a new version is available, with a Reload button (and a cross to hide it for now). It never reloads by itself, so nothing you are typing is lost.',

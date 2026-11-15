@@ -8,6 +8,8 @@ export interface ClientPhaseRow {
   phase: QuotePhase
   /** '2.3' (third sub-phase of the second main phase) when the quote has main phases, else a plain count '5' */
   number: string
+  /** the number of the main phase this row belongs to (set on EVERY row when the quote has main phases), so a screen can fold a whole main phase away */
+  mainNumber?: number
   /** set on the FIRST row of each main phase when the quote has main phases: the heading to draw above it, and every sub-phase in the group (for the heading's total) */
   mainHeading?: { name: string; number: number; phases: QuotePhase[] }
   /** set on the first row of each room or area group inside a main phase */
@@ -48,6 +50,7 @@ export function clientPhaseRows(phases: QuotePhase[]): ClientPhaseRow[] {
         rows.push({
           phase: p,
           number: named ? `${mi + 1}.${n}` : String(rows.length + 1),
+          mainNumber: named ? mi + 1 : undefined,
           mainHeading: named && first ? { name: k || NO_MAIN_PHASE_LABEL, number: mi + 1, phases: group } : undefined,
           roomHeading: r && i === 0 ? r : undefined,
         })
