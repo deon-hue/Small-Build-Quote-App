@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T23:00:00+00:00',
+    title: 'Changes to a sent quote wait until you press Update',
+    detail: 'When you edit a quote that your client can already see, it is no longer saved behind the scenes while you type, so half-finished changes never appear in their portal. The bar at the top says Your client sees this version, and turns amber with Changes not published to your client yet once you have edited. Press Update Quote to publish. If you try to leave with unpublished changes you are asked first, and if you leave anyway your changes are kept on this computer and offered back the next time you open the quote. Quotes that are not sent yet save automatically as before.',
+  },
+  {
     at: '2026-11-15T22:00:00+00:00',
     title: 'Client portal quote: only the costs fold',
     detail: 'In the client portal the phases, sub-phases and their descriptions now always show. Only the cost lines fold away: under each sub-phase there is a bar for Labour, Materials, Plant hire, Subcontractors and Other, closed to start and opened with a click, plus Show all lines and Hide all lines buttons. Prices still follow the client Quote Display setting.',
