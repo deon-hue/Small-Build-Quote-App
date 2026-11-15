@@ -74,13 +74,25 @@ export default function PortalQuoteDetailsModal({
     includeDescriptions: false,   // the full "What's included" text — off by default, printouts stay short
   })
 
-  // The quote's phases and sub-phases fold away so the client does not have to scroll through all of it: everything starts folded (the headings and their totals show), a click on a heading opens it,
-  // and Expand all / Collapse all open or fold the lot. Main phases are keyed 'm:<number>', sub-phases 's:<id>'. Printing and the PDF are not affected.
+  // The main phases, sub-phases and their descriptions are always shown. Only the COST lines fold away: under each sub-phase the lines are grouped by kind (Labour, Materials, Plant,
+  // Subcontractors, Other), each group a bar that starts folded and opens on a click; Expand all / Collapse all open or fold every group. Keys are 'g:<sub-phase id>:<kind>'.
+  // Printing and the PDF are not affected.
   const phaseRows = clientPhaseRows(quote.phases)
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set())
   const toggleKey = (k: string) => setOpenKeys(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
-  const allKeys = phaseRows.flatMap(r => [...(r.mainNumber ? ['m:' + r.mainNumber] : []), 's:' + r.phase.id])
   const keyDown = (k: string) => (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleKey(k) } }
+  const COST_GROUPS: { type: string; label: string; icon: string }[] = [
+    { type: 'labour', label: 'Labour', icon: '🔨' }, { type: 'materials', label: 'Materials', icon: '📦' }, { type: 'plant', label: 'Plant hire', icon: '🚜' },
+    { type: 'subcontractors', label: 'Subcontractors', icon: '👷' }, { type: 'other', label: 'Other', icon: '📋' },
+  ]
+  const lineGroups = (phase: (typeof quote.phases)[number]) => {
+    const rows = clientRows(phase.items.filter(item => calcItemSell(item, phaseMarkup(phase, quote.markup)) > 0), item => calcItemSell(item, phaseMarkup(phase, quote.markup)))
+    return COST_GROUPS.map(g => {
+      const inGroup = rows.filter(r => (COST_GROUPS.some(c => c.type === r.item.itemType) ? r.item.itemType : 'other') === g.type)
+      return { ...g, key: `g:${phase.id}:${g.type}`, rows: inGroup, sell: inGroup.reduce((s, r) => s + r.sell, 0) }
+    }).filter(g => g.rows.length > 0)
+  }
+  const allKeys = phaseRows.flatMap(r => lineGroups(r.phase).map(g => g.key))
 
   const subtotal = quote.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0)
   const vatAmount = quote.vatIncluded ? subtotal * 0.20 : 0
@@ -379,35 +391,34 @@ export default function PortalQuoteDetailsModal({
           {quote.phases.length > 0 && quoteView !== 'total_only' && (
             <>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
-              <button type="button" className="btn btn-outline" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setOpenKeys(new Set(allKeys))}>Expand all</button>
-              <button type="button" className="btn btn-outline" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setOpenKeys(new Set())}>Collapse all</button>
+              <button type="button" className="btn btn-outline" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setOpenKeys(new Set(allKeys))}>Show all lines</button>
+              <button type="button" className="btn btn-outline" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setOpenKeys(new Set())}>Hide all lines</button>
             </div>
             <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-              {phaseRows.map((row, pi) => { const phase = row.phase; const mainKey = row.mainNumber ? 'm:' + row.mainNumber : ''; const mainOpen = !mainKey || openKeys.has(mainKey); const subKey = 's:' + phase.id; const subOpen = openKeys.has(subKey); return (
+              {phaseRows.map((row, pi) => { const phase = row.phase; return (
                 <div key={phase.id}>
                   {/* The main phase heading, then the room or area, then the sub-phase: the way the quote is built */}
                   {row.mainHeading && (
-                    <div role="button" tabIndex={0} aria-expanded={mainOpen} onClick={() => toggleKey(mainKey)} onKeyDown={keyDown(mainKey)} style={{ background: '#2f353b', color: '#fff', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}><span aria-hidden="true" style={{ display: 'inline-block', width: 16, fontSize: 12 }}>{mainOpen ? '▾' : '▸'}</span>{row.mainHeading.number}. {row.mainHeading.name}</div>
+                    <div style={{ background: '#2f353b', color: '#fff', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>{row.mainHeading.number}. {row.mainHeading.name}</div>
                       {(quoteView === 'full' || quoteView === 'phase_totals') && (
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700 }}>{fmt(row.mainHeading.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0))}</div>
                       )}
                     </div>
                   )}
-                  {mainOpen && (<>
                   {row.roomHeading && (
                     <div style={{ background: '#f6f8f3', padding: '6px 16px', fontSize: 12, fontWeight: 700, color: '#16a34a', borderTop: '1px solid var(--border)' }}>📍 {row.roomHeading}</div>
                   )}
                   {/* Phase heading */}
-                  <div role="button" tabIndex={0} aria-expanded={subOpen} onClick={() => toggleKey(subKey)} onKeyDown={keyDown(subKey)} style={{
+                  <div style={{
                     background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4',
                     padding: '10px 16px', display: 'flex',
-                    justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none',
+                    justifyContent: 'space-between', alignItems: 'center',
                     borderTop: pi > 0 && !row.mainHeading && !row.roomHeading ? '2px solid var(--border)' : undefined,
                   }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
-                      <span aria-hidden="true" style={{ display: 'inline-block', width: 16, fontSize: 12 }}>{subOpen ? '▾' : '▸'}</span>{row.number}. {phase.phase}
-                      {!isPreview && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><AskAboutButton label={phase.phase} onAsk={ask} /></span>}
+                      {row.number}. {phase.phase}
+                      {!isPreview && <AskAboutButton label={phase.phase} onAsk={ask} />}
                     </div>
                     {/* Phase total — 'full' and 'phase_totals' (each phase with its total); 'phases' is "list of phases, no amounts" (the totals at the foot are shown) */}
                     {(quoteView === 'full' || quoteView === 'phase_totals') && (
@@ -417,7 +428,6 @@ export default function PortalQuoteDetailsModal({
                     )}
                   </div>
 
-                  {subOpen && (<>
                   {/* Short description, and the full part-by-part "What's included" behind a toggle */}
                   {(phase.taskName?.trim() || phase.scopeDetail?.trim()) && (
                     <div style={{ padding: '8px 16px', background: '#fff', borderTop: '1px solid var(--border)' }}>
@@ -436,7 +446,21 @@ export default function PortalQuoteDetailsModal({
                   )}
 
                   {/* Line items — shown for every view but 'total_only'; only 'full' shows their prices */}
-                  {(quoteView as string) !== 'total_only' && clientRows(phase.items.filter(item => calcItemSell(item, phaseMarkup(phase, quote.markup)) > 0), item => calcItemSell(item, phaseMarkup(phase, quote.markup))).map(({ item, sell, notes }, ii) => {
+                  {(quoteView as string) !== 'total_only' && lineGroups(phase).map(group => { const groupOpen = openKeys.has(group.key); return (
+                  <div key={group.key}>
+                  <div role="button" tabIndex={0} aria-expanded={groupOpen} onClick={() => toggleKey(group.key)} onKeyDown={keyDown(group.key)} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '8px 16px',
+                    borderTop: '1px solid var(--border)', background: '#fff', cursor: 'pointer', userSelect: 'none',
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--moss)' }}>
+                      <span aria-hidden="true" style={{ display: 'inline-block', width: 16, fontSize: 12 }}>{groupOpen ? '▾' : '▸'}</span>
+                      {group.icon} {group.label} <span style={{ fontWeight: 400, color: 'var(--muted)' }}>({group.rows.length} {group.rows.length === 1 ? 'line' : 'lines'})</span>
+                    </div>
+                    {quoteView === 'full' && (
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{fmt(group.sell)}</div>
+                    )}
+                  </div>
+                  {groupOpen && group.rows.map(({ item, sell, notes }, ii) => {
                     // Backfill description if missing
                     const itemTypeLabels: Record<string, string> = {
                       labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
@@ -469,8 +493,8 @@ export default function PortalQuoteDetailsModal({
                     </div>
                     )
                   })}
-                  </>)}
-                  </>)}
+                  </div>
+                  )})}
                 </div>
               )})}
             </div>
