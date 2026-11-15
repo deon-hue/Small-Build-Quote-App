@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T22:00:00+00:00',
+    title: 'Client portal quote: only the costs fold',
+    detail: 'In the client portal the phases, sub-phases and their descriptions now always show. Only the cost lines fold away: under each sub-phase there is a bar for Labour, Materials, Plant hire, Subcontractors and Other, closed to start and opened with a click, plus Show all lines and Hide all lines buttons. Prices still follow the client Quote Display setting.',
+  },
+  {
     at: '2026-11-15T21:00:00+00:00',
     title: 'The client portal quote folds away',
     detail: 'In the client portal, a quote now starts folded: the client sees the main phases with their totals, and can click a main phase to open its sub-phases, and a sub-phase to open its description and lines, without scrolling through everything. There are Expand all and Collapse all buttons. The printout, the PDF and the online quote link are not folded.',
