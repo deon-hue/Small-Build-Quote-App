@@ -10,6 +10,7 @@ import type { UserPermissions } from '@/lib/types'
 import QuickNotesModal from '@/components/QuickNotesModal'
 import MobileLauncher from '@/components/MobileLauncher'
 import BuildStamp from '@/components/BuildStamp'
+import NewVersionBanner from '@/components/NewVersionBanner'
 import FeedbackButton from '@/components/FeedbackButton'
 import TermsUpdateModal from '@/components/TermsUpdateModal'
 import { PRODUCT_NAME } from '@/lib/product-config'
@@ -281,6 +282,7 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
     <>
       <AppLayoutInner title={title} desktopOnly={desktopOnly} tabletOk={pathname === '/takeoff'} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
       {!loading && hasCompany && <FeedbackButton />}
+      <NewVersionBanner />
       <TermsUpdateModal />
     </>
   )
