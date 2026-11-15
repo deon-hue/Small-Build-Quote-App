@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T19:00:00+00:00',
+    title: 'A bar tells you when a new version of the app is available',
+    detail: 'A page left open across an update keeps running the old version until it is reloaded, which could undo fixes. The app now checks, shortly after a page opens, every 5 minutes and whenever you come back to the tab, whether a newer version is live. If it is, a bar appears at the bottom saying a new version is available, with a Reload button (and a cross to hide it for now). It never reloads by itself, so nothing you are typing is lost.',
+  },
+  {
     at: '2026-11-15T16:00:00+00:00',
     title: 'Updating a sent quote no longer hides it from the client',
     detail: 'When you pressed Update Quote on a quote that had already been sent, it went back to Pending and disappeared from the client portal until you sent it again. A sent quote now stays Sent when it is updated, so the client sees the changes straight away and can still approve it. Saving a quote the client can see as a draft now asks first, because a draft takes it out of their portal.',
