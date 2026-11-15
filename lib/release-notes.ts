@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-15T16:00:00+00:00',
+    title: 'Updating a sent quote no longer hides it from the client',
+    detail: 'When you pressed Update Quote on a quote that had already been sent, it went back to Pending and disappeared from the client portal until you sent it again. A sent quote now stays Sent when it is updated, so the client sees the changes straight away and can still approve it. Saving a quote the client can see as a draft now asks first, because a draft takes it out of their portal.',
+  },
+  {
     at: '2026-11-15T12:00:00+00:00',
     title: 'The client quote shows main phases and rooms',
     detail: 'A quote sent to a client now shows the same structure it is built in: the main phase as a heading (with its total where the client can see amounts), then the room or area, then the sub-phases under it, numbered 1.1, 1.2, 2.1. This applies to the client portal, the printed and emailed PDF and the online quote. Before, these listed every sub-phase in one flat list, and the portal and PDF left out the main phase and the room. What amounts the client sees is still set by the Quote Display setting on their contact.',
