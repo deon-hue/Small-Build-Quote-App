@@ -13,3 +13,13 @@ export const isQuoteVisibleToClient = (status: string | null | undefined): boole
 export const canClientApproveQuote = (status: string | null | undefined): boolean => status === 'sent'
 
 export const isInvoiceVisibleToClient = (status: string | null | undefined): boolean => String(status ?? '') !== 'draft'
+
+/**
+ * The status a quote gets when the builder presses Update on a quote that is already saved. It used to be 'pending' every time, so a quote that had been SENT dropped out of the client's portal (which only shows
+ * sent, approved and rejected quotes) the moment it was updated: the client then saw nothing, not even the old version. A quote that is out with the client stays 'sent' (they see the update, and can still approve it);
+ * anything else becomes 'pending' (saved and ready, not yet sent), as before.
+ */
+export const statusAfterUpdate = (current: string | null | undefined): 'sent' | 'pending' => (current === 'sent' ? 'sent' : 'pending')
+
+/** Saving as a DRAFT takes a quote out of the client's portal: true when that would hide a quote the client can see right now (so the builder is asked first). */
+export const draftWouldHideFromClient = (current: string | null | undefined): boolean => isQuoteVisibleToClient(current)
