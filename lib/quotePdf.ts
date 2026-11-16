@@ -16,6 +16,8 @@ import { PRODUCT_NAME } from './product-config'
 import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
 import { scopeHeadings, stripScopeMarks } from './scope-format'
+import { visiblePlan, monthlyTotals } from './payment-plan'
+import { planIntro, planLines } from './payment-plan-html'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -447,6 +449,46 @@ export async function buildQuotePdf(
     const totalStr = fmtGBP(total)
     drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
     y -= TROW_H + 16
+  }
+
+  // ── Payment plan (only when the builder has switched it on for the customer) ──
+  const thePlan = visiblePlan(quote.paymentPlan)
+  if (thePlan) {
+    const lineH = 11
+    const introLines = await wrapText(safe(planIntro(thePlan)), fontRegular, 8, CONTENT_W - 16)
+    ensureSpace(24 + introLines.length * lineH + 40)
+    drawText(page, 'PAYMENT PLAN', MARGIN, y, 7.5, fontBold, C.charcoal)
+    y -= 8
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 1.5, color: C.charcoal })
+    y -= 12
+    for (const l of introLines) { drawText(page, l, MARGIN, y, 8, fontRegular, C.body); y -= lineH }
+    y -= 6
+    const AMT_W = 80
+    for (const row of planLines(thePlan)) {
+      const what = await wrapText(safe(row.what), fontBold, 8.5, CONTENT_W - AMT_W - 12)
+      const rowH = what.length * 11 + 13 + 6
+      ensureSpace(rowH + 4)
+      page.drawLine({ start: { x: MARGIN, y: y + 3 }, end: { x: MARGIN + CONTENT_W, y: y + 3 }, thickness: 0.4, color: C.border })
+      let ry = y - 8
+      what.forEach(w => { drawText(page, w, MARGIN + 2, ry, 8.5, fontBold, C.body); ry -= 11 })
+      drawText(page, safe(row.when), MARGIN + 2, ry + 1, 7.5, fontRegular, C.muted)
+      drawText(page, safe(row.amount), MARGIN + CONTENT_W - fontBold.widthOfTextAtSize(safe(row.amount), 9) - 2, y - 8, 9, fontBold, C.body)
+      y -= rowH
+    }
+    const planTotal = thePlan.rows.reduce((a, r) => a + r.amount, 0)
+    ensureSpace(30)
+    drawRect(page, MARGIN, y - 18, CONTENT_W, 18, C.cream)
+    drawText(page, 'Total of the payments', MARGIN + 6, y - 12.5, 8.5, fontBold, C.charcoal)
+    const ptStr = fmtGBP(planTotal)
+    drawText(page, ptStr, MARGIN + CONTENT_W - fontBold.widthOfTextAtSize(ptStr, 9) - 6, y - 12.5, 9, fontBold, C.charcoal)
+    y -= 24
+    const months = monthlyTotals(thePlan)
+    if (months.length > 1) {
+      const text = 'Month by month: ' + months.map(m => m.label + ' ' + fmtGBP(m.amount)).join('   ·   ')
+      for (const l of await wrapText(safe(text), fontRegular, 8, CONTENT_W)) { ensureSpace(14); drawText(page, l, MARGIN, y, 8, fontRegular, C.body); y -= 11 }
+      y -= 4
+    }
+    y -= 8
   }
 
   // ── Terms ─────────────────────────────────────────────────────────────────

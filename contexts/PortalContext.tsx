@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Quote, Job, Invoice, GanttState, Variation, VariationStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
+import { visiblePlan } from '@/lib/payment-plan'
 
 export interface PortalSettings {
   name: string
@@ -184,6 +185,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
           convertedToJob: r.converted_to_job,
           customer: r.customer || { name: '', address: '', email: '', phone: '' },
           phases: r.phases || [],
+          paymentPlan: visiblePlan(r.payment_plan),   // only a plan the builder has switched on for the client
           clientApprovedAt: r.client_approved_at || null,
           clientApprovedBy: r.client_approved_by || null,
         })))

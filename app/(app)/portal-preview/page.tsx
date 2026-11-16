@@ -20,6 +20,8 @@ import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-v
 import PortalSentView from '@/components/PortalSentView'
 import PortalGlanceCards from '@/components/PortalGlanceCards'
 import { selectionsGlance, sentGlance } from '@/lib/portal-glance'
+import PortalPaymentPlansView from '@/components/PortalPaymentPlansView'
+import { visiblePlan, type PaymentPlan } from '@/lib/payment-plan'
 import { createSentStore } from '@/lib/sent-items-store'
 import { portalItemFrom, portalVisible, type PortalSentItem } from '@/lib/sent-items'
 
@@ -37,6 +39,7 @@ interface PreviewQuote {
   jobType: string; customer: AnyRecord; phases: AnyRecord[]
   markup: number; vatIncluded: boolean; scope?: string
   versionNumber?: number; parentQuoteId?: string
+  title?: string; paymentPlan?: PaymentPlan | null
 }
 interface PreviewInvoice {
   id: string; ref: string; clientName: string; total: number
@@ -53,7 +56,7 @@ interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan' | 'selections' | 'sent'
+type Tab = 'dashboard' | 'quotes' | 'payment-plan' | 'variations' | 'invoices' | 'contracts' | 'build-plan' | 'selections' | 'sent'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -239,6 +242,7 @@ function PortalPreviewInner() {
           markup: Number(r.markup), vatIncluded: r.vat_included,
           scope: r.scope || '', scopeNotes: r.scope_notes || '',
           versionNumber: r.version_number, parentQuoteId: r.parent_quote_id,
+          title: r.title || '', paymentPlan: visiblePlan(r.payment_plan),
         })))
       }
       if (Array.isArray(d?.invoices)) {
@@ -302,7 +306,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule', selections: 'Selections', sent: 'Sent to you',
+    dashboard: 'Dashboard', quotes: 'Quotes', 'payment-plan': 'Payment plan', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule', selections: 'Selections', sent: 'Sent to you',
   }
 
   return (
@@ -320,7 +324,7 @@ function PortalPreviewInner() {
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
           {/* Admin preview shows every tab, regardless of the client's hidden-tab settings */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan', 'selections', 'sent'] as Tab[]).filter(t => (t !== 'selections' || clientSettings.showSelectionsTab !== false) && (t !== 'sent' || previewSent.length > 0)).map(tab => (
+            {(['dashboard', 'quotes', 'payment-plan', 'variations', 'invoices', 'contracts', 'build-plan', 'selections', 'sent'] as Tab[]).filter(t => (t !== 'selections' || clientSettings.showSelectionsTab !== false) && (t !== 'sent' || previewSent.length > 0) && (t !== 'payment-plan' || quotes.some(q => q.paymentPlan))).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -686,6 +690,15 @@ function PortalPreviewInner() {
               items={previewSelections.filter(s => !selJobId || s.jobId === selJobId)} jobs={jobs.map(j => ({ id: j.id, title: j.client, type: j.type, address: j.address }))} jobId={selJobId} onJobChange={setSelJobId}
               missing={selectionsMissing} today={new Date().toISOString().slice(0, 10)} companyName={settings?.name} preview
             />
+          </>
+        )}
+
+        {activeTab === 'payment-plan' && (
+          <>
+            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
+              👁 Preview mode — this is what the client sees. A plan only shows here when it is switched on for the customer in the quote's Payment plan.
+            </div>
+            <PortalPaymentPlansView quotes={quotes.map(q => ({ id: q.id, ref: q.ref, status: q.status, jobType: q.jobType, title: q.title, paymentPlan: q.paymentPlan }))} />
           </>
         )}
 

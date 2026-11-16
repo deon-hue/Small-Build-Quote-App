@@ -14,12 +14,14 @@ export interface QuoteEditValues {
   vatOn: boolean
   scope: string
   photo: string
+  /** the quote's payment plan (null or absent when there is none): an edit to it is an edit to the quote */
+  paymentPlan?: unknown
 }
 
 /** A text that changes only when the CONTENT changes: the screen's own numbering of phases and lines (`id`) is left out, so re-numbering after a reload is not an edit. */
 export function unpublishedSignature(v: QuoteEditValues): string {
   return JSON.stringify(
-    [v.phases, v.custName, v.custAddr, v.custEmail, v.custPhone, v.jobType, v.jobTitle, v.markup, v.vatOn, v.scope, v.photo],
+    [v.phases, v.custName, v.custAddr, v.custEmail, v.custPhone, v.jobType, v.jobTitle, v.markup, v.vatOn, v.scope, v.photo, v.paymentPlan ?? null],
     (k, val) => (k === 'id' ? undefined : val),
   )
 }

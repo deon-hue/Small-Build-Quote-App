@@ -4,6 +4,7 @@ import type { CostedLine } from './assembly-calc'
 import type { AssemblyBasics } from './assembly-basics'
 import type { ElectricsSavedState } from './electrics-units'
 import type { CalcStateSnapshot } from './calc-snapshot'
+import type { PaymentPlan } from './payment-plan'
 export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
@@ -196,6 +197,8 @@ export interface Quote {
   /** Dated notes describing changes to the scope agreed after the quote was accepted. The original `scope` is never altered.
    *  undefined = the database column doesn't exist yet (supabase/quote-scope-notes.sql not run) — then the feature stays hidden. */
   scopeNotes?: string
+  /** The payment plan: when each part of the price falls due (deposit, stages, retention), worked out from rough timescales for each sub-phase (lib/payment-plan.ts). null = none made; undefined = the payment_plan column has not been added yet (supabase/quote-payment-plan.sql). */
+  paymentPlan?: PaymentPlan | null
   photo: string
   convertedToJob: boolean
   customer: QuoteCustomer

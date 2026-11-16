@@ -9,6 +9,7 @@ import { clientAddressBlock } from '@/components/NewClientModal'
 import { fmt, fmtK, calcPhaseSell, jobDisplayTitle } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
+import { planToMilestones } from '@/lib/payment-plan'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -174,6 +175,23 @@ export default function InvoicesPage() {
       setLineItems([{ id: ++lineCounter, desc: jobDisplayTitle(job) + ' works', qty: 1, unitPrice: job.value, total: job.value }])
     }
     setFromJobId(jobId)
+  }
+
+  // The payment plan made on the job's quote (when the quote has one): its deposit, stages and retention become this invoice's payment milestones
+  function planOfJobQuote() {
+    const job = jobs.find(j => j.id === fromJobId)
+    if (!job) return null
+    const q = quotes.find(x => x.id === job.quoteId) || quotes.find(x => {
+      const qn = (x.customer.name || '').toLowerCase(), jn = (job.client || '').toLowerCase()
+      return !!qn && !!jn && (qn === jn || qn.includes(jn) || jn.includes(qn))
+    })
+    return q?.paymentPlan && q.paymentPlan.rows.length > 0 ? { plan: q.paymentPlan, ref: q.ref } : null
+  }
+  function loadMilestonesFromQuotePlan() {
+    const found = planOfJobQuote()
+    if (!found) return
+    if (milestones.some(m => m.description || m.amount) && !confirm('This replaces the milestones already here with the payment plan from quote ' + found.ref + '. Carry on?')) return
+    setMilestones(planToMilestones(found.plan).map(m => ({ id: ++milestoneCounter, description: m.description, amount: m.amount, dueDate: m.dueDate, paid: false, paidDate: '' })))
   }
 
   function loadMilestonesFromPhases() {
@@ -717,6 +735,11 @@ export default function InvoicesPage() {
                       <button className="btn-sm btn-sky" onClick={loadMilestonesFromPhases} title="Line items, plus any approved variations on the linked job">
                         ↓ Load from line items
                       </button>
+                      {planOfJobQuote() && (
+                        <button className="btn-sm btn-primary" onClick={loadMilestonesFromQuotePlan} title="The deposit, stages and retention agreed in the quote's payment plan">
+                          💳 Use the quote's payment plan
+                        </button>
+                      )}
                       <button className="btn-sm btn-outline" onClick={() => setMilestones(p => [...p, BLANK_MILESTONE()])}>
                         + Add milestone
                       </button>
