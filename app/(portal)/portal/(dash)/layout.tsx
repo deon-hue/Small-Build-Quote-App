@@ -12,7 +12,9 @@ function PortalNav() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { settings, clientSettings, contracts, jobs } = usePortal()
+  const { settings, clientSettings, contracts, jobs, quotes } = usePortal()
+  // the 'Payment plan' tab only appears when one of their quotes has a plan the builder has switched on for them
+  const hasPlan = quotes.some(q => q.paymentPlan && q.paymentPlan.rows.length > 0)
   const visibleContracts = contracts.filter(c => c.status === 'sent' || c.status === 'signed')
   const awaitingContracts = contracts.filter(c => c.status === 'sent').length
   const [menuOpen, setMenuOpen] = useState(false)
@@ -61,6 +63,7 @@ function PortalNav() {
         <nav className={`portal-nav${menuOpen ? ' open' : ''}`}>
           {navLink('/portal', 'Dashboard')}
           {clientSettings.showQuotesTab     && navLink('/portal/quotes',      'Quotes')}
+          {clientSettings.showQuotesTab     && hasPlan && navLink('/portal/payment-plan', 'Payment plan')}
           {clientSettings.showVariationsTab && navLink('/portal/variations',  'Variations')}
           {clientSettings.showInvoicesTab   && navLink('/portal/invoices',    'Invoices')}
           {visibleContracts.length > 0 && navLink('/portal/contracts', 'Contracts', awaitingContracts)}

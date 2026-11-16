@@ -10,6 +10,7 @@ import { uid, JOB_TEMPLATES } from '@/lib/utils'
 import { escapeLike } from '@/lib/email-match'
 import { QuoteGoneError } from '@/lib/quote-errors'
 import { removeAllClientFiles } from '@/lib/client-files'
+import { cleanPlan } from '@/lib/payment-plan'
 
 interface AppContextType {
   jobs: Job[]
@@ -185,6 +186,7 @@ const quoteFromRow = (r: { [k: string]: any }): Quote => ({
   status: r.status, jobType: r.job_type, title: r.title || '', markup: Number(r.markup),
   vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
   scopeNotes: 'scope_notes' in r ? (r.scope_notes || '') : undefined,   // undefined = column not added yet
+  paymentPlan: 'payment_plan' in r ? cleanPlan(r.payment_plan) : undefined,   // undefined = column not added yet (quote-payment-plan.sql)
   convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
   quoteSource: r.quote_source || undefined,
   clientApprovedAt: r.client_approved_at || null,
@@ -553,6 +555,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       converted_to_job: false, customer: q.customer, phases: q.phases,
       quote_source: q.quoteSource || null,
       expiry_days: q.expiryDays ?? null,
+      // only when there is a plan to save (so a database without quote-payment-plan.sql still saves new quotes)
+      ...(q.paymentPlan ? { payment_plan: q.paymentPlan } : {}),
     }).select().single()
     if (error) throw error
     const newQuote: Quote = {
@@ -562,6 +566,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       convertedToJob: data.converted_to_job, customer: data.customer, phases: data.phases,
       quoteSource: data.quote_source || undefined,
       expiryDays: data.expiry_days ?? null,
+      paymentPlan: 'payment_plan' in data ? cleanPlan(data.payment_plan) : undefined,
     }
     setQuotes(prev => [...prev, newQuote])
     return newQuote
@@ -579,6 +584,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pre_archive_status: q.preArchiveStatus || null,
       // only sent when the column is known to exist, so an update never fails on a database that hasn't had quote-scope-notes.sql run
       ...(q.scopeNotes !== undefined ? { scope_notes: q.scopeNotes } : {}),
+      // likewise for supabase/quote-payment-plan.sql
+      ...(q.paymentPlan !== undefined ? { payment_plan: q.paymentPlan } : {}),
       last_edited: new Date().toLocaleDateString('en-GB'),
     }).eq('id', q.id).select('id')
     if (error) throw error

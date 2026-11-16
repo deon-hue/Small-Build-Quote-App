@@ -12,6 +12,9 @@ import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem, Client } from '@/lib/types'
 import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
 import QuoteAttachments from '@/components/QuoteAttachments'
+import PaymentPlanModal from '@/components/PaymentPlanModal'
+import { planProblems, planSum, type PaymentPlan } from '@/lib/payment-plan'
+import { planQuoteTotal } from '@/lib/payment-plan-quote'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import { linkLeadToQuote } from '@/lib/leads-db'
@@ -331,6 +334,9 @@ export default function NewQuotePage() {
   const [scope, setScope] = useState('')
   // Dated notes on changes to the scope agreed after acceptance (undefined = database column not added yet)
   const [scopeNotes, setScopeNotes] = useState<string | undefined>(undefined)
+  // The payment plan (deposit, stages, retention). null = none made; undefined = the payment_plan column has not been added yet (supabase/quote-payment-plan.sql)
+  const [paymentPlan, setPaymentPlan] = useState<PaymentPlan | null | undefined>(undefined)
+  const [planOpen, setPlanOpen] = useState(false)
   const [photo, setPhoto] = useState('')
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -606,7 +612,7 @@ export default function NewQuotePage() {
     // The edits are kept on this computer (a safety copy) and reach the client when Update Quote is pressed.
     const existingNow = quotes.find(q => q.id === editingId)
     if (existingNow && isQuoteVisibleToClient(existingNow.status)) {
-      const values = (): QuoteEditValues => ({ phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo })
+      const values = (): QuoteEditValues => ({ phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, paymentPlan: paymentPlan ?? null })
       if (baselineRef.current.id !== editingId) { baselineRef.current = { id: editingId, sig: unpublishedSignature(values()) }; setUnpublished(false) }
       // A safety copy left from an earlier visit that was never published is offered back, once for each time the quote is opened
       if (draftOfferedFor.current !== editingId) {
@@ -621,6 +627,7 @@ export default function NewQuotePage() {
               const v = draftValues(values(), draft)
               setCustName(v.custName); setCustAddr(v.custAddr); setCustEmail(v.custEmail); setCustPhone(v.custPhone)
               setJobType(v.jobType); setJobTitle(v.jobTitle); setMarkup(v.markup); setVatOn(v.vatOn); setScope(v.scope); setPhoto(v.photo)
+              if (v.paymentPlan !== undefined && paymentPlan !== undefined) setPaymentPlan(v.paymentPlan as PaymentPlan | null)
               setPhases((v.phases as QuotePhase[]).map(p => ({ ...p, id: ++phaseCounter, items: (p.items ?? []).map(i => ({ ...i, id: ++itemCounter })) })))
               if (quoteSource === 'quick') { const misc = (v.phases as QuotePhase[])[0]?.miscItems; if (misc) setQuickItems(misc) }
               return   // the change of state runs this effect again and marks the quote as having unpublished changes
@@ -664,6 +671,7 @@ export default function NewQuotePage() {
           customer,
           phases: JSON.parse(JSON.stringify(phases)),
           quoteSource: quoteSource ?? undefined,
+          ...(paymentPlan !== undefined ? { paymentPlan } : {}),
         }
         await updateQuote({ ...existing, ...qData })
         setLastSaved(new Date())
@@ -673,7 +681,7 @@ export default function NewQuotePage() {
     }, 2000)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, editingId])
+  }, [phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, paymentPlan, editingId])
 
   // ── Leaving a quote that has edits not yet published to the client ───────────
   // Closing or reloading the tab asks first (the browser's own question), and so does clicking a link to another page of the app. The edits are also kept on this computer
@@ -952,6 +960,7 @@ export default function NewQuotePage() {
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
     setScopeNotes(q.scopeNotes)
+    setPaymentPlan(q.paymentPlan)
     setPhoto(q.photo || '')
     // Detect Quick Quotes by structure when quoteSource wasn't persisted (legacy saves)
     const isQuickByStructure =
@@ -988,7 +997,7 @@ export default function NewQuotePage() {
     // What the quote looked like when it was opened: for a quote the client can already see, anything different on screen is an edit that is not published yet
     baselineRef.current = { id: q.id, sig: unpublishedSignature({
       phases: loadedPhases, custName: q.customer.name || '', custAddr: q.customer.address || '', custEmail: q.customer.email || '', custPhone: q.customer.phone || '',
-      jobType: q.jobType || 'Rear Extension', jobTitle: q.title || '', markup: q.markup || 15, vatOn: q.vatIncluded !== false, scope: q.scope || '', photo: q.photo || '',
+      jobType: q.jobType || 'Rear Extension', jobTitle: q.title || '', markup: q.markup || 15, vatOn: q.vatIncluded !== false, scope: q.scope || '', photo: q.photo || '', paymentPlan: q.paymentPlan ?? null,
     }) }
     setEditingId(q.id)
     setIsLockedQuote(q.status === 'accepted')
@@ -1047,7 +1056,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'draft' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
+      const qData = { status: 'draft' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined, ...(editingId && paymentPlan !== undefined ? { paymentPlan } : {}) }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         if (!phases.length && existing.phases.length > 0) {
@@ -1810,7 +1819,7 @@ export default function NewQuotePage() {
       // A quote that is already out with the client stays 'sent' when it is updated, so they see the update in their portal (it used to go back to 'pending' and vanish from the portal until it was sent again)
       const statusBefore = editingId ? quotes.find(q => q.id === editingId)?.status : undefined
       const qData = { status: (editingId ? statusAfterUpdate(statusBefore) : 'pending') as 'sent' | 'pending', jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined,
-        ...(editingId && scopeNotes !== undefined ? { scopeNotes } : {}) }
+        ...(editingId && scopeNotes !== undefined ? { scopeNotes } : {}), ...(editingId && paymentPlan !== undefined ? { paymentPlan } : {}) }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         // the answer is checked: "updated" is only said when the database took it, and what is on screen is kept when it did not
@@ -1897,6 +1906,7 @@ export default function NewQuotePage() {
     setEditingId(null)
     setIsLockedQuote(false)
     setScopeNotes(undefined)
+    setPaymentPlan(undefined)
     setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
     setScope(''); setPhoto(''); setAttachments([])
     loadTemplate(jobType)
@@ -2244,6 +2254,36 @@ export default function NewQuotePage() {
             style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
           />
         </div>
+      )}
+
+      {/* ── Payment plan: deposit, stages and retention, worked out from the sub-phases' timescales; shown to the customer in the quote and their portal ── */}
+      {editingId && quoteSource !== 'quick' && (
+        <div style={{ background: '#f6fbf1', border: '1.5px solid #c9e2b3', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>💳 Payment plan</span>
+            {paymentPlan !== undefined && !isLockedQuote && (
+              <button type="button" className="btn-sm btn-primary" onClick={() => setPlanOpen(true)} disabled={!phases.length}>{paymentPlan ? '✏️ Edit the payment plan' : '＋ Make a payment plan'}</button>
+            )}
+          </div>
+          {paymentPlan === undefined ? (
+            <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>To use payment plans, run <strong>supabase/quote-payment-plan.sql</strong> in the database once (it adds one column), then reload this page.</div>
+          ) : !paymentPlan ? (
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>No payment plan yet. Give each sub-phase a rough number of days and the app works out when each payment falls due (a deposit, a payment as each phase finishes or each week for the work done, and a retention on the last payment), so your customer can plan their cash flow. It is shown in the quote and in their portal.</div>
+          ) : (
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              <strong>{paymentPlan.rows.length} payments</strong> totalling £{planSum(paymentPlan.rows).toFixed(2)}
+              {' · '}{paymentPlan.mode === 'phase-end' ? 'a payment at the end of each phase' : `for the work done every ${paymentPlan.everyWeeks === 1 ? 'week' : paymentPlan.everyWeeks + ' weeks'}`}
+              {' · '}deposit {paymentPlan.depositPct}%, retention {paymentPlan.retentionPct}%
+              {' · '}{paymentPlan.showToClient ? 'shown to the customer' : <span style={{ color: '#92400e' }}>hidden from the customer</span>}
+              {planProblems(paymentPlan, planQuoteTotal(phases, markup, vatOn)).filter(p => /come to|changed since/.test(p)).map((p, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>⚠ {p} Open the plan and work the payments out again.</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {planOpen && paymentPlan !== undefined && (
+        <PaymentPlanModal phases={phases} markup={markup} vatOn={vatOn} plan={paymentPlan} onClose={() => setPlanOpen(false)} onSave={p => { setPaymentPlan(p); setPlanOpen(false) }} />
       )}
 
       {/* ── Quick Quote Pricing ── only shown for quick-source quotes ── */}

@@ -6,6 +6,7 @@ import { clientPhaseRows } from './client-phase-groups'
 import { getPhaseVisual } from './phase-visuals'
 import { companyLegalParts } from './company-legal'
 import { scopeToHtml } from './scope-format'
+import { paymentPlanHtml } from './payment-plan-html'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
@@ -224,6 +225,7 @@ ${WHATS_INCLUDED_CSS}
     </div>
   </div>
 
+  ${paymentPlanHtml(q.paymentPlan)}
   ${showPaymentTerms ? `<div class="terms-box"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
   <p style="margin:0 40px 32px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 
@@ -436,6 +438,7 @@ ${WHATS_INCLUDED_CSS}
     </div>
   </div>
 
+  ${paymentPlanHtml(q.paymentPlan)}
   ${showPaymentTerms ? `<div class="terms-box"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
   <p style="margin:0 40px 32px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works, please contact us:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 

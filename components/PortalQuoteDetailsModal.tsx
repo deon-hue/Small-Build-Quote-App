@@ -14,6 +14,9 @@ import ModalMaximizeButton from './ModalMaximizeButton'
 import ScopeView from './ScopeView'
 import AskAboutButton from './AskAboutButton'
 import { scopeToHtml } from '@/lib/scope-format'
+import { visiblePlan } from '@/lib/payment-plan'
+import { paymentPlanHtml } from '@/lib/payment-plan-html'
+import PaymentPlanView from './PaymentPlanView'
 
 interface Props {
   quote: Quote
@@ -199,6 +202,7 @@ export default function PortalQuoteDetailsModal({
         ${notesContent}
         ${phaseContent}
         ${costContent}
+        ${paymentPlanHtml(quote.paymentPlan)}
 
         <div style="margin-top: 40px; font-size: 12px; color: #888;">
           <p>This quote is valid for 30 days from the date of issue.</p>
@@ -530,6 +534,11 @@ export default function PortalQuoteDetailsModal({
               </span>
             </div>
           </div>
+
+          {/* ── Payment plan: when each part of the price falls due (only when the builder has switched it on for the client) ── */}
+          {visiblePlan(quote.paymentPlan) && (
+            <PaymentPlanView plan={visiblePlan(quote.paymentPlan)!} vatNote={quote.vatIncluded ? 'Amounts include VAT.' : ''} />
+          )}
 
           {/* ── Comments section ───────────────────── */}
           {!isPreview && (

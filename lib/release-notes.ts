@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-16T23:00:00+00:00',
+    title: 'Payment plan on a quote, shown to the customer',
+    detail: 'A saved quote now has a Payment plan card. Give each sub-phase a rough number of working days and a start date, choose whether the customer pays at the end of each phase or every week (or 2 or 4 weeks) for the work done, and set the deposit (10% to start) and retention (5% held back from the final payment and released 6 months after completion, to start). The payments are worked out so they add up to the quote total exactly, and every line can be changed by hand. The customer sees the plan in the quote (online page and PDF), in their portal quote and on a new Payment plan tab in their portal. The invoice form has a button to use the quote payment plan as its milestones. A plan on a quote already sent waits for Update Quote like any other change. To switch it on, run supabase/quote-payment-plan.sql once on live.',
+  },
+  {
     at: '2026-11-16T21:00:00+00:00',
     title: 'Subcontractor calendar: each task with its days, carried through every day',
     detail: 'On the subcontractor Company calendar, each job now lists every task going on that day with a badge saying which day of the task it is, for example Skim ceilings Day 2 of 3. A task of two or three days carries on through each of its working days. The Day view says it too. Sundays are never counted, and Saturdays only when the task allows them. A phase with no tasks shows as the phase with its days. To show the tasks, run supabase/sub-company-calendar-tasks.sql once on live (run sub-company-calendar-colour.sql first if it has not been run); until then the calendar shows phases with their days.',
