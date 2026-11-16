@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-16T12:00:00+00:00',
+    title: 'Subcontractor company calendar: a week with every job in its own colour',
+    detail: 'On the subcontractor portal the Company calendar now shows the week as one row per job, each in the colour you picked for that job (jobs with no picked colour get the automatic one). A solid cell with a dot means the subcontractor is booked that day, a pale cell means the company is working on that job, and an empty cell means nothing. Their own jobs come first with a YOU badge, tapping a cell shows that day card in the job colour, and the day buttons show the colours of the jobs worked that day. To show your picked colours, run supabase/sub-company-calendar-colour.sql once on live.',
+  },
+  {
     at: '2026-11-15T23:00:00+00:00',
     title: 'Changes to a sent quote wait until you press Update',
     detail: 'When you edit a quote that your client can already see, it is no longer saved behind the scenes while you type, so half-finished changes never appear in their portal. The bar at the top says Your client sees this version, and turns amber with Changes not published to your client yet once you have edited. Press Update Quote to publish. If you try to leave with unpublished changes you are asked first, and if you leave anyway your changes are kept on this computer and offered back the next time you open the quote. Quotes that are not sent yet save automatically as before.',
