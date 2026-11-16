@@ -17,6 +17,8 @@ export interface CompanyCalendarRow {
   job_start: string          // yyyy-mm-dd
   weeks: number | null
   stage: string | null
+  /** the colour the builder picked for the job (a #rrggbb swatch); absent until supabase/sub-company-calendar-colour.sql has been run, or when none was picked */
+  job_color?: string | null
   phases: CompanyPhase[] | null
 }
 
@@ -128,4 +130,45 @@ export function calendarWeek(weekStart: Date, schedule: ScheduleRow[], rows: Com
     days.push({ date, key, inMonth: true, isToday: date.getTime() === t.getTime(), mine, company: (co.get(key) ?? []).filter(c => !mineJobs.has(c.jobId)) })
   }
   return days
+}
+
+/** A job colour from the database, only if it really is a #rrggbb colour (anything else is ignored: it is put into a style). */
+export function safeColour(c: unknown): string | null {
+  return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.trim()) ? c.trim() : null
+}
+
+/** One cell of a job's week: this person is booked (mine), the company works on it that day (company) or nothing (none). */
+export interface WeekCell { key: string; state: 'mine' | 'company' | 'none'; text: string }
+/** One job across the week, in its own colour. */
+export interface WeekJobRow { jobId: string; title: string; address: string; colour: string; mine: boolean; cells: WeekCell[] }
+
+/**
+ * The week as one row per job (every job worked on at least one day of the week), each with a cell per day: the jobs this person is booked on first
+ * (their own days solid, the company's other days on the same job pale), then the company's other jobs by name. `colourOf(jobId)` gives a job's colour.
+ * With `includeCompany` false only the jobs this person is booked on are listed.
+ */
+export function weekJobRows(days: CalendarDay[], colourOf: (jobId: string) => string, includeCompany = true): WeekJobRow[] {
+  const rows = new Map<string, WeekJobRow>()
+  const rowFor = (jobId: string, title: string, address: string): WeekJobRow => {
+    let r = rows.get(jobId)
+    if (!r) {
+      r = { jobId, title: title || 'Job', address, colour: colourOf(jobId), mine: false, cells: days.map(d => ({ key: d.key, state: 'none' as const, text: '' })) }
+      rows.set(jobId, r)
+    }
+    return r
+  }
+  days.forEach((d, i) => {
+    for (const m of d.mine) {
+      const r = rowFor(m.jobId, m.jobTitle, m.address)
+      r.mine = true
+      r.cells[i] = { key: d.key, state: 'mine', text: m.taskName }
+    }
+    if (includeCompany) {
+      for (const c of d.company) {
+        const r = rowFor(c.jobId, c.jobTitle, c.address)
+        if (r.cells[i].state === 'none') r.cells[i] = { key: d.key, state: 'company', text: c.phaseName }
+      }
+    }
+  })
+  return [...rows.values()].sort((a, b) => Number(b.mine) - Number(a.mine) || (a.address || a.title).localeCompare(b.address || b.title))
 }
