@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-16T19:00:00+00:00',
+    title: 'Subcontractor calendar: the week is one page of days with every job under each',
+    detail: 'The Week view of the subcontractor Company calendar is now one page you scroll down. Each day, Monday to Sunday, has a heading with every job going on that day under it, as a block in the job colour with the address, job name and phase. Nothing needs tapping any more, and the line about how many days you are booked is gone: it now says how many jobs are on this week. Show company jobs sits above the list. The Day view is as before.',
+  },
+  {
     at: '2026-11-16T17:00:00+00:00',
     title: 'Subcontractor calendar: Week and Day buttons, with a plain week',
     detail: 'The subcontractor Company calendar now has two big buttons, Week and Day. The Week view is seven plain rows, Monday to Sunday: a line saying how many days they are working, then for each day a block in the job colour with the address in big writing and what they are doing, or Not booked. With company jobs switched on, a small line under each day shows the other company jobs. Tapping a day opens it in the Day view, which is as before. The last view chosen is remembered on that phone.',
