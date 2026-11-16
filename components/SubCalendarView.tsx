@@ -1,8 +1,9 @@
 'use client'
 
 // The subcontractor portal's Company calendar, in two views the person switches between with two big buttons:
-//  WEEK (the first view): seven plain rows, Monday to Sunday. Each row is the day, then in big coloured blocks where they are working (the job's address
-//  and what they are doing) or a plain 'Not booked'. A line at the top says how many days they are working. Tap a day to see it in the Day view.
+//  WEEK (the first view): ONE PAGE you scroll down, Monday to Sunday. Under each day's heading are ALL the jobs going on that day in the company, each a
+//  block in the job's colour with its address, job name and phase (nothing to tap). It is what is going on job-wise, not who is booked: who does what
+//  is the schedule's job.
 //  DAY: a strip of seven day buttons and a card for the chosen day: their own work, then 'Also working' with the company's other jobs.
 // Every job is in its own colour (the colour the builder picked for the job). A plain display component used by BOTH the real subcontractor portal and
 // the builder's preview of it. Never shows client names, prices, notes, individual tasks or who else is booked.
@@ -94,8 +95,6 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
         })}
       </div>
 
-      {mode === 'week' && <WeekList days={days} showCompany={!!rows} colourOf={colourOf} onPick={key => { setSelected(key); setMode('day') }} />}
-
       {mode === 'day' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 5, marginBottom: 14 }}>
         {days.map((d, i) => {
           const on = d.key === sel.key
@@ -124,6 +123,8 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
           <input type="checkbox" checked={showCompany} onChange={e => setShowCompany(e.target.checked)} style={{ width: 22, height: 22, accentColor: GREEN, cursor: 'pointer' }} />
         </label>
       )}
+
+      {mode === 'week' && <WeekList days={days} colourOf={colourOf} />}
 
       {mode === 'day' && <DayCard day={sel} showCompany={!!rows} companyAvailable={!!companyRows} colourOf={colourOf} />}
     </div>
@@ -166,54 +167,43 @@ function DayCard({ day, showCompany, companyAvailable, colourOf }: { day: Calend
   )
 }
 
-/** The whole week at a glance: one big row per day, Monday to Sunday. Where they are working: a coloured block with the address and the job. Otherwise: Not booked. */
-function WeekList({ days, showCompany, colourOf, onPick }: { days: CalendarDay[]; showCompany: boolean; colourOf: (jobId: string) => string; onPick: (key: string) => void }) {
-  const booked = days.filter(d => d.mine.length > 0).length
+/** The whole week on one page: a heading for each day, Monday to Sunday, and under it every job going on that day. Nothing to tap, you scroll down. */
+function WeekList({ days, colourOf }: { days: CalendarDay[]; colourOf: (jobId: string) => string }) {
+  // every job on a day once: the company's entry (it has the phase) when there is one, else their own booking
+  const jobsOn = (d: CalendarDay) => {
+    const byJob = new Map<string, { jobId: string; address: string; title: string; phase: string }>()
+    for (const c of d.company) byJob.set(c.jobId, { jobId: c.jobId, address: c.address, title: c.jobTitle, phase: c.phaseName })
+    for (const m of d.mine) if (!byJob.has(m.jobId)) byJob.set(m.jobId, { jobId: m.jobId, address: m.address, title: m.jobTitle, phase: m.stageName })
+    return [...byJob.values()].sort((a, b) => (a.address || a.title).localeCompare(b.address || b.title))
+  }
+  const perDay = days.map(jobsOn)
+  const allJobs = new Set(perDay.flat().map(j => j.jobId)).size
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 2px 10px' }}>
-        {booked === 0 ? 'You are not booked this week.' : `You are working ${booked} ${booked === 1 ? 'day' : 'days'} this week.`}
+        {allJobs === 0 ? 'No jobs on this week.' : `${allJobs} ${allJobs === 1 ? 'job' : 'jobs'} on this week.`}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {days.map((d, i) => {
-          const others = showCompany ? [...new Map(d.company.map(c => [c.jobId, c] as const)).values()] : []
-          return (
-            <button key={d.key} type="button" onClick={() => onPick(d.key)} aria-label={dayLabelLong(d.date) + (d.mine.length ? ': you are working' : ': not booked') + '. Tap to open this day.'}
-              style={{ display: 'flex', gap: 12, alignItems: 'stretch', textAlign: 'left', width: '100%', padding: 8, borderRadius: 16, cursor: 'pointer', fontFamily: 'inherit',
-                background: '#fff', border: d.isToday ? `2px solid ${GREEN}` : '1px solid #e2e6ea' }}>
-              <div style={{ width: 66, flexShrink: 0, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 0',
-                background: d.isToday ? '#1e2022' : '#f1f4f6', color: d.isToday ? '#fff' : '#1e2022' }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{DAY_NAMES[i]}</span>
-                <span style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>{d.date.getDate()}</span>
-                {d.isToday && <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, marginTop: 2 }}>TODAY</span>}
-              </div>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-                {d.mine.length === 0
-                  ? <div style={{ fontSize: 17, color: '#94a3b8', padding: '6px 2px' }}>Not booked</div>
-                  : d.mine.map((e, k) => (
-                    <div key={k} style={{ background: colourOf(e.jobId), color: '#fff', borderRadius: 12, padding: '10px 12px' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25 }}>{e.address || e.jobTitle}</div>
-                      <div style={{ fontSize: 15, opacity: 0.95, marginTop: 2 }}>
-                        {[e.taskName, e.ofDays > 1 ? `Day ${e.dayNo} of ${e.ofDays}` : ''].filter(Boolean).join(' · ')}
-                      </div>
-                    </div>
-                  ))}
-                {others.length > 0 && (
-                  <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '2px 12px', padding: '0 2px' }}>
-                    <span style={{ fontWeight: 600 }}>Company also on:</span>
-                    {others.map(c => (
-                      <span key={c.jobId} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <i style={{ width: 9, height: 9, borderRadius: '50%', background: colourOf(c.jobId), display: 'block' }} />{c.address || c.jobTitle}
-                      </span>
-                    ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {days.map((d, i) => (
+          <section key={d.key} aria-label={dayLabelLong(d.date)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, marginBottom: 8,
+              background: d.isToday ? '#1e2022' : '#e9edf0', color: d.isToday ? '#fff' : '#1e2022' }}>
+              <span style={{ fontSize: 19, fontWeight: 700 }}>{DAY_NAMES[i]} {d.date.getDate()} {MONTHS[d.date.getMonth()]}</span>
+              {d.isToday && <span style={{ fontSize: 12, fontWeight: 700, color: GREEN, marginLeft: 'auto' }}>TODAY</span>}
+            </div>
+            {perDay[i].length === 0
+              ? <div style={{ fontSize: 16, color: '#94a3b8', padding: '2px 12px' }}>No jobs</div>
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {perDay[i].map(j => (
+                  <div key={j.jobId} style={{ background: colourOf(j.jobId), color: '#fff', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25 }}>{j.address || j.title}</div>
+                    <div style={{ fontSize: 15, opacity: 0.95, marginTop: 2 }}>{[j.address ? j.title : '', j.phase].filter(Boolean).join(' · ')}</div>
                   </div>
-                )}
-              </div>
-            </button>
-          )
-        })}
+                ))}
+              </div>}
+          </section>
+        ))}
       </div>
-      <div style={{ fontSize: 13, color: '#64748b', margin: '10px 2px 0' }}>Tap a day to see it in more detail.</div>
     </div>
   )
 }
