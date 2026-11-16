@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-16T21:00:00+00:00',
+    title: 'Subcontractor calendar: each task with its days, carried through every day',
+    detail: 'On the subcontractor Company calendar, each job now lists every task going on that day with a badge saying which day of the task it is, for example Skim ceilings Day 2 of 3. A task of two or three days carries on through each of its working days. The Day view says it too. Sundays are never counted, and Saturdays only when the task allows them. A phase with no tasks shows as the phase with its days. To show the tasks, run supabase/sub-company-calendar-tasks.sql once on live (run sub-company-calendar-colour.sql first if it has not been run); until then the calendar shows phases with their days.',
+  },
+  {
     at: '2026-11-16T19:00:00+00:00',
     title: 'Subcontractor calendar: the week is one page of days with every job under each',
     detail: 'The Week view of the subcontractor Company calendar is now one page you scroll down. Each day, Monday to Sunday, has a heading with every job going on that day under it, as a block in the job colour with the address, job name and phase. Nothing needs tapping any more, and the line about how many days you are booked is gone: it now says how many jobs are on this week. Show company jobs sits above the list. The Day view is as before.',
