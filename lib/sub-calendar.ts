@@ -2,14 +2,18 @@
 // has work on (job name, address and phase only). Pure functions, no browser, tested on their own.
 //
 // The company part comes from the database function get_company_calendar_for_sub (rows below). It never carries the client's name, prices,
-// notes, individual tasks or who else is booked — only what a subcontractor needs to see that the company is busy where.
+// notes or who else is booked — only what a subcontractor needs to see that the company is busy where: the job, its address, and each phase and TASK
+// with how many days it has (a task of three days is on each of its three days, Day 1 of 3, Day 2 of 3, Day 3 of 3).
 
 import { isoDay, parseIsoDay, taskDays, expandSchedule, type ScheduleRow, type ScheduleEntry } from './task-days'
 
 /** One phase of a job, as the database function hands it over */
 export interface CompanyPhase { label: string | null; start_day: number; dur_days: number; allow_saturday: boolean }
 
-/** One active job of the company, with its phases */
+/** One task of a job (a sub-phase), as the database function hands it over: its name, the phase it is under, when it starts and how many days it has. Never who does it. */
+export interface CompanyTask { label: string | null; parent_label: string | null; start_day: number; dur_days: number; allow_saturday: boolean }
+
+/** One active job of the company, with its phases and tasks */
 export interface CompanyCalendarRow {
   job_id: string
   job_title: string | null
@@ -20,9 +24,12 @@ export interface CompanyCalendarRow {
   /** the colour the builder picked for the job (a #rrggbb swatch); absent until supabase/sub-company-calendar-colour.sql has been run, or when none was picked */
   job_color?: string | null
   phases: CompanyPhase[] | null
+  /** the job's tasks; absent until supabase/sub-company-calendar-tasks.sql has been run (the calendar then shows the phases, with their days) */
+  tasks?: CompanyTask[] | null
 }
 
-export interface CompanyDayEntry { jobId: string; jobTitle: string; address: string; phaseName: string }
+/** One piece of company work on one day. taskName is empty when only the phase is known (then the phase is what is on). dayNo of ofDays: which working day of it this is. */
+export interface CompanyDayEntry { jobId: string; jobTitle: string; address: string; phaseName: string; taskName: string; dayNo: number; ofDays: number }
 
 export interface CalendarDay {
   date: Date
@@ -33,6 +40,8 @@ export interface CalendarDay {
   mine: ScheduleEntry[]
   /** the company's other work that day (jobs this person is booked on that day are left out — their own booking already shows it) */
   company: CompanyDayEntry[]
+  /** ALL the company's work that day, including on jobs this person is booked on (the week page lists every job and every task) */
+  companyAll: CompanyDayEntry[]
 }
 
 function addDays(d: Date, n: number): Date { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x }
@@ -40,15 +49,20 @@ function addDays(d: Date, n: number): Date { const x = new Date(d.getFullYear(),
 /** "Phase 3 – Structural Shell" -> "Structural Shell" */
 function cleanPhase(label: string): string { return (label || '').replace(/^Phase\s+\d+\s*[–\-]\s*/i, '').trim() }
 
-/** Every day the company has a phase on, as day-key -> entries. A job with no saved phases shows as one bar for its whole length. */
+/** Every day the company has work on, as day-key -> entries: each TASK on each of its working days (Day 1 of 3, Day 2 of 3 ...), and a phase that has no tasks on each of its days.
+ *  A job with no saved phases or tasks shows as one bar for its whole length. */
 export function companyDays(rows: CompanyCalendarRow[]): Map<string, CompanyDayEntry[]> {
   const out = new Map<string, CompanyDayEntry[]>()
   const push = (date: Date, e: CompanyDayEntry) => {
     const key = isoDay(date)
     const list = out.get(key) ?? []
-    // the same job + phase never appears twice on a day
-    if (!list.some(x => x.jobId === e.jobId && x.phaseName === e.phaseName)) list.push(e)
+    // the same job + phase + task never appears twice on a day
+    if (!list.some(x => x.jobId === e.jobId && x.phaseName === e.phaseName && x.taskName === e.taskName)) list.push(e)
     out.set(key, list)
+  }
+  const spread = (start: Date, dur: number, sat: boolean, base: Omit<CompanyDayEntry, 'dayNo' | 'ofDays'>) => {
+    const days = taskDays(start, dur, sat)
+    days.forEach((d, i) => push(d.date, { ...base, dayNo: i + 1, ofDays: days.length }))
   }
   for (const r of rows) {
     const jobStart = parseIsoDay(r.job_start)
@@ -56,16 +70,21 @@ export function companyDays(rows: CompanyCalendarRow[]): Map<string, CompanyDayE
     const jobTitle = (r.job_title || '').trim() || 'Job'
     const address = (r.job_address || '').split('\n')[0]
     const phases = (r.phases ?? []).filter(p => p && Number.isFinite(p.dur_days))
-    if (phases.length === 0) {
-      const days = Math.max(1, Math.round((r.weeks || 1) * 7))
-      for (const d of taskDays(jobStart, days, false)) push(d.date, { jobId: r.job_id, jobTitle, address, phaseName: '' })
+    const tasks = (r.tasks ?? []).filter(t => t && Number.isFinite(t.dur_days) && (t.label || '').trim())
+    if (phases.length === 0 && tasks.length === 0) {
+      spread(jobStart, Math.max(1, Math.round((r.weeks || 1) * 7)), false, { jobId: r.job_id, jobTitle, address, phaseName: '', taskName: '' })
       continue
     }
+    // a phase that has tasks under it is shown by those tasks, not as a bar of its own
+    const withTasks = new Set(tasks.map(t => cleanPhase(t.parent_label || '').toLowerCase()))
     for (const p of phases) {
-      const start = addDays(jobStart, p.start_day || 0)
-      for (const d of taskDays(start, p.dur_days || 1, !!p.allow_saturday)) {
-        push(d.date, { jobId: r.job_id, jobTitle, address, phaseName: cleanPhase(p.label || '') })
-      }
+      const name = cleanPhase(p.label || '')
+      if (name && withTasks.has(name.toLowerCase())) continue
+      spread(addDays(jobStart, p.start_day || 0), p.dur_days || 1, !!p.allow_saturday, { jobId: r.job_id, jobTitle, address, phaseName: name, taskName: '' })
+    }
+    for (const t of tasks) {
+      spread(addDays(jobStart, t.start_day || 0), t.dur_days || 1, !!t.allow_saturday,
+        { jobId: r.job_id, jobTitle, address, phaseName: cleanPhase(t.parent_label || ''), taskName: (t.label || '').trim() })
     }
   }
   return out
@@ -99,6 +118,7 @@ export function calendarMonth(year: number, month: number, schedule: ScheduleRow
         isToday: date.getTime() === t.getTime(),
         mine,
         company: (co.get(key) ?? []).filter(c => !mineJobs.has(c.jobId)),
+        companyAll: co.get(key) ?? [],
       })
     }
     weeks.push(week)
@@ -127,7 +147,7 @@ export function calendarWeek(weekStart: Date, schedule: ScheduleRow[], rows: Com
     const key = isoDay(date)
     const mine = mineByDay.get(key) ?? []
     const mineJobs = new Set(mine.map(m => m.jobId))
-    days.push({ date, key, inMonth: true, isToday: date.getTime() === t.getTime(), mine, company: (co.get(key) ?? []).filter(c => !mineJobs.has(c.jobId)) })
+    days.push({ date, key, inMonth: true, isToday: date.getTime() === t.getTime(), mine, company: (co.get(key) ?? []).filter(c => !mineJobs.has(c.jobId)), companyAll: co.get(key) ?? [] })
   }
   return days
 }

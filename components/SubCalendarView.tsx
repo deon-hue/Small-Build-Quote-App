@@ -2,8 +2,8 @@
 
 // The subcontractor portal's Company calendar, in two views the person switches between with two big buttons:
 //  WEEK (the first view): ONE PAGE you scroll down, Monday to Sunday. Under each day's heading are ALL the jobs going on that day in the company, each a
-//  block in the job's colour with its address, job name and phase (nothing to tap). It is what is going on job-wise, not who is booked: who does what
-//  is the schedule's job.
+//  block in the job's colour with its address and job name, and inside it every TASK going on that day with how many days it has ('Day 2 of 3': a task
+//  of several days is on each of its days). It is what is going on job-wise, not who is booked: who does what is the schedule's job.
 //  DAY: a strip of seven day buttons and a card for the chosen day: their own work, then 'Also working' with the company's other jobs.
 // Every job is in its own colour (the colour the builder picked for the job). A plain display component used by BOTH the real subcontractor portal and
 // the builder's preview of it. Never shows client names, prices, notes, individual tasks or who else is booked.
@@ -17,6 +17,8 @@ import { dayLabelLong, type ScheduleRow } from '@/lib/task-days'
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MODE_KEY = 'sbc_sub_calendar_mode'
+/** 'Day 2 of 3', or '1 day' for a one-day task */
+const dayOf = (e: { dayNo: number; ofDays: number }) => (e.ofDays > 1 ? `Day ${e.dayNo} of ${e.ofDays}` : '1 day')
 type Mode = 'week' | 'day'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const GREEN = '#7ab533'
@@ -157,6 +159,7 @@ function DayCard({ day, showCompany, companyAvailable, colourOf }: { day: Calend
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 600, color: '#1e2022' }}>{c.address || c.jobTitle}</div>
                 <div style={{ fontSize: 14, color: '#64748b' }}>{[c.address ? c.jobTitle : '', c.phaseName].filter(Boolean).join(' · ')}</div>
+                {(c.taskName || c.ofDays > 1) && <div style={{ fontSize: 14, color: '#1e2022', marginTop: 1 }}>{[c.taskName, dayOf(c)].filter(Boolean).join(' · ')}</div>}
               </div>
             </div>
           ))}
@@ -167,13 +170,26 @@ function DayCard({ day, showCompany, companyAvailable, colourOf }: { day: Calend
   )
 }
 
-/** The whole week on one page: a heading for each day, Monday to Sunday, and under it every job going on that day. Nothing to tap, you scroll down. */
+interface WeekTask { key: string; name: string; phase: string; dayNo: number; ofDays: number }
+interface WeekJob { jobId: string; address: string; title: string; tasks: WeekTask[] }
+
+/** The whole week on one page: a heading for each day, Monday to Sunday, and under it every job going on that day with each task and its days. Nothing to tap, you scroll down. */
 function WeekList({ days, colourOf }: { days: CalendarDay[]; colourOf: (jobId: string) => string }) {
-  // every job on a day once: the company's entry (it has the phase) when there is one, else their own booking
-  const jobsOn = (d: CalendarDay) => {
-    const byJob = new Map<string, { jobId: string; address: string; title: string; phase: string }>()
-    for (const c of d.company) byJob.set(c.jobId, { jobId: c.jobId, address: c.address, title: c.jobTitle, phase: c.phaseName })
-    for (const m of d.mine) if (!byJob.has(m.jobId)) byJob.set(m.jobId, { jobId: m.jobId, address: m.address, title: m.jobTitle, phase: m.stageName })
+  // every job on a day once, with each task once: the company's entries first (they carry the whole task's days), then their own bookings not already there
+  const jobsOn = (d: CalendarDay): WeekJob[] => {
+    const byJob = new Map<string, WeekJob>()
+    const job = (id: string, address: string, title: string) => {
+      let j = byJob.get(id); if (!j) { j = { jobId: id, address, title, tasks: [] }; byJob.set(id, j) } return j
+    }
+    for (const c of d.companyAll) {
+      const t = job(c.jobId, c.address, c.jobTitle)
+      t.tasks.push({ key: (c.taskName || c.phaseName).toLowerCase(), name: c.taskName || c.phaseName, phase: c.taskName ? c.phaseName : '', dayNo: c.dayNo, ofDays: c.ofDays })
+    }
+    for (const m of d.mine) {
+      const j = job(m.jobId, m.address, m.jobTitle)
+      const key = m.taskName.toLowerCase()
+      if (!j.tasks.some(t => t.key === key)) j.tasks.push({ key, name: m.taskName, phase: m.stageName, dayNo: m.dayNo, ofDays: m.ofDays })
+    }
     return [...byJob.values()].sort((a, b) => (a.address || a.title).localeCompare(b.address || b.title))
   }
   const perDay = days.map(jobsOn)
@@ -197,7 +213,20 @@ function WeekList({ days, colourOf }: { days: CalendarDay[]; colourOf: (jobId: s
                 {perDay[i].map(j => (
                   <div key={j.jobId} style={{ background: colourOf(j.jobId), color: '#fff', borderRadius: 12, padding: '12px 14px' }}>
                     <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25 }}>{j.address || j.title}</div>
-                    <div style={{ fontSize: 15, opacity: 0.95, marginTop: 2 }}>{[j.address ? j.title : '', j.phase].filter(Boolean).join(' · ')}</div>
+                    {j.address && j.title && <div style={{ fontSize: 14, opacity: 0.95, marginTop: 1 }}>{j.title}</div>}
+                    {j.tasks.filter(t => t.name).length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                        {j.tasks.filter(t => t.name).map(t => (
+                          <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.2)', borderRadius: 9, padding: '7px 10px' }}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25 }}>{t.name}</div>
+                              {t.phase && <div style={{ fontSize: 13, opacity: 0.92 }}>{t.phase}</div>}
+                            </div>
+                            <div style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, background: 'rgba(0,0,0,0.22)', borderRadius: 8, padding: '3px 9px' }}>{dayOf(t)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>}
