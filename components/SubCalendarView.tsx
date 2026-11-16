@@ -1,18 +1,22 @@
 'use client'
 
-// The subcontractor portal's Company calendar: one WEEK at a time, with EVERY JOB IN ITS OWN COLOUR (the colour the builder picked for the job).
-// A header of seven day buttons, then one row per job worked on that week, each with a cell per day: solid where THIS person is booked, pale where
-// the company has other work on that job, empty otherwise. Below, a card for the chosen day (the same colours): their own work, then "Also working
-// today" with the company's other jobs (job name, address and phase only). A plain display component used by BOTH the real subcontractor portal
-// and the builder's preview of it. Never shows client names, prices, notes, individual tasks or who else is booked.
+// The subcontractor portal's Company calendar, in two views the person switches between with two big buttons:
+//  WEEK (the first view): seven plain rows, Monday to Sunday. Each row is the day, then in big coloured blocks where they are working (the job's address
+//  and what they are doing) or a plain 'Not booked'. A line at the top says how many days they are working. Tap a day to see it in the Day view.
+//  DAY: a strip of seven day buttons and a card for the chosen day: their own work, then 'Also working' with the company's other jobs.
+// Every job is in its own colour (the colour the builder picked for the job). A plain display component used by BOTH the real subcontractor portal and
+// the builder's preview of it. Never shows client names, prices, notes, individual tasks or who else is booked.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { calendarWeek, weekStartOf, weekJobRows, safeColour, type CalendarDay, type CompanyCalendarRow, type WeekJobRow } from '@/lib/sub-calendar'
+import { calendarWeek, weekStartOf, safeColour, type CalendarDay, type CompanyCalendarRow } from '@/lib/sub-calendar'
 import { jobColor } from '@/lib/utils'
 import { dayLabelLong, type ScheduleRow } from '@/lib/task-days'
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const MODE_KEY = 'sbc_sub_calendar_mode'
+type Mode = 'week' | 'day'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const GREEN = '#7ab533'
 const GREEN_DARK = '#3e6b12'
@@ -39,13 +43,16 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
   const [weekStart, setWeekStart] = useState<Date>(() => weekStartOf(new Date()))
   const [selected, setSelected] = useState<string | null>(null)
   const [showCompany, setShowCompany] = useState(true)
+  // Week to start with; the last one chosen is remembered on this phone (never needed: a blocked or empty store just means Week)
+  const [mode, setModeState] = useState<Mode>('week')
+  useEffect(() => { try { const m = localStorage.getItem(MODE_KEY); if (m === 'day' || m === 'week') setModeState(m) } catch { /* no storage */ } }, [])
+  function setMode(m: Mode) { setModeState(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* no storage */ } }
 
   const rows = companyRows && showCompany ? companyRows : null
   const days = useMemo(() => calendarWeek(weekStart, schedule, rows, new Date()), [weekStart, schedule, rows])
   // each job's colour: the one the builder picked (sent with the company's jobs), else the app's automatic colour for a job with no pick
   const colourByJob = useMemo(() => new Map((companyRows ?? []).map(r => [r.job_id, safeColour(r.job_color)] as const)), [companyRows])
   const colourOf = (jobId: string) => colourByJob.get(jobId) || jobColor(jobId)
-  const jobRows = useMemo(() => weekJobRows(days, id => colourByJob.get(id) || jobColor(id), !!rows), [days, colourByJob, rows])
   const thisWeek = weekStartOf(new Date()).getTime() === weekStart.getTime()
   // the chosen day (kept while moving about the week); otherwise today if this week, else the first day they are booked, else Monday
   const sel = days.find(d => d.key === selected) ?? days.find(d => d.isToday) ?? days.find(d => d.mine.length > 0) ?? days[0]
@@ -75,7 +82,21 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
         <button type="button" onClick={() => go(1)} aria-label="Next week" style={navBtn}><ChevronRight size={22} /></button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 5, marginBottom: 14 }}>
+      <div role="group" aria-label="Choose how to see the calendar" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+        {(['week', 'day'] as Mode[]).map(m => {
+          const on = mode === m
+          return (
+            <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={on}
+              style={{ height: 50, borderRadius: 14, fontSize: 18, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', background: on ? '#1e2022' : '#fff', color: on ? '#fff' : '#1e2022', border: '2px solid #1e2022' }}>
+              {m === 'week' ? '📅 Week' : '🕘 Day'}
+            </button>
+          )
+        })}
+      </div>
+
+      {mode === 'week' && <WeekList days={days} showCompany={!!rows} colourOf={colourOf} onPick={key => { setSelected(key); setMode('day') }} />}
+
+      {mode === 'day' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 5, marginBottom: 14 }}>
         {days.map((d, i) => {
           const on = d.key === sel.key
           return (
@@ -95,9 +116,7 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
             </button>
           )
         })}
-      </div>
-
-      <WeekGrid rows={jobRows} days={days} selectedKey={sel.key} onPick={setSelected} />
+      </div>}
 
       {companyRows && (
         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 15, color: '#1e2022', margin: '0 2px 12px', cursor: 'pointer' }}>
@@ -106,13 +125,7 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
         </label>
       )}
 
-      <DayCard day={sel} showCompany={!!rows} companyAvailable={!!companyRows} colourOf={colourOf} />
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13, color: '#5b6570', margin: '12px 2px 0', alignItems: 'center' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><i style={{ width: 22, height: 12, borderRadius: 4, background: '#5b6570', display: 'block' }} />Solid: you are booked</span>
-        {companyRows && <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><i style={{ width: 22, height: 12, borderRadius: 4, background: '#5b657038', border: '1px solid #5b657080', display: 'block' }} />Pale: the company is working on that job</span>}
-        <span>Each job has its own colour.</span>
-      </div>
+      {mode === 'day' && <DayCard day={sel} showCompany={!!rows} companyAvailable={!!companyRows} colourOf={colourOf} />}
     </div>
   )
 }
@@ -153,42 +166,54 @@ function DayCard({ day, showCompany, companyAvailable, colourOf }: { day: Calend
   )
 }
 
-/** The week as one row per job in its own colour: a title line, then seven cells (solid = you are booked, pale = the company works on it, empty = nothing). */
-function WeekGrid({ rows, days, selectedKey, onPick }: { rows: WeekJobRow[]; days: CalendarDay[]; selectedKey: string; onPick: (key: string) => void }) {
-  if (rows.length === 0) {
-    return <div style={{ background: '#fff', border: '1px dashed #d9dee3', borderRadius: 14, padding: '14px', fontSize: 15, color: '#64748b', marginBottom: 14 }}>No jobs this week.</div>
-  }
+/** The whole week at a glance: one big row per day, Monday to Sunday. Where they are working: a coloured block with the address and the job. Otherwise: Not booked. */
+function WeekList({ days, showCompany, colourOf, onPick }: { days: CalendarDay[]; showCompany: boolean; colourOf: (jobId: string) => string; onPick: (key: string) => void }) {
+  const booked = days.filter(d => d.mine.length > 0).length
   return (
-    <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {rows.map(r => (
-        <div key={r.jobId}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 4px', minWidth: 0 }}>
-            <i style={{ width: 12, height: 12, borderRadius: 3, background: r.colour, display: 'block', flexShrink: 0 }} />
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1e2022', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address || r.title}</span>
-            {r.address && r.title && <span style={{ fontSize: 13, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>}
-            {r.mine && <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: r.colour, borderRadius: 9, padding: '1px 8px', flexShrink: 0 }}>YOU</span>}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 5 }}>
-            {r.cells.map((c, i) => {
-              const on = c.key === selectedKey
-              const filled = c.state !== 'none'
-              const what = c.state === 'mine' ? 'you are booked' : c.state === 'company' ? 'company working' : 'nothing'
-              return (
-                <button key={c.key} type="button" onClick={() => onPick(c.key)} aria-label={(r.address || r.title) + ', ' + (days[i] ? dayLabelLong(days[i].date) : '') + ': ' + what}
-                  style={{
-                    height: 34, borderRadius: 9, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                    background: c.state === 'mine' ? r.colour : c.state === 'company' ? r.colour + '38' : '#f4f6f8',
-                    color: '#fff',
-                    border: c.state === 'company' ? '1px solid ' + r.colour + '80' : c.state === 'mine' ? '1px solid ' + r.colour : '1px solid #eceff2',
-                    outline: on && filled ? '2px solid #1e2022' : 'none', outlineOffset: 1,
-                  }}>
-                  {c.state === 'mine' ? '●' : ''}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 2px 10px' }}>
+        {booked === 0 ? 'You are not booked this week.' : `You are working ${booked} ${booked === 1 ? 'day' : 'days'} this week.`}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {days.map((d, i) => {
+          const others = showCompany ? [...new Map(d.company.map(c => [c.jobId, c] as const)).values()] : []
+          return (
+            <button key={d.key} type="button" onClick={() => onPick(d.key)} aria-label={dayLabelLong(d.date) + (d.mine.length ? ': you are working' : ': not booked') + '. Tap to open this day.'}
+              style={{ display: 'flex', gap: 12, alignItems: 'stretch', textAlign: 'left', width: '100%', padding: 8, borderRadius: 16, cursor: 'pointer', fontFamily: 'inherit',
+                background: '#fff', border: d.isToday ? `2px solid ${GREEN}` : '1px solid #e2e6ea' }}>
+              <div style={{ width: 66, flexShrink: 0, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 0',
+                background: d.isToday ? '#1e2022' : '#f1f4f6', color: d.isToday ? '#fff' : '#1e2022' }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{DAY_NAMES[i]}</span>
+                <span style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>{d.date.getDate()}</span>
+                {d.isToday && <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, marginTop: 2 }}>TODAY</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
+                {d.mine.length === 0
+                  ? <div style={{ fontSize: 17, color: '#94a3b8', padding: '6px 2px' }}>Not booked</div>
+                  : d.mine.map((e, k) => (
+                    <div key={k} style={{ background: colourOf(e.jobId), color: '#fff', borderRadius: 12, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25 }}>{e.address || e.jobTitle}</div>
+                      <div style={{ fontSize: 15, opacity: 0.95, marginTop: 2 }}>
+                        {[e.taskName, e.ofDays > 1 ? `Day ${e.dayNo} of ${e.ofDays}` : ''].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                  ))}
+                {others.length > 0 && (
+                  <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '2px 12px', padding: '0 2px' }}>
+                    <span style={{ fontWeight: 600 }}>Company also on:</span>
+                    {others.map(c => (
+                      <span key={c.jobId} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <i style={{ width: 9, height: 9, borderRadius: '50%', background: colourOf(c.jobId), display: 'block' }} />{c.address || c.jobTitle}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 13, color: '#64748b', margin: '10px 2px 0' }}>Tap a day to see it in more detail.</div>
     </div>
   )
 }
