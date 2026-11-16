@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-16T17:00:00+00:00',
+    title: 'Subcontractor calendar: Week and Day buttons, with a plain week',
+    detail: 'The subcontractor Company calendar now has two big buttons, Week and Day. The Week view is seven plain rows, Monday to Sunday: a line saying how many days they are working, then for each day a block in the job colour with the address in big writing and what they are doing, or Not booked. With company jobs switched on, a small line under each day shows the other company jobs. Tapping a day opens it in the Day view, which is as before. The last view chosen is remembered on that phone.',
+  },
+  {
     at: '2026-11-16T12:00:00+00:00',
     title: 'Subcontractor company calendar: a week with every job in its own colour',
     detail: 'On the subcontractor portal the Company calendar now shows the week as one row per job, each in the colour you picked for that job (jobs with no picked colour get the automatic one). A solid cell with a dot means the subcontractor is booked that day, a pale cell means the company is working on that job, and an empty cell means nothing. Their own jobs come first with a YOU badge, tapping a cell shows that day card in the job colour, and the day buttons show the colours of the jobs worked that day. To show your picked colours, run supabase/sub-company-calendar-colour.sql once on live.',
