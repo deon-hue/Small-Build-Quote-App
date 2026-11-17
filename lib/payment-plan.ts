@@ -7,6 +7,8 @@
 //   'periodic'   a stage every K weeks for the percentage of each phase planned to be done in that time (work is spread evenly over a sub-phase's days),
 // A CUSTOMER DISCOUNT can be set on any sub-phase (a percentage): it comes off that sub-phase's value BEFORE the deposit, stages and retention are worked out, so every
 // payment is already the lower amount and the rows add up to the quote total less the discount. It is shown to the customer as its own visible line, never folded in.
+// With 'phase-end' the stage can be one per MAIN PHASE or one per TASK (sub-phase: two tasks under a phase can finish at different times), and each stage can be SPLIT so
+// the MATERIALS are due when that phase or task STARTS and the labour and everything else on COMPLETION (two dates).
 // then the RETENTION (5% to start) is held back from the last payment(s) and released some months after completion. The deposit is taken off the later
 // stages in proportion, so everything adds up to the quote's total EXACTLY. All amounts are in pounds INCLUDING VAT when the quote has VAT.
 //
@@ -16,10 +18,12 @@
 import type { QuotePhase } from './types'
 
 export type PlanMode = 'phase-end' | 'periodic'
+/** For 'phase-end': one stage per main phase, or one per task (sub-phase). */
+export type PlanStageBy = 'phase' | 'task'
 export type PlanRowKind = 'deposit' | 'stage' | 'final' | 'retention'
 
 /** One sub-phase, as the plan needs it: where it sits, what it is worth (incl. VAT) and how many working days it has. */
-export interface PlanTask { key: string; group: string; name: string; value: number; days: number; /** customer discount %, 0 to 100 (none when absent) */ discountPct?: number }
+export interface PlanTask { key: string; group: string; name: string; value: number; days: number; /** customer discount %, 0 to 100 (none when absent) */ discountPct?: number; /** the part of `value` that is materials (incl. VAT), for a split payment */ materials?: number }
 
 /** One customer discount, as the customer sees it: which task, the percentage, and the amount taken off (incl. VAT when the quote has VAT). */
 export interface PlanDiscountItem { group: string; name: string; pct: number; amount: number }
@@ -34,6 +38,10 @@ export interface PlanSettings {
   retentionPct: number
   /** the retention is released this many months after the last stage */
   retentionMonths: number
+  /** for 'phase-end': a stage for each main phase (the start) or for each task. Absent reads as 'phase'. */
+  stageBy?: PlanStageBy
+  /** for 'phase-end': pay the materials when the phase or task starts and the labour and the rest on completion. Absent reads as false. */
+  splitMaterials?: boolean
 }
 
 export interface PlanRow {
@@ -64,7 +72,7 @@ export interface PaymentPlan extends PlanSettings {
   generatedAt: string
 }
 
-export const DEFAULT_SETTINGS: PlanSettings = { startDate: '', mode: 'phase-end', everyWeeks: 1, depositPct: 10, retentionPct: 5, retentionMonths: 6 }
+export const DEFAULT_SETTINGS: PlanSettings = { startDate: '', mode: 'phase-end', everyWeeks: 1, depositPct: 10, retentionPct: 5, retentionMonths: 6, stageBy: 'phase', splitMaterials: false }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const clampPct = (n: number) => (Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0)
@@ -155,20 +163,37 @@ function timeline(tasks: PlanTask[]): Timed[] {
 const pct = (x: number) => `${Math.round(x)}%`
 
 /** The stage rows BEFORE the deposit and retention are applied: each has the full value of the work it pays for. */
-function rawStages(tasks: Timed[], s: PlanSettings): { description: string; value: number; endWork: number }[] {
+function rawStages(tasks: Timed[], s: PlanSettings): { description: string; value: number; dueWork: number }[] {
   const start = parseDay(s.startDate)
   if (tasks.length === 0) return []
-  const out: { description: string; value: number; endWork: number }[] = []
+  const out: { description: string; value: number; dueWork: number }[] = []
   if (s.mode === 'phase-end') {
-    const groups: string[] = []
-    for (const t of tasks) if (!groups.includes(t.group)) groups.push(t.group)
-    for (const g of groups) {
-      const mine = tasks.filter(t => t.group === g)
-      const value = mine.reduce((a, t) => a + t.value, 0)
-      if (value <= 0) continue
-      out.push({ description: `On completion of ${g}`, value, endWork: Math.max(...mine.map(t => t.e)) })
+    // the units that are paid for: each main phase, or each task
+    const units: { label: string; mine: Timed[] }[] = []
+    if (s.stageBy === 'task') {
+      for (const t of tasks) units.push({ label: t.group && t.group !== t.name ? `${t.group}: ${t.name}` : t.name, mine: [t] })
+    } else {
+      const groups: string[] = []
+      for (const t of tasks) if (!groups.includes(t.group)) groups.push(t.group)
+      for (const g of groups) units.push({ label: g, mine: tasks.filter(t => t.group === g) })
     }
-    return out
+    for (const u of units) {
+      const value = u.mine.reduce((a, t) => a + t.value, 0)
+      if (value <= 0) continue
+      const first = Math.min(...u.mine.map(t => t.s)), end = Math.max(...u.mine.map(t => t.e))
+      const mats = s.splitMaterials ? Math.min(value, Math.max(0, u.mine.reduce((a, t) => a + (Number(t.materials) || 0), 0))) : 0
+      const rest = value - mats
+      if (mats > 0.004 && rest > 0.004) {
+        // two dates: the materials when the phase or task starts (its first working day), the labour and everything else when it is finished
+        out.push({ description: `Materials for ${u.label}`, value: mats, dueWork: first + 1 })
+        out.push({ description: `Labour and other work on completion of ${u.label}`, value: rest, dueWork: end })
+      } else if (mats > 0.004) {
+        out.push({ description: `Materials for ${u.label}`, value: mats, dueWork: first + 1 })
+      } else {
+        out.push({ description: `On completion of ${u.label}`, value, dueWork: end })
+      }
+    }
+    return out.sort((a, b) => a.dueWork - b.dueWork)   // in the order they fall due (the sort is stable, so materials come before the labour of the same day)
   }
   // periodic: every K weeks of working days (5 per week), the share of each sub-phase planned to be done in that time
   const step = Math.max(1, Math.round(s.everyWeeks || 1)) * 5
@@ -204,7 +229,7 @@ function rawStages(tasks: Timed[], s: PlanSettings): { description: string; valu
     const endCal = workDayToCalDay(start, to)
     const endDate = start ? ` (to ${longDate(addDaysTo(start, endCal))})` : ''
     const label = step === 5 ? `Week ${n}` : `Weeks ${(n - 1) * (step / 5) + 1}–${Math.min(n * (step / 5), Math.ceil(N / 5))}`
-    out.push({ description: `${label}${endDate}: ${shown.join(', ')}`, value, endWork: to })
+    out.push({ description: `${label}${endDate}: ${shown.join(', ')}`, value, dueWork: to })
   }
   return out
 }
@@ -218,7 +243,8 @@ export function applyDiscounts(tasks: PlanTask[]): { tasks: PlanTask[]; items: P
     const amount = round2(t.value * pct / 100)
     if (amount <= 0) return t
     items.push({ group: t.group, name: t.name, pct, amount })
-    return { ...t, value: round2(t.value - amount) }
+    const value = round2(t.value - amount)
+    return { ...t, value, materials: t.materials ? round2(t.materials * (value / t.value)) : t.materials }
   })
   return { tasks: out, items, total: round2(items.reduce((a, i) => a + i.amount, 0)) }
 }
@@ -261,7 +287,7 @@ export function generateRows(allTasks: PlanTask[], s: PlanSettings, total?: numb
     const description = !isFinal ? x.description
       : s.mode === 'phase-end' ? `Final payment: ${lowerFirst(x.description)}${note}`
       : `Final payment${note}: ${x.description}`
-    rows.push({ id: id(), kind: isFinal ? 'final' : 'stage', description, amount: pay[i], dueDay: workDayToCalDay(start, x.endWork) })
+    rows.push({ id: id(), kind: isFinal ? 'final' : 'stage', description, amount: pay[i], dueDay: workDayToCalDay(start, x.dueWork) })
   })
   if (held > 0) {
     const finalDay = rows.filter(r => r.dueDay != null).reduce((m, r) => Math.max(m, r.dueDay as number), 0)
@@ -280,6 +306,7 @@ export function generatePlan(tasks: PlanTask[], days: Record<string, number>, s:
   const disc = applyDiscounts(withDays)
   return {
     version: 1, ...s,
+    stageBy: s.stageBy === 'task' ? 'task' : 'phase', splitMaterials: s.splitMaterials === true,
     depositPct: clampPct(s.depositPct), retentionPct: clampPct(s.retentionPct),
     retentionMonths: Math.min(60, Math.max(0, Math.round(s.retentionMonths || 0))),
     everyWeeks: Math.min(12, Math.max(1, Math.round(s.everyWeeks || 1))),
@@ -344,6 +371,7 @@ export function cleanPlan(raw: unknown): PaymentPlan | null {
   return {
     version: 1, startDate,
     mode: o.mode === 'periodic' ? 'periodic' : 'phase-end',
+    stageBy: o.stageBy === 'task' ? 'task' : 'phase', splitMaterials: o.splitMaterials === true,
     everyWeeks: Math.min(12, Math.max(1, Math.round(Number(o.everyWeeks) || 1))),
     depositPct: clampPct(Number(o.depositPct)), retentionPct: clampPct(Number(o.retentionPct)),
     retentionMonths: Math.min(60, Math.max(0, Math.round(Number(o.retentionMonths) || 0))),

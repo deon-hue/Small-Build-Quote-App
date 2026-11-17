@@ -11,7 +11,7 @@ import { fmt, VAT } from '@/lib/utils'
 import { planKeys, planTasksFromQuote, planQuoteTotal } from '@/lib/payment-plan-quote'
 import {
   DEFAULT_SETTINGS, addDaysTo, cleanDays, generatePlan, isoDayOf, monthlyTotals, parseDay, planProblems, planSum, suggestDays, workDayToCalDay,
-  type PaymentPlan, type PlanMode, type PlanRow,
+  type PaymentPlan, type PlanMode, type PlanRow, type PlanStageBy,
 } from '@/lib/payment-plan'
 
 interface Props {
@@ -33,6 +33,8 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
 
   const [start, setStart] = useState(plan?.startDate ?? '')
   const [mode, setMode] = useState<PlanMode>(plan?.mode ?? DEFAULT_SETTINGS.mode)
+  const [stageBy, setStageBy] = useState<PlanStageBy>(plan?.stageBy ?? 'phase')
+  const [splitMaterials, setSplitMaterials] = useState(plan?.splitMaterials ?? false)
   const [everyWeeks, setEveryWeeks] = useState(plan?.everyWeeks ?? 1)
   const [dep, setDep] = useState(plan?.depositPct ?? DEFAULT_SETTINGS.depositPct)
   const [ret, setRet] = useState(plan?.retentionPct ?? DEFAULT_SETTINGS.retentionPct)
@@ -54,7 +56,7 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
   const [rows, setRows] = useState<PlanRow[]>(plan?.rows ?? [])
   const [edited, setEdited] = useState(false)   // rows changed by hand since they were worked out
 
-  const settings = { startDate: start, mode, everyWeeks, depositPct: dep, retentionPct: ret, retentionMonths: retMonths }
+  const settings = { startDate: start, mode, everyWeeks, depositPct: dep, retentionPct: ret, retentionMonths: retMonths, stageBy, splitMaterials }
   const tasks = useMemo(() => planTasksFromQuote(phases, markup, vatOn, days), [phases, markup, vatOn, days])
   const groups = useMemo(() => {
     const out: { name: string; value: number; items: { key: string; name: string; value: number }[] }[] = []
@@ -159,8 +161,23 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
           <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
             <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
               <input type="radio" name="ppmode" checked={mode === 'phase-end'} onChange={() => setMode('phase-end')} style={{ marginTop: 3, width: 'auto', flexShrink: 0 }} />
-              <span><strong>At the end of each phase</strong><br /><span style={{ fontSize: 12, color: 'var(--muted)' }}>One payment as each main phase is finished. Best when a phase is paid for once it is done.</span></span>
+              <span><strong>On completion</strong><br /><span style={{ fontSize: 12, color: 'var(--muted)' }}>A payment as each part is finished. Best when it is paid for once it is done.</span></span>
             </label>
+            {mode === 'phase-end' && (
+              <div style={{ marginLeft: 26, display: 'grid', gap: 8, padding: '8px 12px', background: 'var(--warm, #f3efe9)', borderRadius: 8 }}>
+                <label style={{ fontSize: 12.5 }}>One payment for{' '}
+                  <select value={stageBy} onChange={e => setStageBy(e.target.value as PlanStageBy)} style={{ ...inp, padding: '2px 6px', width: 'auto', display: 'inline-block' }}>
+                    <option value="phase">each main phase</option>
+                    <option value="task">each task (so two tasks in a phase can be paid at different times)</option>
+                  </select>
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={splitMaterials} onChange={e => setSplitMaterials(e.target.checked)} style={{ marginTop: 2, width: 'auto', flexShrink: 0 }} />
+                  <span><strong>Two dates for each payment</strong>: the <strong>materials</strong> are due when the {stageBy === 'task' ? 'task' : 'phase'} <strong>starts</strong>; the labour and everything else when it is <strong>completed</strong>.<br />
+                    <span style={{ color: 'var(--muted)' }}>Only the materials lines in the quote count as materials. Each date can still be changed by hand in the payments below.</span></span>
+                </label>
+              </div>
+            )}
             <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
               <input type="radio" name="ppmode" checked={mode === 'periodic'} onChange={() => setMode('periodic')} style={{ marginTop: 3, width: 'auto', flexShrink: 0 }} />
               <span><strong>For the work done, every
