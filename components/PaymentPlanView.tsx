@@ -5,6 +5,7 @@
 // It only displays: the rules and the sums are in lib/payment-plan.ts.
 
 import { dueLabel, monthlyTotals, planSum, type PaymentPlan } from '@/lib/payment-plan'
+import { planDiscountLines, planIntro } from '@/lib/payment-plan-html'
 
 const gbp = (n: number) => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -15,12 +16,18 @@ export default function PaymentPlanView({ plan, vatNote, heading = 'Payment plan
     <section aria-label={heading} style={{ marginTop: 18 }}>
       <h3 style={{ fontSize: 17, margin: '0 0 6px', color: 'var(--ink, #1e2022)' }}>{heading}</h3>
       <p style={{ fontSize: 13, color: 'var(--muted, #5b6570)', margin: '0 0 10px', lineHeight: 1.55 }}>
-        This shows when each part of the price falls due, so you can plan your cash flow. The dates are estimates: they depend on the start date and on how the work goes.
-        {plan.mode === 'phase-end' ? ' Each stage is paid when that phase is finished.' : ' Each payment is for the work planned to be done in that time.'}
-        {plan.depositPct > 0 ? ` A ${plan.depositPct}% deposit is paid when you accept the quote and is taken off the later payments.` : ''}
-        {plan.retentionPct > 0 ? ` ${plan.retentionPct}% is held back as retention and paid ${plan.retentionMonths} months after completion, once any defects are put right.` : ''}
+        {planIntro(plan)}
         {vatNote ? ` ${vatNote}` : ''}
       </p>
+      {plan.discountTotal > 0 && (
+        <div style={{ margin: '0 0 10px', maxWidth: 460 }}>
+          {planDiscountLines(plan).map(l => (
+            <div key={l.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, padding: '3px 2px', fontWeight: l.strong ? 700 : 400, borderTop: l.strong ? '1px solid var(--border, #e2e6ea)' : 'none', color: 'var(--ink, #1e2022)' }}>
+              <span>{l.label}</span><span style={{ whiteSpace: 'nowrap' }}>{l.amount}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ border: '1px solid var(--border, #e2e6ea)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
         {plan.rows.map((r, i) => (
           <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', borderTop: i ? '1px solid var(--border, #e2e6ea)' : 'none' }}>

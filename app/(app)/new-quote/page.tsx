@@ -2273,7 +2273,7 @@ export default function NewQuotePage() {
             <div style={{ fontSize: 13, lineHeight: 1.6 }}>
               <strong>{paymentPlan.rows.length} payments</strong> totalling £{planSum(paymentPlan.rows).toFixed(2)}
               {' · '}{paymentPlan.mode === 'phase-end' ? 'a payment at the end of each phase' : `for the work done every ${paymentPlan.everyWeeks === 1 ? 'week' : paymentPlan.everyWeeks + ' weeks'}`}
-              {' · '}deposit {paymentPlan.depositPct}%, retention {paymentPlan.retentionPct}%
+              {' · '}deposit {paymentPlan.depositPct}%, retention {paymentPlan.retentionPct}%{paymentPlan.discountTotal > 0 ? ` · customer discount £${paymentPlan.discountTotal.toFixed(2)}` : ''}
               {' · '}{paymentPlan.showToClient ? 'shown to the customer' : <span style={{ color: '#92400e' }}>hidden from the customer</span>}
               {planProblems(paymentPlan, planQuoteTotal(phases, markup, vatOn)).filter(p => /come to|changed since/.test(p)).map((p, i) => (
                 <div key={i} style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>⚠ {p} Open the plan and work the payments out again.</div>

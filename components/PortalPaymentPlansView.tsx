@@ -22,7 +22,7 @@ export default function PortalPaymentPlansView({ quotes }: { quotes: PortalPlanQ
     <div>
       <div className="portal-page-hd">
         <h1>Payment plan</h1>
-        <p>{withPlan.length === 0 ? 'No payment plan has been set up yet.' : 'When each payment falls due, so you can plan your cash flow.'}</p>
+        <p>{withPlan.length === 0 ? 'No payment plan has been set up yet.' : 'When each payment falls due, so you can plan your payments.'}</p>
       </div>
       {withPlan.map(q => (
         <div key={q.id} className="card" style={{ marginBottom: 20 }}>

@@ -192,6 +192,12 @@ export default function InvoicesPage() {
     if (!found) return
     if (milestones.some(m => m.description || m.amount) && !confirm('This replaces the milestones already here with the payment plan from quote ' + found.ref + '. Carry on?')) return
     setMilestones(planToMilestones(found.plan).map(m => ({ id: ++milestoneCounter, description: m.description, amount: m.amount, dueDate: m.dueDate, paid: false, paidDate: '' })))
+    // the customer discount is its own visible line on the invoice (ex VAT here, as the other lines are), so the total matches what the plan asks for
+    const disc = found.plan.discountTotal
+    if (disc > 0 && !lineItems.some(l => l.desc === 'Customer discount')) {
+      const exVat = Math.round((vatOn ? disc / 1.2 : disc) * 100) / 100
+      setLineItems(prev => [...prev.filter(l => l.desc || l.total), { id: ++lineCounter, desc: 'Customer discount', qty: 1, unitPrice: -exVat, total: -exVat }])
+    }
   }
 
   function loadMilestonesFromPhases() {
