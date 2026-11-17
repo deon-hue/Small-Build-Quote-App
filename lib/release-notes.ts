@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-17T12:00:00+00:00',
+    title: 'Payment plan: customer discount on any task or phase',
+    detail: 'In the Payment plan window each task has a Customer discount % box, and each main phase has a Discount all box. The discount comes off before the deposit, stages and retention are worked out, so every payment is already the lower amount and the payments add up to the quote total less the discount. The window shows what the discount costs you. The customer sees it as its own lines in the plan (quote total, each customer discount, total to pay) in the online quote, PDF and portal. Using the quote payment plan on an invoice also adds a Customer discount line. It does not depend on how the customer pays. Check with your accountant how to show VAT on a discounted payment. No new SQL beyond supabase/quote-payment-plan.sql.',
+  },
+  {
     at: '2026-11-16T23:00:00+00:00',
     title: 'Payment plan on a quote, shown to the customer',
     detail: 'A saved quote now has a Payment plan card. Give each sub-phase a rough number of working days and a start date, choose whether the customer pays at the end of each phase or every week (or 2 or 4 weeks) for the work done, and set the deposit (10% to start) and retention (5% held back from the final payment and released 6 months after completion, to start). The payments are worked out so they add up to the quote total exactly, and every line can be changed by hand. The customer sees the plan in the quote (online page and PDF), in their portal quote and on a new Payment plan tab in their portal. The invoice form has a button to use the quote payment plan as its milestones. A plan on a quote already sent waits for Update Quote like any other change. To switch it on, run supabase/quote-payment-plan.sql once on live.',
