@@ -5,6 +5,8 @@
 // rows: a deposit when the quote is accepted (10% to start), then either
 //   'phase-end'  one stage as each MAIN phase is finished, or
 //   'periodic'   a stage every K weeks for the percentage of each phase planned to be done in that time (work is spread evenly over a sub-phase's days),
+// A CUSTOMER DISCOUNT can be set on any sub-phase (a percentage): it comes off that sub-phase's value BEFORE the deposit, stages and retention are worked out, so every
+// payment is already the lower amount and the rows add up to the quote total less the discount. It is shown to the customer as its own visible line, never folded in.
 // then the RETENTION (5% to start) is held back from the last payment(s) and released some months after completion. The deposit is taken off the later
 // stages in proportion, so everything adds up to the quote's total EXACTLY. All amounts are in pounds INCLUDING VAT when the quote has VAT.
 //
@@ -17,7 +19,10 @@ export type PlanMode = 'phase-end' | 'periodic'
 export type PlanRowKind = 'deposit' | 'stage' | 'final' | 'retention'
 
 /** One sub-phase, as the plan needs it: where it sits, what it is worth (incl. VAT) and how many working days it has. */
-export interface PlanTask { key: string; group: string; name: string; value: number; days: number }
+export interface PlanTask { key: string; group: string; name: string; value: number; days: number; /** customer discount %, 0 to 100 (none when absent) */ discountPct?: number }
+
+/** One customer discount, as the customer sees it: which task, the percentage, and the amount taken off (incl. VAT when the quote has VAT). */
+export interface PlanDiscountItem { group: string; name: string; pct: number; amount: number }
 
 export interface PlanSettings {
   /** yyyy-mm-dd, or '' when the start is not known yet */
@@ -45,8 +50,14 @@ export interface PaymentPlan extends PlanSettings {
   version: 1
   /** working days for each sub-phase, by `PlanTask.key` (the quote phase's id) */
   days: Record<string, number>
+  /** customer discount % for each sub-phase, by `PlanTask.key` (only those above 0) */
+  discounts: Record<string, number>
+  /** each discount given, with the amount taken off, for the customer's view */
+  discountItems: PlanDiscountItem[]
+  /** all the discounts together, in pounds (incl. VAT when the quote has VAT) */
+  discountTotal: number
   rows: PlanRow[]
-  /** the quote total these rows were worked out from (to say when the quote has changed since) */
+  /** the quote total (before any customer discount) these rows were worked out from, to say when the quote has changed since */
   total: number
   /** the customer sees it in the quote and the portal when true */
   showToClient: boolean
@@ -198,10 +209,26 @@ function rawStages(tasks: Timed[], s: PlanSettings): { description: string; valu
   return out
 }
 
-/** Works the rows out. `tasks` carry each sub-phase's value (incl. VAT) and days; the amounts add up to `total` exactly. */
-export function generateRows(tasks: PlanTask[], s: PlanSettings, total?: number): PlanRow[] {
+/** Takes each task's customer discount off its value: the tasks with their lower values, each discount given (to show the customer) and the total of them. */
+export function applyDiscounts(tasks: PlanTask[]): { tasks: PlanTask[]; items: PlanDiscountItem[]; total: number } {
+  const items: PlanDiscountItem[] = []
+  const out = tasks.map(t => {
+    const pct = clampPct(Number(t.discountPct ?? 0))
+    if (pct <= 0 || !(t.value > 0)) return t
+    const amount = round2(t.value * pct / 100)
+    if (amount <= 0) return t
+    items.push({ group: t.group, name: t.name, pct, amount })
+    return { ...t, value: round2(t.value - amount) }
+  })
+  return { tasks: out, items, total: round2(items.reduce((a, i) => a + i.amount, 0)) }
+}
+
+/** Works the rows out. `tasks` carry each sub-phase's value (incl. VAT), days and any customer discount %; the amounts add up to `total` less the discounts, exactly. */
+export function generateRows(allTasks: PlanTask[], s: PlanSettings, total?: number): PlanRow[] {
+  const disc = applyDiscounts(allTasks)
+  const tasks = disc.tasks
   const timed = timeline(tasks.filter(t => t.value > 0))
-  const T = round2(total ?? tasks.reduce((a, t) => a + t.value, 0))
+  const T = round2((total ?? allTasks.reduce((a, t) => a + t.value, 0)) - disc.total)
   if (timed.length === 0 || T <= 0) return []
   const start = parseDay(s.startDate)
   const dep = clampPct(s.depositPct), ret = clampPct(s.retentionPct)
@@ -245,16 +272,19 @@ export function generateRows(tasks: PlanTask[], s: PlanSettings, total?: number)
 }
 
 /** Builds a whole plan: the tasks' days come from `days` (by task key), then the rows are worked out from the settings. */
-export function generatePlan(tasks: PlanTask[], days: Record<string, number>, s: PlanSettings, total: number, now: Date = new Date(), showToClient = true): PaymentPlan {
-  const withDays = tasks.map(t => ({ ...t, days: cleanDays(days[t.key] ?? t.days) }))
+export function generatePlan(tasks: PlanTask[], days: Record<string, number>, s: PlanSettings, total: number, now: Date = new Date(), showToClient = true, discounts: Record<string, number> = {}): PaymentPlan {
+  const withDays = tasks.map(t => ({ ...t, days: cleanDays(days[t.key] ?? t.days), discountPct: clampPct(Number(discounts[t.key] ?? t.discountPct ?? 0)) }))
   const cleanMap: Record<string, number> = {}
-  for (const t of withDays) cleanMap[t.key] = t.days
+  const discMap: Record<string, number> = {}
+  for (const t of withDays) { cleanMap[t.key] = t.days; if ((t.discountPct ?? 0) > 0) discMap[t.key] = t.discountPct as number }
+  const disc = applyDiscounts(withDays)
   return {
     version: 1, ...s,
     depositPct: clampPct(s.depositPct), retentionPct: clampPct(s.retentionPct),
     retentionMonths: Math.min(60, Math.max(0, Math.round(s.retentionMonths || 0))),
     everyWeeks: Math.min(12, Math.max(1, Math.round(s.everyWeeks || 1))),
-    days: cleanMap, rows: generateRows(withDays, s, total), total: round2(total), showToClient, generatedAt: now.toISOString(),
+    days: cleanMap, discounts: discMap, discountItems: disc.items, discountTotal: disc.total,
+    rows: generateRows(withDays, s, total), total: round2(total), showToClient, generatedAt: now.toISOString(),
   }
 }
 
@@ -268,8 +298,11 @@ export function planProblems(plan: PaymentPlan | null | undefined, currentTotal:
   if (!plan) return out
   if (plan.rows.length === 0) { out.push('The plan has no payments yet.'); return out }
   const sum = planSum(plan.rows)
-  const diff = round2(currentTotal - sum)
-  if (Math.abs(diff) >= 0.01) out.push(diff > 0 ? `The payments come to £${sum.toFixed(2)}, which is £${diff.toFixed(2)} less than the quote total of £${round2(currentTotal).toFixed(2)}.` : `The payments come to £${sum.toFixed(2)}, which is £${Math.abs(diff).toFixed(2)} more than the quote total of £${round2(currentTotal).toFixed(2)}.`)
+  const discount = plan.discountTotal > 0 ? plan.discountTotal : 0
+  const expected = round2(currentTotal - discount)   // what the payments should come to: the quote total less any customer discount
+  const diff = round2(expected - sum)
+  const what = discount > 0 ? 'the total to pay (the quote total less the customer discount)' : 'the quote total'
+  if (Math.abs(diff) >= 0.01) out.push(diff > 0 ? `The payments come to £${sum.toFixed(2)}, which is £${diff.toFixed(2)} less than ${what} of £${expected.toFixed(2)}.` : `The payments come to £${sum.toFixed(2)}, which is £${Math.abs(diff).toFixed(2)} more than ${what} of £${expected.toFixed(2)}.`)
   if (Math.abs(round2(currentTotal - plan.total)) >= 0.01 && Math.abs(diff) < 0.01) out.push('The quote total has changed since the plan was made, but the payments still add up to it.')
   if (!parseDay(plan.startDate)) out.push('No start date yet: the customer is told how many weeks after work starts each payment falls due.')
   return out
@@ -296,6 +329,17 @@ export function cleanPlan(raw: unknown): PaymentPlan | null {
   }
   const days: Record<string, number> = {}
   if (o.days && typeof o.days === 'object') for (const [k, v] of Object.entries(o.days as Record<string, unknown>)) days[k.slice(0, 40)] = cleanDays(v)
+  const discounts: Record<string, number> = {}
+  if (o.discounts && typeof o.discounts === 'object') for (const [k, v] of Object.entries(o.discounts as Record<string, unknown>)) { const p = clampPct(Number(v)); if (p > 0) discounts[k.slice(0, 40)] = p }
+  const discountItems: PlanDiscountItem[] = []
+  if (Array.isArray(o.discountItems)) for (const it of o.discountItems as unknown[]) {
+    if (!it || typeof it !== 'object') continue
+    const x = it as Record<string, unknown>
+    const amount = Number(x.amount), pct = clampPct(Number(x.pct))
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1e8) continue
+    discountItems.push({ group: typeof x.group === 'string' ? x.group.slice(0, 120) : '', name: typeof x.name === 'string' ? x.name.slice(0, 160) : '', pct, amount: round2(amount) })
+  }
+  const discountTotal = round2(discountItems.reduce((a, i) => a + i.amount, 0))
   const startDate = typeof o.startDate === 'string' && parseDay(o.startDate) ? o.startDate : ''
   return {
     version: 1, startDate,
@@ -303,9 +347,16 @@ export function cleanPlan(raw: unknown): PaymentPlan | null {
     everyWeeks: Math.min(12, Math.max(1, Math.round(Number(o.everyWeeks) || 1))),
     depositPct: clampPct(Number(o.depositPct)), retentionPct: clampPct(Number(o.retentionPct)),
     retentionMonths: Math.min(60, Math.max(0, Math.round(Number(o.retentionMonths) || 0))),
-    days, rows, total: Number.isFinite(Number(o.total)) ? round2(Number(o.total)) : planSum(rows),
+    days, discounts, discountItems, discountTotal, rows, total: Number.isFinite(Number(o.total)) ? round2(Number(o.total)) : planSum(rows),
     showToClient: o.showToClient !== false, generatedAt: typeof o.generatedAt === 'string' ? o.generatedAt : '',
   }
+}
+
+/** The three figures the customer is shown: the quote total, the customer discount, and what they pay (always the sum of the payments, so it cannot disagree with them). */
+export function planTotals(plan: PaymentPlan): { gross: number; discount: number; payable: number } {
+  const payable = planSum(plan.rows)
+  const discount = plan.discountTotal > 0 ? plan.discountTotal : 0
+  return { gross: round2(payable + discount), discount, payable }
 }
 
 /** A plan the customer is allowed to see: switched on, and with at least one payment. */

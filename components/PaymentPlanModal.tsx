@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { QuotePhase } from '@/lib/types'
-import { fmt } from '@/lib/utils'
+import { fmt, VAT } from '@/lib/utils'
 import { planKeys, planTasksFromQuote, planQuoteTotal } from '@/lib/payment-plan-quote'
 import {
   DEFAULT_SETTINGS, addDaysTo, cleanDays, generatePlan, isoDayOf, monthlyTotals, parseDay, planProblems, planSum, suggestDays, workDayToCalDay,
@@ -43,6 +43,14 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
     phases.forEach((p, i) => { d[keys[i]] = plan?.days?.[keys[i]] ?? suggestDays(p) })
     return d
   })
+  // customer discount %, by sub-phase key (only those above 0 are kept)
+  const [discounts, setDiscounts] = useState<Record<string, number>>(plan?.discounts ?? {})
+  const setDiscount = (keys: string[], v: number) => setDiscounts(d => {
+    const n = { ...d }
+    const p = Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : 0
+    for (const k of keys) { if (p > 0) n[k] = p; else delete n[k] }
+    return n
+  })
   const [rows, setRows] = useState<PlanRow[]>(plan?.rows ?? [])
   const [edited, setEdited] = useState(false)   // rows changed by hand since they were worked out
 
@@ -61,13 +69,18 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
   const startD = parseDay(start)
   const finishLabel = startD ? addDaysTo(startD, workDayToCalDay(startD, totalDays)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''
 
-  const candidate: PaymentPlan = { ...generatePlan(tasks, days, settings, total, new Date(), show), rows }
+  const candidate: PaymentPlan = { ...generatePlan(tasks, days, settings, total, new Date(), show, discounts), rows }
   const problems = planProblems(candidate, total).filter(p => !(rows.length === 0))
   const months = monthlyTotals(candidate)
+  // the discount typed for a phase's tasks: the one figure when they all agree, else 'mixed'
+  const groupPct = (ks: string[]): number | 'mixed' | '' => {
+    const first = discounts[ks[0]] ?? 0
+    return ks.every(k => (discounts[k] ?? 0) === first) ? (first === 0 ? '' : first) : 'mixed'
+  }
 
   function work() {
     if (edited && rows.length > 0 && !confirm('Working the payments out again replaces the changes you made to them by hand. Carry on?')) return
-    setRows(generatePlan(tasks, days, settings, total).rows)
+    setRows(generatePlan(tasks, days, settings, total, new Date(), show, discounts).rows)
     setEdited(false)
   }
   function setRow(id: string, patch: Partial<PlanRow>) { setRows(r => r.map(x => (x.id === id ? { ...x, ...patch } : x))); setEdited(true) }
@@ -90,7 +103,7 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
         <div className="form-modal-bd" style={{ overflowY: 'auto' }}>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 14 }}>
             Works out when each part of the price falls due, so the customer can plan their cash flow before the job is confirmed. It is kept with the quote, shown to the customer in the quote and in their portal, and goes with the job when the quote is accepted.
-            Quote total <strong>{fmt(total)}</strong>{vatOn ? ' including VAT' : ' (no VAT)'}.
+            Quote total <strong>{fmt(total)}</strong>{vatOn ? ' including VAT' : ' (no VAT)'}. A <strong>customer discount</strong> can be set on any task (or a whole phase): it comes off before the deposit, stages and retention are worked out.
           </div>
 
           {/* 1. Timescales */}
@@ -109,19 +122,37 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
           <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16, maxHeight: 260, overflowY: 'auto' }}>
             {groups.map(g => (
               <div key={g.name}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--warm, #f3efe9)', padding: '6px 10px', fontSize: 12, fontWeight: 700 }}>
-                  <span>{g.name}</span><span>{fmt(g.value)} · {g.items.reduce((a, i) => a + cleanDays(days[i.key] ?? 1), 0)} days</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--warm, #f3efe9)', padding: '6px 10px', fontSize: 12, fontWeight: 700 }}>
+                  <span>{g.name}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span>{fmt(g.value)} · {g.items.reduce((a, i) => a + cleanDays(days[i.key] ?? 1), 0)} days</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }} title="Sets the customer discount on every task in this phase">
+                      Discount all
+                      <input type="number" min={0} max={100} step={0.5} placeholder={groupPct(g.items.map(i => i.key)) === 'mixed' ? 'mixed' : '0'}
+                        value={groupPct(g.items.map(i => i.key)) === 'mixed' ? '' : groupPct(g.items.map(i => i.key))}
+                        onChange={e => setDiscount(g.items.map(i => i.key), e.target.value === '' ? 0 : Number(e.target.value))}
+                        style={{ ...inp, width: 68, padding: '3px 6px' }} />%
+                    </label>
+                  </span>
                 </div>
                 {g.items.map(i => (
-                  <div key={i.key} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px', gap: 8, alignItems: 'center', padding: '4px 10px', fontSize: 12, borderTop: '1px solid var(--border)' }}>
+                  <div key={i.key} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 92px', gap: 8, alignItems: 'center', padding: '4px 10px', fontSize: 12, borderTop: '1px solid var(--border)' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
                     <span style={{ textAlign: 'right', color: 'var(--muted)' }}>{fmt(i.value)}</span>
                     <span><input type="number" min={1} max={400} value={days[i.key] ?? 1} onChange={e => setDays(d => ({ ...d, [i.key]: cleanDays(e.target.value) }))} style={{ ...inp, width: 60, padding: '3px 6px' }} /> days</span>
+                    <span title="Customer discount on this task"><input type="number" min={0} max={100} step={0.5} value={discounts[i.key] ?? ''} placeholder="0" onChange={e => setDiscount([i.key], e.target.value === '' ? 0 : Number(e.target.value))} style={{ ...inp, width: 58, padding: '3px 6px' }} /> %</span>
                   </div>
                 ))}
               </div>
             ))}
           </div>
+
+          {candidate.discountTotal > 0 && (
+            <div style={{ fontSize: 12.5, lineHeight: 1.55, background: '#f6fbf1', border: '1px solid #c9e2b3', borderRadius: 8, padding: '8px 12px', margin: '-6px 0 16px' }}>
+              <strong>Customer discount {fmt(candidate.discountTotal)}</strong> off the quote total of {fmt(total)}, so the customer pays <strong>{fmt(total - candidate.discountTotal)}</strong>.
+              {' '}It comes straight off your profit: {fmt(candidate.discountTotal / (vatOn ? 1 + VAT : 1))} before VAT. The customer sees it as its own line, "Customer discount".
+            </div>
+          )}
 
           {/* 2. How they pay */}
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>2. How the customer pays</div>

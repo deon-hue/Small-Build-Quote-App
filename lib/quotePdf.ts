@@ -17,7 +17,7 @@ import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
 import { scopeHeadings, stripScopeMarks } from './scope-format'
 import { visiblePlan, monthlyTotals } from './payment-plan'
-import { planIntro, planLines } from './payment-plan-html'
+import { planDiscountLines, planIntro, planLines } from './payment-plan-html'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -463,6 +463,14 @@ export async function buildQuotePdf(
     y -= 12
     for (const l of introLines) { drawText(page, l, MARGIN, y, 8, fontRegular, C.body); y -= lineH }
     y -= 6
+    for (const dl of planDiscountLines(thePlan)) {
+      ensureSpace(16)
+      const f = dl.strong ? fontBold : fontRegular
+      drawText(page, safe(dl.label), MARGIN + 2, y, 8.5, f, C.body)
+      drawText(page, safe(dl.amount), MARGIN + CONTENT_W - f.widthOfTextAtSize(safe(dl.amount), 8.5) - 2, y, 8.5, f, C.body)
+      y -= 12
+    }
+    if (thePlan.discountTotal > 0) y -= 6
     const AMT_W = 80
     for (const row of planLines(thePlan)) {
       const what = await wrapText(safe(row.what), fontBold, 8.5, CONTENT_W - AMT_W - 12)
