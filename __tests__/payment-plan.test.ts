@@ -142,5 +142,59 @@ t('parseDay rejects 31 Feb', P.parseDay('2027-02-31') === null && P.parseDay('')
   const bad = P.cleanPlan({ version: 1, rows: [], discounts: { a: 900, b: -3, c: 'x' }, discountItems: [{ name: 'ok', group: 'g', pct: 5, amount: 10 }, { amount: -5 }, null, { amount: 'z' }] })
   t('hostile discount values are cleaned', !!bad && bad.discounts.a === 100 && !('b' in bad.discounts) && !('c' in bad.discounts) && bad.discountItems.length === 1 && bad.discountTotal === 10, bad)
 }
+// ---- one payment per TASK, and materials/labour split (two dates)
+{
+  const mt: P.PlanTask[] = [
+    { key: 'a', group: 'Foundations', name: 'Dig', value: 6000, days: 3, materials: 1000 },
+    { key: 'b', group: 'Foundations', name: 'Concrete', value: 6000, days: 2, materials: 3000 },
+    { key: 'c', group: 'Structure', name: 'Walls', value: 12000, days: 10, materials: 5000 },
+  ]
+  const base = { ...S, depositPct: 0, retentionPct: 0 }
+  const byTask = P.generateRows(mt, { ...base, stageBy: 'task' }, 24000)
+  t('per task: one payment for each task (3)', byTask.length === 3 && byTask.map(r => r.amount).join() === '6000,6000,12000', byTask.map(r => r.amount))
+  t('per task: descriptions name group and task', /Foundations: Dig/.test(byTask[0].description) && /Structure: Walls/.test(byTask[2].description), byTask.map(r => r.description))
+  t('per task: due on each task finishing (offsets 2, 4, 18)', byTask.map(r => r.dueDay).join() === '2,4,18', byTask.map(r => r.dueDay))
+  const byPhase = P.generateRows(mt, { ...base, stageBy: 'phase' }, 24000)
+  t('per phase (the old way) is still 2 payments', byPhase.length === 2 && byPhase[0].amount === 12000, byPhase.map(r => r.amount))
+  const noStage = P.generateRows(mt, base, 24000)
+  t('settings without stageBy behave as per phase', noStage.length === 2)
+  const sp = P.generateRows(mt, { ...base, stageBy: 'task', splitMaterials: true }, 24000)
+  t('split per task: 6 payments adding to 24,000', sp.length === 6 && near(P.planSum(sp), 24000), sp.map(r => r.amount))
+  t('split per task: amounts in the order they fall due', sp.map(r => r.amount).join() === '1000,5000,3000,3000,5000,7000', sp.map(r => r.amount))
+  t('split per task: materials due when the task starts, labour when it finishes (0,2,3,4,7,18)', sp.map(r => r.dueDay).join() === '0,2,3,4,7,18', sp.map(r => r.dueDay))
+  t('split per task: wording', /^Materials for Foundations: Dig/.test(sp[0].description) && /^Labour and other work on completion of Foundations: Dig/.test(sp[1].description), sp.map(r => r.description))
+  t('split per task: last is the final payment', sp[5].kind === 'final' && sp.slice(0, 5).every(r => r.kind === 'stage'), sp.map(r => r.kind))
+  const spPhase = P.generateRows(mt, { ...base, stageBy: 'phase', splitMaterials: true }, 24000)
+  t('split per phase: materials 4,000 at the phase start, labour 8,000 at its end, then 5,000 and 7,000', spPhase.map(r => r.amount).join() === '4000,8000,5000,7000' && spPhase.map(r => r.dueDay).join() === '0,4,7,18', [spPhase.map(r => r.amount), spPhase.map(r => r.dueDay)])
+  const spOff = P.generateRows(mt, { ...base, stageBy: 'task', splitMaterials: false }, 24000)
+  t('materials on the tasks but split off: no split', spOff.length === 3)
+  // with deposit and retention everything still adds up, the retention comes off the last (labour) payment
+  const full = P.generateRows(mt, { ...S, stageBy: 'task', splitMaterials: true }, 24000)
+  t('split with deposit and retention adds to the total', near(P.planSum(full), 24000), P.planSum(full))
+  t('split with retention: deposit first, retention last, the final is the walls labour less retention', full[0].kind === 'deposit' && full[full.length - 1].kind === 'retention' && full[full.length - 1].amount === 1200 && /less retention/.test(full[full.length - 2].description), full.map(r => [r.kind, r.amount]))
+  t('split with deposit: the materials payment is cut by the deposit in proportion (1000 x 0.9 = 900)', full[1].amount === 900, full[1])
+  // no materials or all materials
+  const none = P.generateRows(mt.map(x => ({ ...x, materials: 0 })), { ...base, stageBy: 'task', splitMaterials: true }, 24000)
+  t('no materials anywhere: split changes nothing (3 payments)', none.length === 3)
+  const allM = P.generateRows([{ ...mt[0], materials: 6000 }], { ...base, stageBy: 'task', splitMaterials: true }, 6000)
+  t('a task that is all materials is one payment when it starts', allM.length === 1 && /materials for/i.test(allM[0].description) && allM[0].dueDay === 0, allM)
+  const over = P.generateRows([{ ...mt[0], materials: 99999 }], { ...base, stageBy: 'task', splitMaterials: true }, 6000)
+  t('materials over the value are held to the value', over.length === 1 && over[0].amount === 6000, over)
+  // a customer discount scales the materials with the value
+  const d = P.applyDiscounts([{ ...mt[2], discountPct: 10 }])
+  t('discount scales the materials too (5,000 -> 4,500)', d.tasks[0].value === 10800 && d.tasks[0].materials === 4500, d.tasks[0])
+  const dRows = P.generateRows(mt.map(x => ({ ...x, discountPct: x.key === 'c' ? 10 : 0 })), { ...base, stageBy: 'task', splitMaterials: true }, 24000)
+  t('discount with split: adds to 24,000 less 1,200', near(P.planSum(dRows), 22800) && dRows[4].amount === 4500 && dRows[5].amount === 6300, dRows.map(r => r.amount))
+  // stored plans
+  const plan = P.generatePlan(mt, {}, { ...S, stageBy: 'task', splitMaterials: true }, 24000)
+  const back = P.cleanPlan(JSON.parse(JSON.stringify(plan)))
+  t('the two choices survive being stored', !!back && back.stageBy === 'task' && back.splitMaterials === true, back)
+  const old2 = P.cleanPlan({ version: 1, rows: [{ kind: 'stage', amount: 50, description: 'x', dueDay: 3 }] })
+  t('a plan saved before reads as per phase, not split', !!old2 && old2.stageBy === 'phase' && old2.splitMaterials === false, old2)
+  const junk = P.cleanPlan({ version: 1, rows: [], stageBy: 'banana', splitMaterials: 'yes' })
+  t('junk choices are cleaned', !!junk && junk.stageBy === 'phase' && junk.splitMaterials === false, junk)
+  const wk = P.generateRows(mt, { ...base, mode: 'periodic', everyWeeks: 1, stageBy: 'task', splitMaterials: true }, 24000)
+  t('weekly mode ignores the two choices (adds up, no Materials-for rows)', near(P.planSum(wk), 24000) && !wk.some(r => /^Materials for/.test(r.description)), wk.map(r => r.description))
+}
 console.log(`payment plan: ${ok} ok, ${bad} failed`)
 if (bad > 0) process.exit(1)
