@@ -157,6 +157,8 @@ export interface QuotePhase {
   miscItems?: QuoteMiscItem[]
   /** Set true when the AI phase-review has been run and "Complete Phase" clicked */
   aiReviewed?: boolean
+  /** The estimator has priced this sub-phase and checked it is finished (the green tick in the quote builder). Internal progress only: never shown to the client. */
+  checked?: boolean
   /** Visual assigned during AI phase review — shown in workspace + client quote */
   phaseImage?: { emoji: string; color: string; photoUrl?: string }
 }

@@ -1447,13 +1447,27 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       <div
         style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flexWrap: 'wrap',
-          background: p.needsReview ? '#fffbeb' : '#f8fafc',
+          background: p.checked ? '#f0fdf4' : p.needsReview ? '#fffbeb' : '#f8fafc',
           cursor: 'pointer', userSelect: 'none',
-          borderLeft: p.needsReview ? '3px solid #f59e0b' : 'none',
+          borderLeft: p.checked ? '3px solid #16a34a' : p.needsReview ? '3px solid #f59e0b' : 'none',
         }}
         onClick={() => toggle(colKey)}
       >
         <span style={{ color: '#94a3b8', fontSize: 11, width: 12, flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
+        {/* Checked: the estimator has priced this sub-phase and says it is finished. Ticking it also clears a 'Needs Review' flag, since checking it is the review. */}
+        <button
+          type="button"
+          disabled={isLocked}
+          aria-pressed={!!p.checked}
+          aria-label={p.checked ? 'Checked and complete (click to untick)' : 'Mark this sub-phase as checked and complete'}
+          title={isLocked ? (p.checked ? 'Checked and complete' : 'Not checked yet') : p.checked ? 'Checked and complete. Click to untick.' : 'Click when this sub-phase is priced, checked and complete'}
+          onClick={e => { e.stopPropagation(); onUpdate(p.checked ? { ...p, checked: false } : { ...p, checked: true, needsReview: false, reviewNote: undefined }) }}
+          style={{
+            width: 22, height: 22, minWidth: 22, borderRadius: '50%', padding: 0, flexShrink: 0, lineHeight: 1, fontSize: 13, fontWeight: 800,
+            border: p.checked ? '2px solid #16a34a' : '2px solid #cbd5e1', background: p.checked ? '#16a34a' : '#fff', color: '#fff',
+            cursor: isLocked ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >{p.checked ? '✓' : ''}</button>
         <input
           value={p.phase}
           readOnly={isLocked}
@@ -2066,6 +2080,8 @@ interface PhaseBlockProps {
   collapsed: Set<string>
   toggle: (k: string) => void
   onUpdatePhase: (p: QuotePhase) => void
+  /** tick or untick the 'checked' mark on several sub-phases at once (one change, so none is lost) */
+  onSetChecked: (ids: number[], checked: boolean) => void
   onDeletePhase: (id: number) => void
   onDuplicatePhase: (p: QuotePhase) => void
   onAddSubPhase: (mainPhase: string, room: string) => void
@@ -2083,12 +2099,16 @@ interface PhaseBlockProps {
   boTasks?: BOTask[]
 }
 
-function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems, boPhases = [], boSubPhases = [], boTasks = [] }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onSetChecked, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems, boPhases = [], boSubPhases = [], boTasks = [] }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
   const rooms  = getRoomLabels(phases, mainPhase)
   const [nameFocused, setNameFocused] = React.useState(false)
+  // how many of this phase's sub-phases are ticked as checked and complete
+  const subs = phases.filter(p => (p.parentPhase || '(No Phase)') === mainPhase)
+  const nChecked = subs.filter(p => p.checked).length
+  const allChecked = subs.length > 0 && nChecked === subs.length
 
   return (
     <div style={{ marginBottom: 16 }}>
@@ -2115,6 +2135,20 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
           title={isLocked ? undefined : 'Click to rename'}
         />
         {!isLocked && !nameFocused && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
+        {subs.length > 0 && (
+          <button
+            type="button"
+            disabled={isLocked}
+            onClick={e => { e.stopPropagation(); onSetChecked(subs.map(p => p.id), !allChecked) }}
+            title={isLocked ? `${nChecked} of ${subs.length} sub-phases checked` : allChecked ? 'Every sub-phase in this phase is checked. Click to untick them all.' : 'Tick every sub-phase in this phase as checked and complete'}
+            style={{
+              flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 99, lineHeight: 1.5,
+              border: allChecked ? '1px solid #16a34a' : '1px solid rgba(255,255,255,0.3)',
+              background: allChecked ? '#16a34a' : 'transparent', color: allChecked ? '#fff' : 'rgba(255,255,255,0.85)',
+              cursor: isLocked ? 'default' : 'pointer',
+            }}
+          >{allChecked ? '✓ All checked' : nChecked > 0 ? `✓ ${nChecked} of ${subs.length} checked` : 'Mark all checked'}</button>
+        )}
         <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533', flexShrink: 0 }} title="This phase's total, without VAT">
           {total > 0 ? fmt(total) : '—'}
         </span>
@@ -2342,6 +2376,13 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       return next
     })
   }
+  // tick or untick 'checked' on several sub-phases in ONE change (calling updatePhase for each would keep only the last)
+  function setChecked(ids: number[], checked: boolean) {
+    const set = new Set(ids)
+    onChange(phases.map(p => (set.has(p.id)
+      ? (checked ? { ...p, checked: true, needsReview: false, reviewNote: undefined } : { ...p, checked: false })
+      : p)))
+  }
   function deleteMain(name: string) {
     if (!confirm(`Delete phase "${name}" and all its contents?`)) return
     onChange(phases.filter(p => (p.parentPhase || '(No Phase)') !== name))
@@ -2484,6 +2525,20 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         </div>
       )}
 
+      {/* How many sub-phases are ticked as checked and complete (internal progress, never shown to the client) */}
+      {phases.length > 0 && (() => {
+        const nAll = phases.length
+        const nDone = phases.filter(p => p.checked).length
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 10px', fontSize: 12, color: '#475569' }} title="Tick a sub-phase's green circle when you have priced it and checked it is complete">
+            <div style={{ flex: 1, maxWidth: 220, height: 6, borderRadius: 99, background: '#e2e8f0', overflow: 'hidden' }}>
+              <div style={{ width: `${Math.round((100 * nDone) / nAll)}%`, height: '100%', background: '#16a34a' }} />
+            </div>
+            <span><strong style={{ color: nDone === nAll ? '#16a34a' : '#1e293b' }}>{nDone} of {nAll}</strong> sub-phases checked{nDone === nAll ? ' ✓' : ''}</span>
+          </div>
+        )
+      })()}
+
       {/* Phase blocks */}
       {mainPhases.map(mp => (
         <PhaseBlock
@@ -2496,6 +2551,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           collapsed={collapsed}
           toggle={toggle}
           onUpdatePhase={updatePhase}
+          onSetChecked={setChecked}
           onDeletePhase={deletePhase}
           onDuplicatePhase={duplicatePhase}
           onAddSubPhase={addSubPhase}
