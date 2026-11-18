@@ -4,19 +4,9 @@
 import type { QuotePhase } from './types'
 import { calcPhaseSell, phaseMarkup, VAT } from './utils'
 import { stripPhasePrefix } from './gantt-utils'
-import type { PlanTask } from './payment-plan'
+import { planKeys, type PlanTask } from './payment-plan'
 
-/** A key for each sub-phase that is the same every time the quote is opened (the quote screen renumbers phase ids on every load, so ids cannot be used):
- *  main phase, room and sub-phase name, with a number added when the very same three appear twice. */
-export function planKeys(phases: QuotePhase[]): string[] {
-  const seen = new Map<string, number>()
-  return phases.map(p => {
-    const base = [p.parentPhase || '', p.roomLabel || '', p.phase || ''].join('|')
-    const n = (seen.get(base) ?? 0) + 1
-    seen.set(base, n)
-    return n === 1 ? base : `${base}#${n}`
-  })
-}
+export { planKeys }
 
 /** The main phase a sub-phase is paid under: its parent phase, else its own name, without a "Phase 3 –" prefix. */
 export function planGroup(p: Pick<QuotePhase, 'parentPhase' | 'phase'>): string {

@@ -14,7 +14,7 @@ import PortalIntro from '@/components/PortalIntro'
 import type { PortalContract } from '@/contexts/PortalContext'
 import { useApp } from '@/contexts/AppContext'
 import { signedAttachmentUrl } from '@/lib/job-attachments'
-import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
+import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell, quoteDiscount } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
 import PortalSentView from '@/components/PortalSentView'
@@ -83,7 +83,7 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
 function quoteTotal(q: PreviewQuote): number {
   const sub = (q.phases as unknown as QuotePhase[]).reduce(
     (s, p) => s + calcPhaseSell(p, q.markup || 0), 0)
-  return sub * (q.vatIncluded ? 1.2 : 1)
+  return sub * (q.vatIncluded ? 1.2 : 1) - quoteDiscount({ phases: q.phases as unknown as QuotePhase[], markup: q.markup || 0, vatIncluded: q.vatIncluded, paymentPlan: (q as unknown as { paymentPlan?: unknown }).paymentPlan }).incVat
 }
 function phaseNet(phase: AnyRecord, markup: number): number {
   return calcPhaseSell(phase as unknown as QuotePhase, markup)

@@ -22,6 +22,18 @@ export type PlanMode = 'phase-end' | 'periodic'
 export type PlanStageBy = 'phase' | 'task'
 export type PlanRowKind = 'deposit' | 'stage' | 'final' | 'retention'
 
+/** A key for each sub-phase that is the same every time the quote is opened (the quote screen renumbers phase ids on every load, so ids cannot be used):
+ *  main phase, room and sub-phase name, with a number added when the very same three appear twice. */
+export function planKeys(phases: Pick<QuotePhase, 'parentPhase' | 'roomLabel' | 'phase'>[]): string[] {
+  const seen = new Map<string, number>()
+  return phases.map(p => {
+    const base = [p.parentPhase || '', p.roomLabel || '', p.phase || ''].join('|')
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    return n === 1 ? base : `${base}#${n}`
+  })
+}
+
 /** One sub-phase, as the plan needs it: where it sits, what it is worth (incl. VAT) and how many working days it has. */
 export interface PlanTask { key: string; group: string; name: string; value: number; days: number; /** customer discount %, 0 to 100 (none when absent) */ discountPct?: number; /** the part of `value` that is materials (incl. VAT), for a split payment */ materials?: number }
 

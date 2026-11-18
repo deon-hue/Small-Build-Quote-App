@@ -1,6 +1,6 @@
 import type { Quote } from './types'
 import type { Settings } from './types'
-import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell, phaseMarkup } from './utils'
+import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell, phaseMarkup, quoteDiscount } from './utils'
 import { clientRows } from './client-items'
 import { clientPhaseRows } from './client-phase-groups'
 import { getPhaseVisual } from './phase-visuals'
@@ -61,8 +61,9 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
   // products/plant), and a flat markup on top double-counts labour-trade
   // items, which already store their own marked-up sell price.
   const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
-  const vat = qVat ? sub * VAT : 0
-  const total = sub + vat
+  const discount = quoteDiscount(q).exVat   // the customer discount from the payment plan, before VAT
+  const vat = qVat ? (sub - discount) * VAT : 0
+  const total = sub - discount + vat
   const now = new Date()
 
   const itemTypeLabels: Record<string, string> = {
@@ -214,6 +215,10 @@ ${WHATS_INCLUDED_CSS}
         <div class="total-label">Subtotal (ex-VAT)</div>
         <div class="total-amount">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
       </div>
+      ${discount > 0.004 ? `<div class="total-row">
+        <div class="total-label">Customer discount</div>
+        <div class="total-amount">-£${discount.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>` : ''}
       ${qVat ? `<div class="total-row">
         <div class="total-label">VAT (20%)</div>
         <div class="total-amount">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
@@ -249,8 +254,9 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
   const now = new Date()
 
   const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
-  const vat = qVat ? sub * VAT : 0
-  const total = sub + vat
+  const discount = quoteDiscount(q).exVat   // the customer discount from the payment plan, before VAT
+  const vat = qVat ? (sub - discount) * VAT : 0
+  const total = sub - discount + vat
 
   // Build phase card rows — behaviour depends on quoteView
   const phaseRows = quoteView === 'total_only' ? '' : clientPhaseRows(q.phases).map(row => {
@@ -427,6 +433,10 @@ ${WHATS_INCLUDED_CSS}
         <div class="total-label">Subtotal (ex-VAT)</div>
         <div class="total-amount">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
       </div>
+      ${discount > 0.004 ? `<div class="total-row">
+        <div class="total-label">Customer discount</div>
+        <div class="total-amount">-£${discount.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>` : ''}
       ${qVat ? `<div class="total-row">
         <div class="total-label">VAT (20%)</div>
         <div class="total-amount">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>

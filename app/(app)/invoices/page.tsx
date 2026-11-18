@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { clientAddressBlock } from '@/components/NewClientModal'
-import { fmt, fmtK, calcPhaseSell, jobDisplayTitle } from '@/lib/utils'
+import { fmt, fmtK, calcPhaseSell, jobDisplayTitle, quoteDiscountPerPhase } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
 import { planToMilestones } from '@/lib/payment-plan'
@@ -170,6 +170,13 @@ export default function InvoicesPage() {
           const sell = calcPhaseSell(p, linked.markup)
           return { id: ++lineCounter, desc: p.phase, qty: 1, unitPrice: Math.round(sell * 100) / 100, total: Math.round(sell * 100) / 100 }
         })
+      // the customer discount the quote's payment plan gives on the phases billed here, as its own visible negative line (before VAT, like the other lines)
+      const perPhase = quoteDiscountPerPhase(linked)
+      const discIncVat = linked.phases.reduce((s, p, i) => s + (alreadyInvoicedDescs.has(p.phase) ? 0 : perPhase[i]), 0)
+      if (items.length && discIncVat > 0.004) {
+        const exVat = Math.round((linked.vatIncluded ? discIncVat / 1.2 : discIncVat) * 100) / 100
+        items.push({ id: ++lineCounter, desc: 'Customer discount', qty: 1, unitPrice: -exVat, total: -exVat })
+      }
       setLineItems(items.length ? items : [BLANK_LINE()])
     } else {
       setLineItems([{ id: ++lineCounter, desc: jobDisplayTitle(job) + ' works', qty: 1, unitPrice: job.value, total: job.value }])

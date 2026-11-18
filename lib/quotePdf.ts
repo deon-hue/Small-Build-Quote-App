@@ -9,7 +9,7 @@
 
 import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
-import { calcPhaseSell, calcItemSell, VAT, phaseMarkup } from './utils'
+import { calcPhaseSell, calcItemSell, VAT, phaseMarkup, quoteDiscount } from './utils'
 import { clientRows } from './client-items'
 import { clientPhaseRows } from './client-phase-groups'
 import { PRODUCT_NAME } from './product-config'
@@ -136,7 +136,9 @@ export async function buildQuotePdf(
   const qVat = quote.vatIncluded
   const now = new Date()
 
-  const net = quote.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
+  const sub = quote.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
+  const discount = quoteDiscount(quote).exVat   // the customer discount from the payment plan, before VAT
+  const net = sub - discount                    // what VAT is charged on
   const vat = qVat ? net * VAT : 0
   const total = net + vat
   const validUntil = new Date(now.getTime() + 30 * 864e5)
@@ -434,7 +436,8 @@ export async function buildQuotePdf(
   } else {
     // 'full' / 'phases': subtotal rows then total bar
     const totalsRows: [string, string][] = [
-      ['Subtotal (ex-VAT)', fmtGBP(net)],
+      ['Subtotal (ex-VAT)', fmtGBP(sub)],
+      ...(discount > 0.004 ? [['Customer discount', '-' + fmtGBP(discount)] as [string, string]] : []),
       ...(qVat ? [['VAT (20%)', fmtGBP(vat)] as [string, string]] : [['* VAT not included', ''] as [string, string]]),
     ]
     ensureSpace(TROW_H * (totalsRows.length + 1) + 20)

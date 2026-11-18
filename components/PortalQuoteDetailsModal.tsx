@@ -2,7 +2,7 @@
 
 import { showHtmlDocument } from '@/lib/open-document'
 import { useState } from 'react'
-import { calcItemSell, calcPhaseSell, fmt, phaseMarkup } from '@/lib/utils'
+import { calcItemSell, calcPhaseSell, fmt, phaseMarkup, quoteDiscount } from '@/lib/utils'
 import { clientRows } from '@/lib/client-items'
 import { clientPhaseRows } from '@/lib/client-phase-groups'
 import type { Quote } from '@/lib/types'
@@ -98,8 +98,9 @@ export default function PortalQuoteDetailsModal({
   const allKeys = phaseRows.flatMap(r => lineGroups(r.phase).map(g => g.key))
 
   const subtotal = quote.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0)
-  const vatAmount = quote.vatIncluded ? subtotal * 0.20 : 0
-  const total = subtotal + vatAmount
+  const discount = quoteDiscount(quote).exVat   // the customer discount from the payment plan, before VAT
+  const vatAmount = quote.vatIncluded ? (subtotal - discount) * 0.20 : 0
+  const total = subtotal - discount + vatAmount
   const isApproved = quote.status === 'accepted'
 
   const hasFullDescriptions = quote.phases.some(p => p.scopeDetail?.trim())
@@ -159,6 +160,12 @@ export default function PortalQuoteDetailsModal({
           <div style="padding: 10px; background: #fafaf8; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between;">
             <span>Subtotal (ex. VAT)</span>
             <strong>${fmt(subtotal)}</strong>
+          </div>
+        ` : ''}
+        ${discount > 0.004 ? `
+          <div style="padding: 10px; background: #fafaf8; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between;">
+            <span>Customer discount</span>
+            <strong>-${fmt(discount)}</strong>
           </div>
         ` : ''}
         ${quote.vatIncluded ? `
@@ -514,6 +521,12 @@ export default function PortalQuoteDetailsModal({
               <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
                 <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
+              </div>
+            )}
+            {quoteView !== 'total_only' && discount > 0.004 && (
+              <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Customer discount</span>
+                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>-{fmt(discount)}</span>
               </div>
             )}
             {quoteView !== 'total_only' && quote.vatIncluded && (

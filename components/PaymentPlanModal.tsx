@@ -105,7 +105,7 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
         <div className="form-modal-bd" style={{ overflowY: 'auto' }}>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 14 }}>
             Works out when each part of the price falls due, so the customer can plan their cash flow before the job is confirmed. It is kept with the quote, shown to the customer in the quote and in their portal, and goes with the job when the quote is accepted.
-            Quote total <strong>{fmt(total)}</strong>{vatOn ? ' including VAT' : ' (no VAT)'}. A <strong>customer discount</strong> can be set on any task (or a whole phase): it comes off before the deposit, stages and retention are worked out.
+            Quote total <strong>{fmt(total)}</strong>{vatOn ? ' including VAT' : ' (no VAT)'}. A <strong>customer discount</strong> can be set on any task (or a whole phase): it comes off before the deposit, stages and retention are worked out, and it also comes off the quote's own total (shown to the customer as its own line) while the plan is shown to the customer.
           </div>
 
           {/* 1. Timescales */}
@@ -152,7 +152,7 @@ export default function PaymentPlanModal({ phases, markup, vatOn, plan, onSave, 
           {candidate.discountTotal > 0 && (
             <div style={{ fontSize: 12.5, lineHeight: 1.55, background: '#f6fbf1', border: '1px solid #c9e2b3', borderRadius: 8, padding: '8px 12px', margin: '-6px 0 16px' }}>
               <strong>Customer discount {fmt(candidate.discountTotal)}</strong> off the quote total of {fmt(total)}, so the customer pays <strong>{fmt(total - candidate.discountTotal)}</strong>.
-              {' '}It comes straight off your profit: {fmt(candidate.discountTotal / (vatOn ? 1 + VAT : 1))} before VAT. The customer sees it as its own line, "Customer discount".
+              {' '}It comes straight off your profit: {fmt(candidate.discountTotal / (vatOn ? 1 + VAT : 1))} before VAT. The customer sees it as its own line, "Customer discount", in the quote's totals and in the plan.{!show && ' This plan is not shown to the customer, so the discount does NOT come off the quote total.'}
             </div>
           )}
 

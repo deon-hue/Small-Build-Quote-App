@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { usePortal } from '@/contexts/PortalContext'
-import { calcPhaseSell, fmt } from '@/lib/utils'
+import { calcPhaseSell, fmt, quoteDiscount } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Quote } from '@/lib/types'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
@@ -87,8 +87,8 @@ export default function PortalQuotesPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {quotes.map(q => {
             const subtotal = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup), 0)
-            const vatAmount = q.vatIncluded ? subtotal * 0.20 : 0
-            const total = subtotal + vatAmount
+            const vatAmount = q.vatIncluded ? (subtotal - quoteDiscount(q).exVat) * 0.20 : 0
+            const total = subtotal - quoteDiscount(q).exVat + vatAmount
             const groupId = q.parentQuoteId || q.id
             const isCurrentVersion = currentVersionMap.get(groupId) === q.id
             const isSuperseded = q.versionNumber && !isCurrentVersion
@@ -213,6 +213,7 @@ export default function PortalQuotesPage() {
                     {fmt(
                       approvingQuote.phases.reduce((s, p) => s + calcPhaseSell(p, approvingQuote.markup), 0)
                       * (approvingQuote.vatIncluded ? 1.2 : 1)
+                      - quoteDiscount(approvingQuote).incVat
                     )}
                     {approvingQuote.vatIncluded && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>inc. VAT</span>}
                   </span>
