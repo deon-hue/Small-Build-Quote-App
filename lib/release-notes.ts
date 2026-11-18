@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-18T12:00:00+00:00',
+    title: 'Take-off: load a plan from a lead\'s files',
+    detail: 'In Take-off, Add Plan then From a customer\'s files now has a Lead choice. It lists the leads that have pictures or PDFs (the ones that came with the enquiry or that you added to the lead) and loads the one you pick as a plan. If the take-off client was picked from the leads, the window opens straight on that lead; otherwise it looks for a lead with the same email, phone or name. No new SQL.',
+  },
+  {
     at: '2026-11-17T15:00:00+00:00',
     title: 'Payment plan: a payment for each task, and materials and labour on two dates',
     detail: 'In the Payment plan window, paying on completion now has two choices. You can have one payment for each main phase or for each task, so two tasks under one phase can be paid at different times. And you can give each payment two dates: the materials fall due when the phase or task starts, and the labour and everything else on completion. The materials come from the materials lines in the quote. Every date can still be changed by hand. The deposit, retention and any customer discount still work, and the payments still add up exactly. Plans saved before this are unchanged. No new SQL.',

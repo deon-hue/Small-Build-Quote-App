@@ -10728,7 +10728,7 @@ export default function TakeoffPage() {
           </div>
         </div>
       )}
-      <ClientFilePicker open={filePickerOpen} onClose={() => setFilePickerOpen(false)} takeoffClient={{ id: project.clientId, name: project.client?.name }}
+      <ClientFilePicker open={filePickerOpen} onClose={() => setFilePickerOpen(false)} takeoffClient={{ id: project.clientId || project.client?.id, name: project.client?.name, email: project.client?.email, phone: project.client?.phone }}
         onPick={file => { setFilePickerOpen(false); loadPlanFile(file) }} />
 
       {/* ── Client / Project modal ─────────────────────────────────────────── */}
