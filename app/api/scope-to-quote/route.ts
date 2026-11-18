@@ -21,6 +21,7 @@ import { solidBrickPromptGuide } from '@/lib/solid-brick-ai'
 import { floorRoofPromptGuide } from '@/lib/floor-roof-ai'
 import { joineryPromptGuide } from '@/lib/joinery-ai'
 import { structuralPromptGuide } from '@/lib/structural-ai'
+import { oldPhasesToHide, redirectOldPhases } from '@/lib/ai-calc-first'
 
 export const maxDuration = 300
 
@@ -67,6 +68,8 @@ async function buildLibraryFromDB(userId: string): Promise<{
   calcPhases: { name: string; parent: string; ask: string; hint: string }[]
   /** "What this covers" for each sub-phase, by name: the company's own wording, otherwise the built-in suggestion */
   hintByName: Record<string, string>
+  /** old task-based sub-phases (by name) that a calculator the company has now prices, with the calculator's name: never shown to the AI (lib/ai-calc-first.ts) */
+  oldToCalc: Map<string, string>
 } | null> {
   const sb = await createClient()
 
@@ -161,7 +164,8 @@ async function buildLibraryFromDB(userId: string): Promise<{
     phaseTaskMap[phaseName].push(t.name)
   }
 
-  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap, calcPhases, hintByName } : null
+  const oldToCalc = oldPhasesToHide((subPhases ?? []).map(sp => ({ name: sp.name as string, canonical_id: sp.canonical_id as string | null })))
+  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap, calcPhases, hintByName, oldToCalc } : null
 }
 
 // ── Static fallback library builder ───────────────────────────────────────────
@@ -241,6 +245,7 @@ export async function POST(req: NextRequest) {
   let usingDB = false
   let calcPhases: { name: string; parent: string; ask: string; hint: string }[] = []
   let hintByName: Record<string, string> = {}
+  let oldToCalc = new Map<string, string>()
 
   if (user) {
     const dbLib = await buildLibraryFromDB(user.id)
@@ -250,6 +255,7 @@ export async function POST(req: NextRequest) {
       rateMap = dbLib.rateMap
       calcPhases = dbLib.calcPhases
       hintByName = dbLib.hintByName
+      oldToCalc = dbLib.oldToCalc
       usingDB = true
     } else {
       // User exists but Back Office not set up yet — use static defaults
@@ -267,7 +273,8 @@ export async function POST(req: NextRequest) {
 
   // Compact library text — "Phase name": task1 | task2 | task3
   const calcByName = new Map(calcPhases.map(c => [c.name, c]))
-  const libraryLines = Object.entries(phaseTaskMap).filter(([phase]) => !calcByName.has(phase)).map(([phase, tasks]) =>
+  // the old task-based sub-phases a calculator replaces are not offered at all: the quote always uses the new calculators unless a sub-phase has none
+  const libraryLines = Object.entries(phaseTaskMap).filter(([phase]) => !calcByName.has(phase) && !oldToCalc.has(phase)).map(([phase, tasks]) =>
     `"${phase}"${hintByName[phase] ? ` (covers: ${hintByName[phase]})` : ''}: ${tasks.join(' | ')}`
   )
   // Calculator sub-phases are priced by their calculator, not from tasks, so they are listed on their own (even with no tasks)
@@ -321,7 +328,7 @@ Rules:
 - Always include Preliminaries for any construction project
 - VAULTED CEILINGS: if the scope has a vaulted ceiling (a ceiling that follows the roof slope, exposed or lined rafters, a cathedral ceiling, no flat ceiling under the roof), ALSO select the "Vaulted ceiling" tasks (insulation between and under the rafters, plasterboard to the rafters, skim) from the Plastering & Boarding phase: they are not part of the roof structure, so they are never in the roof calculator
 - Include Completion & Handover for all projects
-- PREFER the calculator lines. Where a library line marked [PRICED BY CALCULATOR] covers the work (read what it "covers"), choose it instead of a general task-based phase for the same work. For example, for a new external cavity wall choose the cavity wall calculator line, not a general "Masonry & Blockwork" phase.
+- ALWAYS use the calculator lines. Where a library line marked [PRICED BY CALCULATOR] covers the work (read what it "covers"), you MUST choose it and never a task-based phase for the same work, even when the scope gives few details for it (choose the calculator line anyway and give only the sizes the scope states). Use a task-based phase only for work that no calculator line covers. For example, for a new external cavity wall choose the cavity wall calculator line, not a general "Masonry & Blockwork" phase.
 - A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those that say what to give, add a "measurements" object using ONLY the sizes the scope actually states for that element, in metres ("count" is a whole number): lengthM, widthM, heightM, depthM, count as that line asks. Include a size only if the scope states it; if the scope does not state the sizes a line needs, leave "measurements" out for it. Never guess or invent a size. If the scope gives several separate runs, walls or foundations of the same kind, add them up for a foundation length, but for a wall use the one stated wall.
   - ${electricsPromptGuide()}
   - ${plumbingPromptGuide()}
@@ -448,6 +455,10 @@ Analyse the scope and select appropriate phases and tasks from the library.`
       const real = parentPhaseMap[p.phase]
       if (real) p.parentPhase = real
     }
+    // If the AI still named an old task-based sub-phase that a calculator now prices, swap it for the calculator line (see lib/ai-calc-first.ts)
+    const redirected = redirectOldPhases(phases, oldToCalc, parentPhaseMap)
+    phases.splice(0, phases.length, ...redirected.phases)
+    if (redirected.swapped.length) console.warn('scope-to-quote: swapped old task-based phases for their calculators:', JSON.stringify(redirected.swapped))
 
     // Build a taskRates map so the client can hydrate estimator items with Back Office rates
     // without needing to call getPhaseEstimatorDefaults (which only knows the static library)
