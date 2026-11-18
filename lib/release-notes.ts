@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-18T15:00:00+00:00',
+    title: 'AI quote: always uses the new calculators',
+    detail: 'The AI quote writer no longer offers the old task-based sub-phases (fixed rates) for work that a calculator now prices: internal plastering, render, insulation, steelwork, windows and doors, drainage, the old room-by-room electrics and plumbing, staircases, kitchens, fitted furniture, skirtings, tiling, solid brick and timber frame walls, and the old demolition lines. If it still names one, it is swapped for the calculator line. Sub-phases with no calculator (ceiling plastering for vaulted ceilings, flashings, above-ground drainage, boiler and heating system, specialist finishes and so on) work as before. A calculator line the AI cannot size from the scope arrives blank for you to open. This only applies when your Back Office has the calculator, so open Back Office once if the newest calculators are missing. No new SQL.',
+  },
+  {
     at: '2026-11-18T12:00:00+00:00',
     title: 'Take-off: load a plan from a lead\'s files',
     detail: 'In Take-off, Add Plan then From a customer\'s files now has a Lead choice. It lists the leads that have pictures or PDFs (the ones that came with the enquiry or that you added to the lead) and loads the one you pick as a plan. If the take-off client was picked from the leads, the window opens straight on that lead; otherwise it looks for a lead with the same email, phone or name. No new SQL.',
