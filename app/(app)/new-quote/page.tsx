@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
 import VaultedCeilingReminder from '@/components/VaultedCeilingReminder'
-import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
+import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid, quoteDiscount } from '@/lib/utils'
 import { statusAfterUpdate, draftWouldHideFromClient, isQuoteVisibleToClient } from '@/lib/portal-visibility'
 import { unpublishedSignature, unpublishedDraftKey, parseUnpublishedDraft, serialiseUnpublishedDraft, shouldOfferUnpublishedDraft, draftValues, type QuoteEditValues } from '@/lib/unpublished-quote'
 import { PRODUCT_NAME } from '@/lib/product-config'
@@ -1801,8 +1801,10 @@ export default function NewQuotePage() {
   const cost = phases.reduce((s, p) => s + calcPhase(p), 0)
   const sell = phases.reduce((s, p) => s + calcPhaseSell(p, markup), 0)
   const mu = sell - cost
-  const vatAmt = vatOn ? sell * VAT : 0
-  const total = sell + vatAmt
+  // the customer discount from the payment plan (only a plan shown to the customer counts): it comes off before VAT, so the total follows it
+  const discount = quoteDiscount({ phases, markup, vatIncluded: vatOn, paymentPlan }).exVat
+  const vatAmt = vatOn ? (sell - discount) * VAT : 0
+  const total = sell - discount + vatAmt
 
   function mainPhaseTotal(parentPhase: string) {
     return phases.filter(p => p.parentPhase === parentPhase).reduce((s, p) => s + calcPhaseSell(p, markup), 0)
@@ -2431,6 +2433,7 @@ export default function NewQuotePage() {
             <div className="tot-row"><span>Your Cost</span><span className="mono" style={{ color: '#e67e22' }}>{fmt(cost)}</span></div>
             {quoteSource !== 'quick' && <div className="tot-row"><span>Markup ({markup}%)</span><span className="mono" style={{ color: '#7ab533' }}>{fmt(mu)}</span></div>}
             <div className="tot-row"><span>Sell Price (ex-VAT)</span><span className="mono">{fmt(sell)}</span></div>
+            {discount > 0.004 && <div className="tot-row" title="From the payment plan. It comes off the price before VAT, and off your profit."><span>Customer discount</span><span className="mono" style={{ color: '#b45309' }}>-{fmt(discount)}</span></div>}
             {vatOn && <div className="tot-row"><span>VAT (20%)</span><span className="mono" style={{ color: '#4a90a4' }}>{fmt(vatAmt)}</span></div>}
             <div className="tot-final">
               <span style={{ fontWeight: 700 }}>TOTAL</span>
@@ -2491,6 +2494,7 @@ export default function NewQuotePage() {
               )}
               <VaultedCeilingReminder phases={phases} />
               <QuoteWorkspace
+                customerDiscountExVat={discount}
                 phases={phases}
                 markup={markup}
                 vatOn={vatOn}

@@ -20,7 +20,7 @@ export function planDiscountLines(plan: PaymentPlan): { label: string; amount: s
   if (!(plan.discountTotal > 0)) return []
   const t = planTotals(plan)
   return [
-    { label: 'Quote total', amount: gbp(t.gross) },
+    { label: 'Price before discount', amount: gbp(t.gross) },
     ...plan.discountItems.map(i => ({ label: 'Customer discount: ' + (i.name || i.group || 'works'), amount: '-' + gbp(i.amount) })),
     { label: 'Total to pay', amount: gbp(t.payable), strong: true },
   ]

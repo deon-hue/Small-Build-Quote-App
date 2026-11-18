@@ -1,5 +1,6 @@
 import type { Quote, QuotePhase, QuoteItem, QuoteMiscItem, TemplatePhaseData, Job } from './types'
 import { getPhaseEstimatorDefaults } from './estimatorDefaults'
+import { visiblePlan, planKeys } from './payment-plan'
 
 export const VAT = 0.20
 
@@ -113,13 +114,34 @@ export function calcPhaseSell(p: QuotePhase, quoteMkp: number): number {
   return itemsSell + productsSell + plantSell + miscSell
 }
 
+/** The CUSTOMER DISCOUNT the quote's payment plan gives, worked out from the plan's percentages (by sub-phase) and the quote as it is NOW, so it follows an edited quote. incVat is what comes off the
+ *  total payable (the plan's own amounts include VAT when the quote has VAT); exVat is the same amount before VAT, for the Subtotal / VAT / Total block. Zero when there is no plan or no discount. */
+export function quoteDiscount(q: { phases: QuotePhase[]; markup?: number; vatIncluded?: boolean; paymentPlan?: unknown }): { exVat: number; incVat: number } {
+  const inc = Math.round(quoteDiscountPerPhase(q).reduce((s, x) => s + x, 0) * 100) / 100
+  return { incVat: inc, exVat: q.vatIncluded ? inc / (1 + VAT) : inc }
+}
+
+/** The same discount for each sub-phase, in the order of `q.phases`, in pounds INCLUDING VAT when the quote has VAT (0 for a sub-phase with none): what an invoice of just some phases needs. */
+export function quoteDiscountPerPhase(q: { phases: QuotePhase[]; markup?: number; vatIncluded?: boolean; paymentPlan?: unknown }): number[] {
+  const plan = q.paymentPlan ? visiblePlan(q.paymentPlan) : null   // only a plan that is switched on for the customer counts, so the client's views and the builder's agree
+  if (!plan || Object.keys(plan.discounts).length === 0) return q.phases.map(() => 0)
+  const keys = planKeys(q.phases)
+  const mult = q.vatIncluded ? 1 + VAT : 1
+  return q.phases.map((p, i) => {
+    const pct = plan.discounts[keys[i]]
+    if (!(pct > 0)) return 0
+    const value = Math.round(calcPhaseSell(p, q.markup || 0) * mult * 100) / 100
+    return Math.round((value * Math.min(100, pct) / 100 + Number.EPSILON) * 100) / 100
+  })
+}
+
 export function quoteTotal(q: Quote): number {
   // Use calcPhaseSell (not calcPhase + flat markup) so that labour-trade items
   // — which already store a sell price — are passed through without a second
   // markup hit. For standard quotes the result is identical; for quotes with
   // labour trades this prevents the global markup from being applied twice.
   const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup || 0), 0)
-  return sub * (q.vatIncluded ? 1 + VAT : 1)
+  return sub * (q.vatIncluded ? 1 + VAT : 1) - quoteDiscount(q).incVat   // less any customer discount given in the payment plan
 }
 
 // ── Per-job unique colours (matches calendar view) ───────────────────────────

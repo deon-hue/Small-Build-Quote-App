@@ -2232,6 +2232,8 @@ export interface QuoteWorkspaceProps {
   onOpenLibrary?:    () => void
   /** This quote's reference and id, so the breakdown never compares it with itself */
   quoteRefs?:        (string | undefined)[]
+  /** The customer discount (before VAT) the payment plan gives, shown in the footer and taken off its total */
+  customerDiscountExVat?: number
 }
 
 /** The collapse keys (main phase, room, sub-phase, task) that close the given phases. */
@@ -2247,7 +2249,7 @@ function collapseKeysFor(list: QuotePhase[], keys: Set<string>): Set<string> {
   return keys
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary, quoteRefs = [] }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary, quoteRefs = [], customerDiscountExVat = 0 }: QuoteWorkspaceProps) {
   // A quote opens with its phases collapsed (no flash of everything open first)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => collapseKeysFor(phases, new Set<string>()))
   const [search,    setSearch]    = useState('')
@@ -2420,8 +2422,9 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   // ── Grand totals ──────────────────────────────────────────────────────────
   const grandCost = phases.reduce((s, p) => s + calcPhase(p), 0)
   const grandSell = phases.reduce((s, p) => s + calcPhaseSell(p, markup), 0)
-  const grandVat  = vatOn ? grandSell * 0.2 : 0
-  const grandTotal = grandSell + grandVat
+  const grandDiscount = customerDiscountExVat > 0.004 ? customerDiscountExVat : 0
+  const grandVat  = vatOn ? (grandSell - grandDiscount) * 0.2 : 0
+  const grandTotal = grandSell - grandDiscount + grandVat
 
   const mainPhases = getMainPhases(visiblePhases)
 
@@ -2713,6 +2716,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 8, paddingTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Cost: <span style={{ fontFamily: 'monospace', color: '#e67e22', fontWeight: 600 }}>{fmt(grandCost)}</span></div>
           <div style={{ fontSize: 12, color: '#64748b' }}>Sell (ex-VAT): <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(grandSell)}</span></div>
+          {grandDiscount > 0 && <div style={{ fontSize: 12, color: '#64748b' }} title="From the payment plan, before VAT">Customer discount: <span style={{ fontFamily: 'monospace', color: '#b45309', fontWeight: 600 }}>-{fmt(grandDiscount)}</span></div>}
           {vatOn && <div style={{ fontSize: 12, color: '#64748b' }}>VAT: <span style={{ fontFamily: 'monospace', color: '#4a90a4' }}>{fmt(grandVat)}</span></div>}
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#7ab533' }}>Total: {fmt(grandTotal)}</div>
         </div>
