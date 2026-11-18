@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-19T12:00:00+00:00',
+    title: 'Customer discount now comes off the quote total',
+    detail: 'A customer discount set in the payment plan now also reduces the quote total. Everywhere the totals are shown (the quote builder summary and footer, the online quote, the PDF, the portal quote and its print-out, the portal quotes list and approval box, your portal preview, and the lists and dashboards) the block reads Subtotal, Customer discount (a minus line), VAT on the discounted amount, then Total, and the total matches the plan Total to pay. It follows the quote if you reprice a sub-phase. The discount only comes off the quote total while the payment plan is shown to the customer. The plan now starts with Price before discount. An invoice made from the job quote also gets a Customer discount line for the phases it bills. No new SQL.',
+  },
+  {
     at: '2026-11-18T17:00:00+00:00',
     title: 'Quote builder: tick a phase as checked and complete',
     detail: 'In the quote builder each sub-phase has a round tick at the left of its header: click it when the sub-phase is priced, checked and finished, and it goes green. Each main phase heading has a button that ticks or unticks every sub-phase in it at once (Mark all checked, 2 of 5 checked, All checked), and a progress line above the phases shows how many are checked. Ticking a sub-phase also clears its Needs Review flag. The tick is just for you: it is saved with the quote and never shown to the client. On a quote already sent, a tick waits for Update Quote like any other change. No new SQL.',
