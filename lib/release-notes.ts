@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-18T17:00:00+00:00',
+    title: 'Quote builder: tick a phase as checked and complete',
+    detail: 'In the quote builder each sub-phase has a round tick at the left of its header: click it when the sub-phase is priced, checked and finished, and it goes green. Each main phase heading has a button that ticks or unticks every sub-phase in it at once (Mark all checked, 2 of 5 checked, All checked), and a progress line above the phases shows how many are checked. Ticking a sub-phase also clears its Needs Review flag. The tick is just for you: it is saved with the quote and never shown to the client. On a quote already sent, a tick waits for Update Quote like any other change. No new SQL.',
+  },
+  {
     at: '2026-11-18T15:00:00+00:00',
     title: 'AI quote: always uses the new calculators',
     detail: 'The AI quote writer no longer offers the old task-based sub-phases (fixed rates) for work that a calculator now prices: internal plastering, render, insulation, steelwork, windows and doors, drainage, the old room-by-room electrics and plumbing, staircases, kitchens, fitted furniture, skirtings, tiling, solid brick and timber frame walls, and the old demolition lines. If it still names one, it is swapped for the calculator line. Sub-phases with no calculator (ceiling plastering for vaulted ceilings, flashings, above-ground drainage, boiler and heating system, specialist finishes and so on) work as before. A calculator line the AI cannot size from the scope arrives blank for you to open. This only applies when your Back Office has the calculator, so open Back Office once if the newest calculators are missing. No new SQL.',
