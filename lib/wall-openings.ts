@@ -140,6 +140,8 @@ export interface OpeningShape {
   labelAt: Pt
   /** the four corners of the gap (for picking it with the mouse) */
   gap: Pt[]
+  /** the middle of each jamb, on the wall's line: the start end (smaller distance along the wall) and the far end: where the drag handles for resizing go */
+  ends: [Pt, Pt]
 }
 
 const isLeafDoor = (k: PlacedKind) => k === 'door-front' || k === 'door-back' || k === 'door-composite' || k === 'door-security' || k === 'door-int-single' || k === 'door-int-fire'
@@ -251,7 +253,53 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
 
   const reach = Math.abs(hi - lo) / 2 + labelGapPx
   const labelAt = p(0, mid + labelSide * reach)
-  return { centre: C, tangent: T, widthPx: w, prims, labelAt, gap }
+  return { centre: C, tangent: T, widthPx: w, prims, labelAt, gap, ends: [p(-half, mid), p(half, mid)] }
+}
+
+export interface OpeningResizeOpts {
+  /** the narrowest and widest an opening may be made, mm (300 and 6000 to start) */
+  minMm?: number
+  maxMm?: number
+  /** the width is rounded to this many mm (10 to start) */
+  stepMm?: number
+  /** widths (mm) the result snaps to when it lands within `snapTolMm` of one (a standard size) */
+  snapTo?: number[]
+  snapTolMm?: number
+}
+
+/**
+ * Resize an opening by dragging one of its ends along its wall: the OTHER end stays where it is, the dragged end follows the pointer (projected onto the wall's straight length the opening is on), so the width and the centre
+ * both change. Returns the new centre distance and width, or null when the wall has no length. The opening is held on its one straight length (it never wraps a corner) and the width is rounded, kept within the limits and
+ * snapped to a standard width when it lands close to one.
+ */
+export function resizeOpeningEdge(
+  path: Pt[], closed: boolean, o: { distPx: number; widthMm: number }, mpp: number, edge: 'start' | 'end', pointer: Pt, opts: OpeningResizeOpts = {},
+): { distPx: number; widthMm: number } | null {
+  if (!(mpp > 0)) return null
+  const ls = legs(path, closed)
+  if (ls.length === 0) return null
+  const half = o.widthMm / (mpp * 1000) / 2
+  const at = pointAtDist(path, closed, clampDist(path, closed, o.distPx, half))
+  if (!at) return null
+  const leg = ls[at.seg]
+  const mmPerPx = mpp * 1000
+  // the pointer's place along this leg's own line (not clamped to the leg, so dragging past the end of the wall still reads as "as far as it goes")
+  const pointerDist = at.dist + ((pointer.x - at.x) * at.tx + (pointer.y - at.y) * at.ty)
+  const fixed = at.dist + (edge === 'start' ? half : -half)   // the end that stays put
+  const legEnd = edge === 'start' ? leg.start : leg.start + leg.len
+  const reachMm = Math.abs(fixed - legEnd) * mmPerPx            // how wide it can get before it runs off the wall
+  const minMm = opts.minMm ?? 300
+  const maxMm = Math.min(opts.maxMm ?? 6000, reachMm)
+  const rawMm = (edge === 'start' ? fixed - pointerDist : pointerDist - fixed) * mmPerPx
+  const step = opts.stepMm ?? 10
+  let w = Math.round(rawMm / step) * step
+  const tol = opts.snapTolMm ?? 15
+  const near = (opts.snapTo ?? []).filter(s => Math.abs(s - rawMm) <= tol).sort((a, b) => Math.abs(a - rawMm) - Math.abs(b - rawMm))[0]
+  if (near !== undefined) w = near
+  w = Math.max(Math.min(minMm, maxMm), Math.min(maxMm, w))
+  if (!(w > 0)) return null
+  const wPx = w / mmPerPx
+  return { distPx: edge === 'start' ? fixed - wPx / 2 : fixed + wPx / 2, widthMm: w }
 }
 
 /** The distance along the wall of the middle of the straight length that a distance falls on: where to put an opening to centre it on its side of the wall. */

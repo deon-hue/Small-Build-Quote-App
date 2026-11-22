@@ -106,8 +106,8 @@ import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
-import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, standardSizesFor, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
@@ -3502,6 +3502,32 @@ export default function TakeoffPage() {
     changePlaced(list => list.map(q => (q.id !== id ? q : hasSwing(q.kind) ? { ...q, swing: flippedSwing(q.swing) } : { ...q, flipped: !q.flipped })))
   }
 
+  /** drag one end of the picked opening along its wall to make it wider or narrower: the other end stays put, the width follows the pointer (rounded to 10mm, snapping to a standard door width) and the panel's Width box follows it */
+  function startOpeningResize(e: React.MouseEvent, o: PlacedOpening, edge: 'start' | 'end') {
+    e.stopPropagation(); e.preventDefault()
+    setSelectedOpeningId(o.id)
+    setPanelMode('properties')
+    setEditingItem((o.kind === STRUCTURAL_KIND ? structItem : wdItem) ?? null)
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const mpp = project.calibration.mpp
+    const wall = project.elements.find(el => el.id === o.wallId)
+    const g = wall ? wallGeometry(wall) : null
+    if (!g || !(mpp > 0)) return
+    const snapTo = o.kind === STRUCTURAL_KIND ? [] : standardSizesFor(o.kind).map(s => s.widthMm)
+    const move = (ev: MouseEvent) => {
+      const pt = { x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z }
+      changePlaced(list => list.map(q => {
+        if (q.id !== o.id) return q
+        const r = resizeOpeningEdge(g.path, g.closed, q, mpp, edge, pt, { snapTo })
+        return r ? { ...q, distPx: r.distPx, widthMm: r.widthMm } : q
+      }))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
   function startOpeningDrag(e: React.MouseEvent, o: PlacedOpening) {
     if (tool !== 'select') return
     e.stopPropagation()
@@ -3625,11 +3651,33 @@ export default function TakeoffPage() {
       return (
         <g key={'op-' + o.id} opacity={o.notEstimated ? 0.55 : 1} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
           style={{ cursor: tool === 'select' ? 'move' : 'inherit', pointerEvents: tool === 'select' ? undefined : 'none', filter: o.notEstimated ? 'grayscale(1)' : undefined }}>
-          {draw(shape, colourOf(o.kind), 'd', o.kind === STRUCTURAL_KIND ? `${o.ref} · ${(o.widthMm / 1000).toFixed(2)}m${steel?.section ? ' · ' + steel.section : ''}` : o.ref, o.id === selectedOpeningId)}
+          {draw(shape, colourOf(o.kind), 'd', o.kind === STRUCTURAL_KIND ? `${o.ref} · ${(o.widthMm / 1000).toFixed(2)}m${steel?.section ? ' · ' + steel.section : ''}` : o.id === selectedOpeningId ? `${o.ref} · ${o.widthMm}mm` : o.ref, o.id === selectedOpeningId)}
           <polygon points={shape.gap.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" stroke="none" />
         </g>
       )
     })
+    // the picked opening has a round handle at each end: drag one along the wall to make the opening wider or narrower (the other end stays put)
+    const picked = tool === 'select' ? allPlaced.find(o => o.id === selectedOpeningId && !o.notEstimated) : undefined
+    let handles: React.ReactNode = null
+    if (picked && !(picked.kind === STRUCTURAL_KIND ? structHidden : wdHidden)) {
+      const el = els.find(e => e.id === picked.wallId)
+      const g = el && wallGeometry(el)
+      const shape = g ? openingShape(g.path, g.closed, picked, mpp, g.band, sw(10)) : null
+      if (shape) {
+        const colour = colourOf(picked.kind)
+        const rad = sw(coarse ? 11 : 6)
+        handles = (
+          <g key="resize-handles">
+            {(['start', 'end'] as const).map((edge, i) => (
+              <circle key={edge} data-opening-handle={edge} cx={shape.ends[i].x} cy={shape.ends[i].y} r={rad} fill="#ffffff" stroke={colour} strokeWidth={sw(2)}
+                style={{ cursor: 'ew-resize' }} onMouseDown={ev => startOpeningResize(ev, picked, edge)} onClick={ev => ev.stopPropagation()}>
+                <title>Drag to make this {picked.kind === STRUCTURAL_KIND ? 'opening' : picked.kind.startsWith('win-') ? 'window' : 'door'} wider or narrower</title>
+              </circle>
+            ))}
+          </g>
+        )
+      }
+    }
     let ghost: React.ReactNode = null
     if (tool === 'opening' && rawMouse) {
       const hit = nearestWall(rawMouse)
@@ -3642,7 +3690,7 @@ export default function TakeoffPage() {
         if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(kind), 'g', nextOpeningRef(allPlaced, kind), false)}</g>
       }
     }
-    return <g>{placed}{ghost}</g>
+    return <g>{placed}{ghost}{handles}</g>
   }
 
   function renderOpeningsPanel() {

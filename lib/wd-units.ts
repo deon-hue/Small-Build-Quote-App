@@ -58,6 +58,31 @@ export const KINDS: KindInfo[] = [
 ]
 export const KIND_BY_ID: Record<string, KindInfo> = Object.fromEntries(KINDS.map(k => [k.id, k]))
 export const isInternalDoor = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Internal doors'
+
+/** A standard size to pick from: the door leaf (a pair of doors: both leaves together), width and height in mm */
+export interface StandardSize { id: string; label: string; system: 'Metric' | 'Imperial'; widthMm: number; heightMm: number }
+const LEAF_METRIC = [526, 626, 726, 826, 926].map(w => ({ w, h: 2040 }))
+const LEAF_IMPERIAL: { w: number; h: number; name: string }[] = [
+  { w: 610, h: 1981, name: `2'0" x 6'6"` }, { w: 686, h: 1981, name: `2'3" x 6'6"` }, { w: 762, h: 1981, name: `2'6" x 6'6"` }, { w: 838, h: 1981, name: `2'8" x 6'6"` },
+]
+const leafSizes = (): StandardSize[] => [
+  ...LEAF_METRIC.map(s => ({ id: `${s.w}x${s.h}`, label: `${s.w} x ${s.h}mm`, system: 'Metric' as const, widthMm: s.w, heightMm: s.h })),
+  ...LEAF_IMPERIAL.map(s => ({ id: `${s.w}x${s.h}`, label: `${s.name} (${s.w} x ${s.h}mm)`, system: 'Imperial' as const, widthMm: s.w, heightMm: s.h })),
+]
+/** a pair of doors is two leaves side by side: the standard pairs are two of the usual leaves */
+const pairSizes = (): StandardSize[] => [
+  ...[626, 726, 826, 926].map(w => ({ id: `${w * 2}x2040`, label: `2 x ${w} (${w * 2} x 2040mm)`, system: 'Metric' as const, widthMm: w * 2, heightMm: 2040 })),
+  ...[686, 762, 838].map(w => ({ id: `${w * 2}x1981`, label: `2 x ${w} (${w * 2} x 1981mm)`, system: 'Imperial' as const, widthMm: w * 2, heightMm: 1981 })),
+]
+/** The standard sizes of a kind of opening, to pick from (internal doors only so far: the usual UK door leaf sizes, metric and imperial). Empty for a kind with none. */
+export function standardSizesFor(k: OpeningKind): StandardSize[] {
+  if (k === 'door-int-single' || k === 'door-int-fire' || k === 'door-int-pocket') return leafSizes()
+  if (k === 'door-int-double') return pairSizes()
+  return []
+}
+/** The standard size that exactly matches a width and height, if any */
+export const matchStandardSize = (k: OpeningKind, widthMm: number, heightMm: number): StandardSize | undefined =>
+  standardSizesFor(k).find(s => s.widthMm === Math.round(widthMm) && s.heightMm === Math.round(heightMm))
 export const isWindow = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Windows'
 
 /** The two calculators the schedule is split into (the older one with both stays for saved quotes): WINDOWS take the windows only; DOORS take every door, bi-fold and sliding patio doors included (they sat under Windows until 2026-11-01) */
