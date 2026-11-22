@@ -2681,7 +2681,9 @@ export default function TakeoffPage() {
   // They are kept on one "Windows and doors" item (created the first time one is placed) so they save and load with the project; each is a distance along its wall's drawn line, so it keeps its place when the wall is reshaped.
   // The Windows & Doors calculator is fed them (PlanOpening) and keeps its own openings in step with the plan until one is typed over.
   const wdItem = project.items.find(it => it.wdSummary)
-  const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
+  const rawPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
+  // a door side panel placed while it was briefly listed under Windows has the old kind id: read it as the door side panel
+  const allPlaced: PlacedOpening[] = rawPlaced.some(o => (o.kind as string) === 'win-side-panel') ? rawPlaced.map(o => ((o.kind as string) === 'win-side-panel' ? { ...o, kind: 'door-side-panel' as PlacedOpening['kind'] } : o)) : rawPlaced
   /** the steel the Structural Openings calculator holds for a placed structural opening (the calculator's opening that follows it): how many beams, how many posts and where, and the beam section */
   const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null } => {
     // what the calculator holds for this opening (anything typed over there) while it is in step with the plan; once the steel has been changed on the plan since the calculator last followed it, what is chosen on the plan wins (the calculator takes it when it is next opened); else the usual
@@ -2875,7 +2877,7 @@ export default function TakeoffPage() {
         const i = roomIndexAt(det.rooms, { x: C.x + N.x * off, y: C.y + N.y * off })
         if (i < 0 || seen.has(i)) continue
         seen.add(i)
-        if (gp.kind.startsWith('win-')) { counts[i].windows++; counts[i].windowAreaM2 += gp.w * gp.h }
+        if (gp.kind.startsWith('win-') || gp.kind === 'door-side-panel') { counts[i].windows++; counts[i].windowAreaM2 += gp.w * gp.h }
         else { counts[i].doors++; counts[i].doorWidthM += gp.w; counts[i].doorAreaM2 += gp.w * gp.h }
       }
     }

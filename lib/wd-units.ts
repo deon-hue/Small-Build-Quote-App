@@ -8,8 +8,8 @@
 // the screen costs the lines it returns through the shared costLayer.
 
 export type OpeningKind =
-  | 'win-casement' | 'win-tilt-turn' | 'win-fixed' | 'win-sash' | 'win-bay' | 'win-side-panel'
-  | 'door-front' | 'door-back' | 'door-composite' | 'door-security' | 'door-french' | 'door-bifold' | 'door-sliding' | 'door-garage'
+  | 'win-casement' | 'win-tilt-turn' | 'win-fixed' | 'win-sash' | 'win-bay'
+  | 'door-front' | 'door-back' | 'door-composite' | 'door-security' | 'door-french' | 'door-bifold' | 'door-sliding' | 'door-garage' | 'door-side-panel'
   | 'door-int-single' | 'door-int-fire' | 'door-int-double' | 'door-int-pocket'
 export type OpeningGroup = 'Windows' | 'External doors' | 'Internal doors'
 export type WdMaterial = 'upvc' | 'aluminium' | 'timber' | 'composite' | 'steel'
@@ -43,7 +43,7 @@ export const KINDS: KindInfo[] = [
   { id: 'win-fixed', label: 'Fixed window / picture window', group: 'Windows', stdW: 1200, stdH: 900, fixed: 60, perM2: 230, hrsBase: 1.5, hrsPerM2: 0.8, trade: 'fitter', swings: false, defaultMaterial: 'upvc' },
   { id: 'win-sash', label: 'Sash window', group: 'Windows', stdW: 900, stdH: 1500, fixed: 250, perM2: 750, hrsBase: 4, hrsPerM2: 2, trade: 'fitter', swings: false, defaultMaterial: 'timber' },
   { id: 'win-bay', label: 'Bay window', group: 'Windows', stdW: 2400, stdH: 1350, fixed: 500, perM2: 520, hrsBase: 6, hrsPerM2: 2, trade: 'fitter', swings: false, defaultMaterial: 'upvc' },
-  { id: 'win-side-panel', label: 'Door side panel', group: 'Windows', stdW: 450, stdH: 2100, fixed: 70, perM2: 290, hrsBase: 1.5, hrsPerM2: 0.9, trade: 'fitter', swings: false, defaultMaterial: 'upvc' },
+  { id: 'door-side-panel', label: 'Door side panel', group: 'External doors', stdW: 450, stdH: 2100, fixed: 70, perM2: 290, hrsBase: 1.5, hrsPerM2: 0.9, trade: 'fitter', swings: false, defaultMaterial: 'upvc' },
   { id: 'door-front', label: 'Front door', group: 'External doors', stdW: 900, stdH: 2100, fixed: 520, perM2: 220, hrsBase: 4, hrsPerM2: 0.5, trade: 'fitter', swings: true, defaultMaterial: 'composite' },
   { id: 'door-composite', label: 'Composite door', group: 'External doors', stdW: 920, stdH: 2100, fixed: 640, perM2: 260, hrsBase: 4, hrsPerM2: 0.5, trade: 'fitter', swings: true, defaultMaterial: 'composite' },
   { id: 'door-security', label: 'Security door (PAS 24 or steel)', group: 'External doors', stdW: 926, stdH: 2057, fixed: 850, perM2: 320, hrsBase: 5, hrsPerM2: 0.6, trade: 'fitter', swings: true, defaultMaterial: 'steel' },
@@ -58,6 +58,10 @@ export const KINDS: KindInfo[] = [
   { id: 'door-int-pocket', label: 'Pocket (sliding) door', group: 'Internal doors', stdW: 826, stdH: 2040, fixed: 330, perM2: 30, hrsBase: 6, hrsPerM2: 0, trade: 'carpenter', swings: false, defaultMaterial: 'timber' },
 ]
 export const KIND_BY_ID: Record<string, KindInfo> = Object.fromEntries(KINDS.map(k => [k.id, k]))
+/** the door side panel was briefly listed under Windows as 'win-side-panel': anything saved with that id is the same door side panel */
+export const LEGACY_KIND_IDS: Record<string, OpeningKind> = { 'win-side-panel': 'door-side-panel' }
+KIND_BY_ID['win-side-panel'] = KIND_BY_ID['door-side-panel']
+export const currentKind = (k: string): string => LEGACY_KIND_IDS[k] ?? k
 export const isInternalDoor = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Internal doors'
 
 /** A standard size to pick from: the door leaf (a pair of doors: both leaves together), width and height in mm */
@@ -88,7 +92,7 @@ export const isWindow = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Windows'
 
 /** The two calculators the schedule is split into (the older one with both stays for saved quotes): WINDOWS take the windows only; DOORS take every door, bi-fold and sliding patio doors included (they sat under Windows until 2026-11-01) */
 export type WdScope = 'all' | 'windows' | 'doors'
-export const WINDOWS_SCOPE_KINDS: OpeningKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay', 'win-side-panel']
+export const WINDOWS_SCOPE_KINDS: OpeningKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay']
 export const kindInScope = (kind: OpeningKind, scope: WdScope): boolean => scope === 'all' || WINDOWS_SCOPE_KINDS.includes(kind) === (scope === 'windows')
 
 export const MATERIAL_LABEL: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'Aluminium', timber: 'Timber', composite: 'Composite', steel: 'Steel' }
@@ -170,7 +174,7 @@ export function newOpening(id: string, ref: string, kind: OpeningKind, location 
   const internal = isInternalDoor(kind)
   return {
     id, ref, location, kind, widthMm: k.stdW, heightMm: k.stdH, qty: 1, material: k.defaultMaterial, glazing: 'double', coloured: false,
-    supply: 'we', pcEach: null, swing: 'in-left', cill: isWindow(kind) && kind !== 'win-side-panel' ? 'internal' : 'none',
+    supply: 'we', pcEach: null, swing: 'in-left', cill: isWindow(kind) ? 'internal' : 'none',
     lining: internal && kind !== 'door-int-pocket', architrave: internal, ironmongery: internal, removeOld: false,
   }
 }
