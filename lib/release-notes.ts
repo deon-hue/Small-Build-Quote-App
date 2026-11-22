@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-22T20:00:00+00:00',
+    title: 'Resize doors and windows on the Take-off plan, and standard internal door sizes',
+    detail: 'In Take-off, a door or window you have picked now has a round handle at each end: drag one along the wall to make it wider or narrower (the other end stays put) and the Width box follows. Typing a size in the panel already redrew it. Internal doors, fire doors, pocket doors and internal double doors also have a Standard size list (metric 526 to 926mm, imperial 2\'0" to 2\'8", pairs of doors), which sets the width and height in one go. The Next door to place box now says its sizes are for the next one you place, not the picked one.',
+  },
+  {
     at: '2026-11-22T18:00:00+00:00',
     title: 'Subcontractor invoice button on Bills and the contact card',
     detail: 'A subcontractor bill made with Send to Bills now has a Sub invoice button on its row in Bills, and the subcontractor\'s contact card has an Invoice button on each week in Time Logs and on each bill in Bills. On Bills and the contact card\'s Bills tab it downloads the invoice that was made for that bill; a bill made before invoices started has none, and the message points you to the Invoice button on that week in Subcontractors. No new SQL beyond supabase/sub-invoices.sql.',

@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import LocationInput from '@/components/LocationInput'
-import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, type OpeningKind, type WdSwing } from '@/lib/wd-units'
+import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, standardSizesFor, matchStandardSize, type OpeningKind, type WdSwing } from '@/lib/wd-units'
 import { hasSwing, type PlacedOpening, type WdPlacedOpening } from '@/lib/wall-openings'
 import type { CostedLine } from '@/lib/assembly-calc'
 
@@ -80,6 +80,26 @@ function Num({ value, onChange, suffix }: { value: number; onChange: (n: number)
   )
 }
 
+/** A list of the standard sizes of a kind (internal doors: the usual UK leaf sizes, metric and imperial). Picking one sets the width and the height; a size that is not on the list reads 'Own size'. Nothing is shown for a kind with no standard sizes. */
+function StandardSizePicker({ kind, widthMm, heightMm, onPick }: { kind: OpeningKind; widthMm: number; heightMm: number; onPick: (w: number, h: number) => void }) {
+  const sizes = standardSizesFor(kind)
+  if (sizes.length === 0) return null
+  const match = matchStandardSize(kind, widthMm, heightMm)
+  return (
+    <div>
+      <div style={tiny}>Standard size</div>
+      <select data-standard-size value={match?.id ?? 'own'} onChange={e => { const s = sizes.find(x => x.id === e.target.value); if (s) onPick(s.widthMm, s.heightMm) }} style={input}>
+        {!match && <option value="own">Own size ({Math.round(widthMm)} x {Math.round(heightMm)}mm)</option>}
+        {(['Metric', 'Imperial'] as const).map(sys => (
+          <optgroup key={sys} label={sys === 'Metric' ? 'Metric (mm)' : 'Imperial (feet and inches)'}>
+            {sizes.filter(s => s.system === sys).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export default function OpeningsPanel(p: Props) {
   const selected = p.openings.find(o => o.id === p.selectedId) ?? null
   const [mode, setMode] = useState<Mode>(modeOf(p.kind))
@@ -128,6 +148,7 @@ export default function OpeningsPanel(p: Props) {
 
       <div style={box}>
         <div style={label}>Next {mode === 'windows' ? 'window' : 'door'} to place</div>
+        {selected && <div style={{ fontSize: 10.5, color: '#b45309', marginBottom: 6, lineHeight: 1.4 }}>These sizes are for the NEXT one you place. To change {selected.ref} (picked on the plan), use the Selected box below.</div>}
         {GROUPS.filter(g => KINDS.some(k => k.group === g && kindInScope(k.id, mode))).map(g => (
           <div key={g} style={{ marginBottom: 6 }}>
             <div style={{ fontSize: 10, color: GROUP_COLOUR[g], fontWeight: 700, marginBottom: 3 }}>{g}</div>
@@ -145,6 +166,9 @@ export default function OpeningsPanel(p: Props) {
             </div>
           </div>
         ))}
+        <div style={{ marginTop: 8 }}>
+          <StandardSizePicker kind={p.kind} widthMm={p.widthMm} heightMm={p.heightMm} onPick={(w, h) => p.onNext({ widthMm: w, heightMm: h })} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
           <div><div style={tiny}>Width</div><Num value={p.widthMm} onChange={n => p.onNext({ widthMm: n })} suffix="mm" /></div>
           <div><div style={tiny}>Height</div><Num value={p.heightMm} onChange={n => p.onNext({ heightMm: n })} suffix="mm" /></div>
@@ -192,12 +216,14 @@ export default function OpeningsPanel(p: Props) {
             <select value={selected.kind} onChange={e => { const k = KIND_BY_ID[e.target.value]; p.onUpdate(selected.id, { kind: k.id, widthMm: k.stdW, heightMm: k.stdH }) }} style={input}>
               {GROUPS.map(g => <optgroup key={g} label={g}>{KINDS.filter(k => k.group === g).map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</optgroup>)}
             </select>
+            <StandardSizePicker kind={selected.kind as OpeningKind} widthMm={selected.widthMm} heightMm={selected.heightMm} onPick={(w, h) => p.onUpdate(selected.id, { widthMm: w, heightMm: h })} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <div><div style={tiny}>Reference</div><input value={selected.ref} onChange={e => p.onUpdate(selected.id, { ref: e.target.value })} style={input} /></div>
               <div><div style={tiny}>Room / wall</div><LocationInput value={selected.location ?? ''} onChange={v => p.onUpdate(selected.id, { location: v })} placeholder="e.g. Kitchen" style={input} /></div>
               <div><div style={tiny}>Width</div><Num value={selected.widthMm} onChange={n => p.onUpdate(selected.id, { widthMm: n })} suffix="mm" /></div>
               <div><div style={tiny}>Height</div><Num value={selected.heightMm} onChange={n => p.onUpdate(selected.id, { heightMm: n })} suffix="mm" /></div>
             </div>
+            <div style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.4 }}>The opening on the plan changes as you type. You can also drag the round handle at either end of it on the plan (Select tool).</div>
             {hasSwing(selected.kind) && (
               <select value={selected.swing} onChange={e => p.onUpdate(selected.id, { swing: e.target.value as WdSwing })} style={input}>
                 {SWINGS.map(s => <option key={s} value={s}>{SWING_LABEL[s]}</option>)}
