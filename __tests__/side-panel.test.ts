@@ -1,20 +1,21 @@
 /**
- * Tests for the door side panel (a fixed glazed panel beside a front door): its kind, styles, materials and colours, plan drawing and how it reaches the Windows calculator
+ * Tests for the door side panel (a fixed glazed panel beside a front door): its kind, styles, materials and colours, plan drawing and how it reaches the Doors calculator
  *
  * Run with:   npx tsx __tests__/side-panel.test.ts
  */
-import { KINDS, KIND_BY_ID, WINDOWS_SCOPE_KINDS, kindInScope, newOpening, openingWords, planOpeningSig, mergePlanOpenings, isWindow, type PlanOpening } from '../lib/wd-units'
+import { KINDS, KIND_BY_ID, currentKind, WINDOWS_SCOPE_KINDS, kindInScope, newOpening, openingWords, planOpeningSig, mergePlanOpenings, isWindow, type PlanOpening } from '../lib/wd-units'
 import { WINDOW_STYLES, stylesFor, mullionFractions, openingPaneCount } from '../lib/window-styles'
 import { styleCards, materialsFor, swatchesFor, cleanOpeningChoice, openingStyleWords, isColoured, styleSize, defaultStyleId, isStyledKind, mullionsFor } from '../lib/opening-styles'
 import { openingShape } from '../lib/wall-openings'
 
 let ok = 0, bad = 0
 const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.log('FAIL', n, x ?? '')) }
-const K = 'win-side-panel'
+const K = 'door-side-panel' as const
 
-t('the kind exists, in Windows', !!KIND_BY_ID[K] && KIND_BY_ID[K].group === 'Windows' && isWindow(K))
+t('the kind exists, in External doors (not Windows)', !!KIND_BY_ID[K] && KIND_BY_ID[K].group === 'External doors' && !isWindow(K))
 t('it stands about as tall as a door and is narrow', KIND_BY_ID[K].stdH === 2100 && KIND_BY_ID[K].stdW >= 300 && KIND_BY_ID[K].stdW <= 700)
-t('it is in the Windows calculator only', kindInScope(K, 'windows') && !kindInScope(K, 'doors') && kindInScope(K, 'all') && WINDOWS_SCOPE_KINDS.includes(K))
+t('it is in the Doors calculator only', kindInScope(K, 'doors') && !kindInScope(K, 'windows') && kindInScope(K, 'all') && !WINDOWS_SCOPE_KINDS.includes(K))
+t('the old win- id still finds it', KIND_BY_ID['win-side-panel'] === KIND_BY_ID[K] && currentKind('win-side-panel') === K && currentKind('win-bay') === 'win-bay')
 t('every kind is in exactly one scope', KINDS.every(k => kindInScope(k.id, 'windows') !== kindInScope(k.id, 'doors')))
 t('it is a styled kind with six styles', isStyledKind(K) && styleCards(K).length === 6 && stylesFor(K).length === 6)
 t('its default style exists', styleCards(K).some(s => s.id === defaultStyleId(K)))
@@ -45,7 +46,7 @@ t('words for the quote', openingStyleWords(K, { style: 'sp-glass-over-solid' }) 
 // the calculator
 const o = newOpening('a', 'W1', K)
 t('a new side panel has no cill or window board', o.cill === 'none' && o.widthMm === 450 && o.heightMm === 2100)
-t('another window still gets an inside board', newOpening('b', 'W2', 'win-casement').cill === 'internal')
+t('a window still gets an inside board and a side panel a D reference', newOpening('b', 'W2', 'win-casement').cill === 'internal' && openingShape([{ x: 0, y: 0 }, { x: 1000, y: 0 }], false, { distPx: 300, kind: K, widthMm: 450, swing: 'in-left' } as never, 0.01, { lo: -10, hi: 10, inside: 1 })!.prims.length > 0)
 const w = openingWords({ ...o, styleText: 'full-height fixed glazed side panel', coloured: true, colourName: 'Anthracite grey' })
 t('quote words name it', w.includes('door side panel') && w.includes('(full-height fixed glazed side panel)') && w.includes('anthracite grey'), w)
 const base: PlanOpening = { id: 'p1', ref: 'W1', kind: K, widthMm: 450, heightMm: 2100, swing: 'in-left' }

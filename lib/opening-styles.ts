@@ -11,7 +11,7 @@ import {
 } from './door-styles'
 
 /** a side panel stands beside a front door, so it is offered the door's materials and colours to match it */
-export const isSidePanel = (k: string): boolean => k === 'win-side-panel'
+export const isSidePanel = (k: string): boolean => k === 'door-side-panel'
 
 export const isStyledKind = (k: string): boolean => isWindowKind(k) || isDoorKind(k)
 

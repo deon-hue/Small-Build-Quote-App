@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T18:00:00+00:00',
+    title: 'Door side panel moved to Doors',
+    detail: 'The door side panel was listed under Windows in Take-off and the Windows calculator. It is now a door: it is in the Doors list, goes to the Doors calculator, and is numbered and coloured on the plan as a door. Its style, material and colour choices are the same.',
+  },
+  {
     at: '2026-11-23T16:00:00+00:00',
     title: 'Internal doors: the client can supply the door furniture as well as the door',
     detail: 'In the Doors calculator an internal door can already be supplied by the client (we only fit it). Now, with Ironmongery ticked, there is also a tick for The client supplies the door furniture (handles, hinges and latch): the furniture is then left out of the price, we still allow the time to fit it, the quote wording says it is supplied by the client and fitted by us, and a warning reminds you to have it on site before the fitter comes. The door and the furniture are chosen separately, so the client can supply either or both.',

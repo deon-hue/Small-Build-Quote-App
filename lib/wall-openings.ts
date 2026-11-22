@@ -196,7 +196,8 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
     const nPosts = Math.max(0, Math.round(o.posts ?? 0))
     const fr = nPosts <= 0 ? [] : o.postRole === 'mid' ? Array.from({ length: nPosts }, (_, i) => (i + 1) / (nPosts + 1)) : nPosts === 1 ? [0] : Array.from({ length: nPosts }, (_, i) => i / (nPosts - 1))
     for (const f of fr) prims.push({ type: 'post', centre: p(-half + w * f, mid), size: Math.max(152 / (mpp * 1000), thick * 0.7), style: 'post' })
-  } else if (kind.startsWith('win-')) {
+  } else if (kind.startsWith('win-') || kind === 'door-side-panel') {
+    // a window, or the glazed side panel beside a door: the frame, the glass and the bars between its panes
     prims.push({ type: 'line', a: p(-half, lo), b: p(half, lo), style: 'frame' })
     prims.push({ type: 'line', a: p(-half, hi), b: p(half, hi), style: 'frame' })
     prims.push({ type: 'line', a: p(-half, mid - thick * 0.08), b: p(half, mid - thick * 0.08), style: 'glass' })

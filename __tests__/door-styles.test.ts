@@ -19,7 +19,8 @@ let ok = 0, bad = 0
 const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.log('FAIL', n, x ?? '')) }
 
 // ---- the lists
-const allDoorKinds = KINDS.filter(k => k.group !== 'Windows').map(k => k.id)
+// the door side panel is a glazed panel styled with panes (lib/window-styles.ts, tested in side-panel.test.ts), not a door leaf
+const allDoorKinds = KINDS.filter(k => k.group !== 'Windows' && k.id !== 'door-side-panel').map(k => k.id)
 t('every door kind in the calculator has styles', allDoorKinds.every(k => isDoorKind(k) && doorStylesFor(k).length >= 3), allDoorKinds.filter(k => !isDoorKind(k)))
 t('no door kind is missing from the style lists', DOOR_KINDS.length === allDoorKinds.length && DOOR_KINDS.every(k => allDoorKinds.includes(k)))
 t('every kind (window or door) is styled', KINDS.every(k => isStyledKind(k.id)))
