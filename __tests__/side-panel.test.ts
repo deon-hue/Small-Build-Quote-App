@@ -6,7 +6,7 @@
 import { KINDS, KIND_BY_ID, currentKind, WINDOWS_SCOPE_KINDS, kindInScope, newOpening, openingWords, planOpeningSig, mergePlanOpenings, isWindow, type PlanOpening } from '../lib/wd-units'
 import { WINDOW_STYLES, stylesFor, mullionFractions, openingPaneCount } from '../lib/window-styles'
 import { styleCards, materialsFor, swatchesFor, cleanOpeningChoice, openingStyleWords, isColoured, styleSize, defaultStyleId, isStyledKind, mullionsFor } from '../lib/opening-styles'
-import { openingShape } from '../lib/wall-openings'
+import { openingShape, snapBesideNeighbour, snapsBeside } from '../lib/wall-openings'
 
 let ok = 0, bad = 0
 const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.log('FAIL', n, x ?? '')) }
@@ -53,6 +53,30 @@ const base: PlanOpening = { id: 'p1', ref: 'W1', kind: K, widthMm: 450, heightMm
 const m = mergePlanOpenings([], [{ ...base, material: 'aluminium', coloured: true, colourName: 'Black', styleText: 'x' }])
 t('the plan feeds material and colour into the calculator', m.length === 1 && m[0].material === 'aluminium' && m[0].coloured === true && m[0].cill === 'none', m[0])
 t('a plain side panel signature has nothing added', planOpeningSig(base) === planOpeningSig({ ...base }))
+
+// snapping flush against a door (1 plan pixel = 10mm here)
+{
+  const wall = [{ x: 0, y: 0 }, { x: 1000, y: 0 }]
+  const door = { distPx: 500, widthMm: 900, kind: 'door-front' }
+  const snap = (kind: string, w: number, d: number, nb = [door], reach = 25, path = wall) => snapBesideNeighbour(path, false, nb, kind, w, d, 0.01, reach)
+  t('which kinds snap together', snapsBeside(K, 'door-front') && snapsBeside(K, 'door-french') && snapsBeside('door-front', K) && !snapsBeside(K, 'door-int-single') && !snapsBeside(K, 'win-casement') && !snapsBeside(K, K) && !snapsBeside('door-front', 'door-back') && !snapsBeside('win-casement', 'door-front'))
+  t('a panel just right of the door snaps edge to edge (door ends at 545, panel is 45 wide)', snap(K, 450, 575) === 567.5, snap(K, 450, 575))
+  t('and just left of it', snap(K, 450, 420) === 432.5, snap(K, 450, 420))
+  t('the snapped panel exactly touches the door', (() => { const d = snap(K, 450, 575)!; return Math.abs((d - 22.5) - (500 + 45)) < 1e-9 })())
+  t('too far away: no snap', snap(K, 450, 640) === null)
+  t('just inside the reach snaps', snap(K, 450, 567.5 + 24) === 567.5 && snap(K, 450, 567.5 + 26) === null)
+  t('with the cursor over the door itself there is nothing to snap to (the panel is too far from either edge)', snap(K, 450, 500) === null && snap(K, 450, 440) === 432.5 && snap(K, 450, 560) === 567.5)
+  t('a window beside it does not snap', snap(K, 450, 575, [{ ...door, kind: 'win-casement' }]) === null)
+  t('an internal door does not snap', snap(K, 450, 575, [{ ...door, kind: 'door-int-single' }]) === null)
+  t('a wider panel keeps flush: 650 wide', snap(K, 650, 600) === 500 + 45 + 32.5)
+  t('a door placed beside a side panel snaps to it too', snap('door-front', 900, 590, [{ distPx: 500, widthMm: 450, kind: K }]) === 500 + 22.5 + 45, snap('door-front', 900, 590, [{ distPx: 500, widthMm: 450, kind: K }]))
+  t('it will not snap where the panel would run off the wall end', snap(K, 450, 990, [{ distPx: 955, widthMm: 900, kind: 'door-front' }]) === null ? true : snap(K, 450, 990, [{ distPx: 955, widthMm: 900, kind: 'door-front' }])! <= 1000 - 22.5)
+  t('and when only the far side fits it snaps to that one', snap(K, 450, 990, [{ distPx: 955, widthMm: 900, kind: 'door-front' }], 120) === 955 - 45 - 22.5)
+  const bent = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }]
+  t('it never snaps round a corner (the right side would not fit before the bend, so the left side is used)', snap(K, 450, 600, [{ distPx: 540, widthMm: 900, kind: 'door-front' }], 150, bent) === 540 - 45 - 22.5, snap(K, 450, 600, [{ distPx: 540, widthMm: 900, kind: 'door-front' }], 150, bent))
+  t('no scale: no snap', snapBesideNeighbour(wall, false, [door], K, 450, 575, 0, 25) === null)
+  t('no neighbours: no snap', snap(K, 450, 575, []) === null)
+}
 
 console.log(`${ok} passed, ${bad} failed`)
 if (bad) process.exit(1)

@@ -106,7 +106,7 @@ import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, snapBesideNeighbour, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { cleanOpeningChoice, mullionsFor, panelsFor, openingStyleWords, swatchOf, isColoured, isStyledKind } from '@/lib/opening-styles'
 import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, standardSizesFor, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
@@ -3448,6 +3448,12 @@ export default function TakeoffPage() {
     return best && best.score <= 24 / zoom ? best : null
   }
 
+  /** a door side panel snaps flush against an outside door it comes near on the same wall (and an outside door against a side panel): the panel's edge meets the door's edge, either side. Returns the centre to use. */
+  function snapBesideDoor(g: { path: TakeoffPoint[]; closed: boolean }, wallId: string, kind: PlacedKind, widthMm: number, distPx: number, excludeId?: string): number {
+    const r = snapBesideNeighbour(g.path, g.closed, allPlaced.filter(q => q.wallId === wallId && q.id !== excludeId).map(q => ({ distPx: q.distPx, widthMm: q.widthMm, kind: q.kind })), kind, widthMm, distPx, project.calibration.mpp, (coarse ? 40 : 26) / zoom)
+    return r ?? distPx
+  }
+
   function placeOpening(pt: TakeoffPoint) {
     const mpp = project.calibration.mpp
     if (!(mpp > 0)) { showToast('Set the scale of the plan first, so the openings are the right size'); return }
@@ -3456,7 +3462,7 @@ export default function TakeoffPage() {
     const half = openingNext.widthMm / (mpp * 1000) / 2
     const id = uid()
     const ref = nextOpeningRef(allPlaced, openingKind)
-    const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, half)
+    const distPx = snapBesideDoor(hit.g, hit.el.id, openingKind, openingNext.widthMm, clampDist(hit.g.path, hit.g.closed, hit.dist, half))
     // a window or door takes the style, material, colour and bars picked in the style picker (a style that is not this kind's, or none picked yet, is the kind's usual one in its plain colour)
     const win = isStyledKind(openingKind) ? cleanOpeningChoice(openingKind, openingNext) : null
     changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(win ? { style: win.style, material: win.material, colour: win.colour, bars: win.bars } : {}), ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
@@ -3547,7 +3553,7 @@ export default function TakeoffPage() {
       const pt = { x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z }
       const hit = nearestWall(pt)
       if (!hit) return
-      const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, o.widthMm / (mpp * 1000) / 2)
+      const distPx = snapBesideDoor(hit.g, hit.el.id, o.kind, o.widthMm, clampDist(hit.g.path, hit.g.closed, hit.dist, o.widthMm / (mpp * 1000) / 2), o.id)
       changePlaced(list => list.map(q => q.id === o.id ? { ...q, wallId: hit.el.id, distPx } : q))
     }
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
@@ -3691,7 +3697,7 @@ export default function TakeoffPage() {
         const wMm = structural ? structNext.widthMm : openingNext.widthMm
         const half = wMm / (mpp * 1000) / 2
         const kind: PlacedKind = structural ? STRUCTURAL_KIND : openingKind
-        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind, widthMm: wMm, swing: openingNext.swing, ...(!structural && isStyledKind(openingKind) ? (() => { const st = cleanOpeningChoice(openingKind, openingNext).style; return { mullions: mullionsFor(openingKind, st), panels: panelsFor(openingKind, st) } })() : {}) }, mpp, hit.g.band, sw(10))
+        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: snapBesideDoor(hit.g, hit.el.id, kind, wMm, clampDist(hit.g.path, hit.g.closed, hit.dist, half)), kind, widthMm: wMm, swing: openingNext.swing, ...(!structural && isStyledKind(openingKind) ? (() => { const st = cleanOpeningChoice(openingKind, openingNext).style; return { mullions: mullionsFor(openingKind, st), panels: panelsFor(openingKind, st) } })() : {}) }, mpp, hit.g.band, sw(10))
         if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(kind), 'g', nextOpeningRef(allPlaced, kind), false)}</g>
       }
     }

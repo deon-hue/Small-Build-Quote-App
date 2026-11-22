@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T20:00:00+00:00',
+    title: 'Door side panels snap to the door in Take-off',
+    detail: 'When you place a door side panel, or drag one, and it comes close to a front, back or other outside door on the same wall, it now snaps edge to edge against the door, on whichever side is nearer. It works the other way round too: an outside door placed next to a side panel snaps to it. It only snaps along the same straight stretch of wall, never round a corner.',
+  },
+  {
     at: '2026-11-23T18:00:00+00:00',
     title: 'Door side panel moved to Doors',
     detail: 'The door side panel was listed under Windows in Take-off and the Windows calculator. It is now a door: it is in the Doors list, goes to the Doors calculator, and is numbered and coloured on the plan as a door. Its style, material and colour choices are the same.',

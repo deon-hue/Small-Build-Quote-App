@@ -112,6 +112,36 @@ export function pointAtDist(points: Pt[], closed: boolean, d: number): OnPath | 
   return { dist: at, x: l.a.x + dx * t, y: l.a.y + dy * t, tx: dx, ty: dy, seg: i, off: 0 }
 }
 
+/** an outside door (not an internal door, not a side panel) */
+const isOutsideDoor = (k: string) => k.startsWith('door-') && !k.startsWith('door-int-') && k !== 'door-side-panel'
+/** Does an opening of this kind snap flush against that neighbour? A door side panel snaps to an outside door (and an outside door to a side panel): the panel stands beside the door, frame to frame. */
+export const snapsBeside = (kind: string, neighbour: string): boolean => (kind === 'door-side-panel' && isOutsideDoor(neighbour)) || (isOutsideDoor(kind) && neighbour === 'door-side-panel')
+
+/**
+ * Snaps an opening flush against the door (or door side panel) it is being put beside: when its near edge comes within `reachPx` of the neighbour's edge, on the same straight length of the wall, its centre moves to
+ * sit exactly edge to edge with it (on whichever side is nearer). Returns the snapped centre (a distance along the wall, plan pixels), or null when nothing is close enough or the panel would not fit on that length.
+ * `neighbours` are the other openings on the SAME wall: their centre, width (mm) and kind. Pure.
+ */
+export function snapBesideNeighbour(points: Pt[], closed: boolean, neighbours: { distPx: number; widthMm: number; kind: string }[], kind: string, widthMm: number, distPx: number, mpp: number, reachPx: number): number | null {
+  if (!(mpp > 0)) return null
+  const half = widthMm / (mpp * 1000) / 2
+  let best: { d: number; gap: number } | null = null
+  for (const n of neighbours) {
+    if (!snapsBeside(kind, n.kind)) continue
+    const nh = n.widthMm / (mpp * 1000) / 2
+    const nSeg = pointAtDist(points, closed, n.distPx)?.seg
+    for (const sign of [-1, 1]) {
+      const cand = n.distPx + sign * (nh + half)
+      const c = clampDist(points, closed, cand, half)
+      if (Math.abs(c - cand) > 1e-6) continue                                       // would not fit on that straight length
+      if (pointAtDist(points, closed, cand)?.seg !== nSeg) continue                   // on another length of the wall
+      const gap = Math.abs(cand - distPx)
+      if (gap <= reachPx && (!best || gap < best.gap)) best = { d: cand, gap }
+    }
+  }
+  return best ? best.d : null
+}
+
 /** Keeps an opening's centre where the whole opening stays on ONE straight length of the wall (an opening never wraps a corner). If the length is shorter than the opening it sits in the middle of it. */
 export function clampDist(points: Pt[], closed: boolean, d: number, halfPx: number): number {
   const ls = legs(points, closed)
