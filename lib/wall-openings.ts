@@ -2,7 +2,7 @@
 // way it opens, so it keeps its place when the wall is reshaped and moves with the wall. This module is pure (plan pixels in, plan pixels out) so it can be tested: where along a wall a click lands, where an opening sits and how it
 // is drawn (the gap in the wall, the jambs, a window's glass lines, a door leaf with its swing arc, bi-fold panels, a sliding door...). The screen only paints the shapes returned here.
 
-import type { OpeningKind, WdSwing } from './wd-units'
+import type { OpeningKind, WdSwing, WdMaterial } from './wd-units'
 
 export interface Pt { x: number; y: number }
 
@@ -52,9 +52,9 @@ export interface PlacedOpening {
   tagDy?: number
   /** a structural opening's steel: the beam section, posts and connections chosen for it */
   struct?: PlacedStruct
-  /** a window's style (a layout from lib/window-styles.ts), frame material, frame colour and glazing bars, as picked in the style picker: absent on a window placed before the picker existed (it is then a plain window) */
+  /** a window or door's style (a layout from lib/window-styles.ts or lib/door-styles.ts), material, colour (or an internal door's finish) and a window's glazing bars, as picked in the style picker: absent on one placed before the picker existed (it is then plain) */
   style?: string
-  material?: 'upvc' | 'aluminium'
+  material?: WdMaterial
   colour?: string
   bars?: 'none' | 'georgian' | 'astragal'
 }
@@ -162,7 +162,7 @@ export const bifoldPanels = (widthMm: number) => Math.max(2, Math.round(widthMm 
  * How an opening is drawn. `path` is the wall's line, `band` its two faces, `mpp` the plan's metres per pixel, `labelGapPx` how far clear of the wall the label sits (a screen size divided by the zoom).
  * Returns null if the wall has no length. Coordinates are plan pixels; with `p(a, b)` = the point `a` along the wall and `b` across it from the line.
  */
-export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean; /** a structural opening's steel: how many beams, and how many posts and where */ beams?: number; posts?: number; postRole?: 'ends' | 'mid'; /** where the dividing bars of a window fall across its width, as fractions (0 to 1, ends left out): drawn as bars across the frame */ mullions?: number[] }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
+export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean; /** a structural opening's steel: how many beams, and how many posts and where */ beams?: number; posts?: number; postRole?: 'ends' | 'mid'; /** where the dividing bars of a window fall across its width, as fractions (0 to 1, ends left out): drawn as bars across the frame */ mullions?: number[]; /** how many panels a bi-fold door folds into (the style picked; otherwise about 700mm each) */ panels?: number }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
   if (!(mpp > 0)) return null
   const w = o.widthMm / (mpp * 1000)
   const half = w / 2
@@ -231,7 +231,7 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
     }
     labelSide = (-swingN) as 1 | -1
   } else if (kind === 'door-bifold') {
-    const n = bifoldPanels(o.widthMm)
+    const n = o.panels && o.panels >= 2 ? Math.round(o.panels) : bifoldPanels(o.widthMm)
     const dep = Math.min(w / n, Math.max(thick * 1.5, w * 0.08))
     const foldN = o.flipped ? -swingN : swingN   // which way the panels fold, turned over with the door
     let prev = p(-half, mid)

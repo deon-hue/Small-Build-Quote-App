@@ -10,8 +10,8 @@
 import React, { useEffect, useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import LocationInput from '@/components/LocationInput'
-import WindowStylePicker, { WindowThumb } from '@/components/WindowStylePicker'
-import { cleanChoice, colourById, styleOrDefault, DEFAULT_STYLE, isWindowKind, type WindowChoice, type WinStyle, type LooseChoice } from '@/lib/window-styles'
+import OpeningStylePicker, { OpeningThumb } from '@/components/OpeningStylePicker'
+import { cleanOpeningChoice, swatchOf, styleCardOrDefault, defaultStyleId, isStyledKind, styleSize, MATERIAL_NAME, type OpeningChoice, type LooseOpeningChoice, type StyleCard } from '@/lib/opening-styles'
 import { KINDS, KIND_BY_ID, SWING_LABEL, kindInScope, standardSizesFor, matchStandardSize, type OpeningKind, type WdSwing } from '@/lib/wd-units'
 import { hasSwing, type PlacedOpening, type WdPlacedOpening } from '@/lib/wall-openings'
 import type { CostedLine } from '@/lib/assembly-calc'
@@ -34,9 +34,9 @@ interface Props {
   widthMm: number
   heightMm: number
   swing: WdSwing
-  onNext: (patch: { widthMm?: number; heightMm?: number; swing?: WdSwing } & Partial<WindowChoice>) => void
-  /** the style, frame material, colour and bars the next window will have (from the style picker) */
-  next?: LooseChoice
+  onNext: (patch: { widthMm?: number; heightMm?: number; swing?: WdSwing } & Partial<OpeningChoice>) => void
+  /** the style, material, colour and bars the next window or door will have (from the style picker) */
+  next?: LooseOpeningChoice
   selectedId: string | null
   onSelect: (id: string | null) => void
   onUpdate: (id: string, patch: Partial<PlacedOpening>) => void
@@ -105,16 +105,16 @@ function StandardSizePicker({ kind, widthMm, heightMm, onPick }: { kind: Opening
 }
 
 /** The style, frame material and colour of a window, drawn small, with a button to change them */
-function StyleSummary({ kind, choice, onChange }: { kind: OpeningKind; choice?: LooseChoice; onChange: () => void }) {
-  const c = cleanChoice(kind, choice)
-  const st = styleOrDefault(kind, c.style)
+function StyleSummary({ kind, choice, onChange }: { kind: OpeningKind; choice?: LooseOpeningChoice; onChange: () => void }) {
+  const c = cleanOpeningChoice(kind, choice)
+  const st = styleCardOrDefault(kind, c.style)
   if (!st) return null
   return (
     <div data-style-summary style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: 6, border: '1px solid var(--to-border)', borderRadius: 7, background: 'var(--to-bg)' }}>
-      <div style={{ width: 64, flexShrink: 0 }}><WindowThumb kind={kind} choice={c} height={52} /></div>
+      <div style={{ width: 64, flexShrink: 0 }}><OpeningThumb kind={kind} choice={c} height={52} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--to-textb)', lineHeight: 1.3 }}>{st.name}</div>
-        <div style={{ fontSize: 10.5, color: 'var(--to-muted)' }}>{c.material === 'upvc' ? 'uPVC' : 'Aluminium'}, {colourById(c.colour).name.toLowerCase()}{c.bars === 'georgian' ? ', Georgian bars' : c.bars === 'astragal' ? ', astragal bars' : ''}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)' }}>{MATERIAL_NAME[c.material]}, {swatchOf(kind, c.colour).name.toLowerCase()}{c.bars === 'georgian' ? ', Georgian bars' : c.bars === 'astragal' ? ', astragal bars' : ''}</div>
         <button type="button" data-change-style onClick={onChange} style={{ marginTop: 3, background: 'none', border: 'none', padding: 0, color: '#2b6cb0', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', textDecoration: 'underline' }}>Change style, material or colour…</button>
       </div>
     </div>
@@ -124,13 +124,15 @@ function StyleSummary({ kind, choice, onChange }: { kind: OpeningKind; choice?: 
 export default function OpeningsPanel(p: Props) {
   const selected = p.openings.find(o => o.id === p.selectedId) ?? null
   // the window style picker: opened by clicking a kind of window (then the window is placed with the choice) or by Change style on the next window or a window already on the plan
-  const [picker, setPicker] = useState<{ kind: OpeningKind; mode: 'next' | 'change'; place: boolean; id?: string; initial?: LooseChoice } | null>(null)
-  const onPicked = (c: WindowChoice, s: WinStyle) => {
+  const [picker, setPicker] = useState<{ kind: OpeningKind; mode: 'next' | 'change'; place: boolean; id?: string; initial?: LooseOpeningChoice } | null>(null)
+  const onPicked = (c: OpeningChoice, s: StyleCard) => {
     if (!picker) return
     if (picker.mode === 'change' && picker.id) p.onUpdate(picker.id, { style: c.style, material: c.material, colour: c.colour, bars: c.bars })
     else {
       if (picker.place) p.onKind(picker.kind)
-      p.onNext({ ...c, widthMm: s.w, heightMm: s.h })
+      // the style's own size when it has one (windows, bi-fold, sliding and garage doors); a door style with none keeps the size the kind started at
+      const size = styleSize(picker.kind, s.id)
+      p.onNext({ ...c, ...(size ? { widthMm: size.w, heightMm: size.h } : {}) })
       if (picker.place) p.onPlacing(true)
     }
     setPicker(null)
@@ -189,7 +191,7 @@ export default function OpeningsPanel(p: Props) {
               {KINDS.filter(k => k.group === g && kindInScope(k.id, mode)).map(k => {
                 const on = p.kind === k.id
                 return (
-                  <button key={k.id} type="button" data-kind-button={k.id} onClick={() => { if (isWindowKind(k.id)) setPicker({ kind: k.id, mode: 'next', place: true, initial: p.kind === k.id ? p.next : undefined }); else { p.onKind(k.id); p.onPlacing(true) } }} title={`${k.label}, ${k.stdW} x ${k.stdH}`}
+                  <button key={k.id} type="button" data-kind-button={k.id} onClick={() => { if (isStyledKind(k.id)) setPicker({ kind: k.id, mode: 'next', place: true, initial: p.kind === k.id ? p.next : undefined }); else { p.onKind(k.id); p.onPlacing(true) } }} title={`${k.label}, ${k.stdW} x ${k.stdH}`}
                     style={{ fontSize: 11, padding: '3px 7px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
                       border: `1px solid ${on ? GROUP_COLOUR[g] : 'var(--to-border)'}`, background: on ? GROUP_COLOUR[g] : 'transparent', color: on ? '#fff' : 'var(--to-text)' }}>
                     {k.label.replace(/ \(.*\)$/, '')}
@@ -199,7 +201,7 @@ export default function OpeningsPanel(p: Props) {
             </div>
           </div>
         ))}
-        {isWindowKind(p.kind) && <StyleSummary kind={p.kind} choice={p.next} onChange={() => setPicker({ kind: p.kind, mode: 'next', place: false, initial: p.next })} />}
+        {isStyledKind(p.kind) && <StyleSummary kind={p.kind} choice={p.next} onChange={() => setPicker({ kind: p.kind, mode: 'next', place: false, initial: p.next })} />}
         <div style={{ marginTop: 8 }}>
           <StandardSizePicker kind={p.kind} widthMm={p.widthMm} heightMm={p.heightMm} onPick={(w, h) => p.onNext({ widthMm: w, heightMm: h })} />
         </div>
@@ -247,10 +249,10 @@ export default function OpeningsPanel(p: Props) {
         <div style={{ ...box, borderColor: '#16a34a' }}>
           <div style={label}>Selected: {selected.ref}</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select value={selected.kind} onChange={e => { const k = KIND_BY_ID[e.target.value]; p.onUpdate(selected.id, { kind: k.id, widthMm: k.stdW, heightMm: k.stdH, style: isWindowKind(k.id) ? DEFAULT_STYLE[k.id] : undefined, material: undefined, colour: undefined, bars: undefined }) }} style={input}>
+            <select value={selected.kind} onChange={e => { const k = KIND_BY_ID[e.target.value]; p.onUpdate(selected.id, { kind: k.id, widthMm: k.stdW, heightMm: k.stdH, style: isStyledKind(k.id) ? defaultStyleId(k.id) : undefined, material: undefined, colour: undefined, bars: undefined }) }} style={input}>
               {GROUPS.map(g => <optgroup key={g} label={g}>{KINDS.filter(k => k.group === g).map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</optgroup>)}
             </select>
-            {isWindowKind(selected.kind) && <StyleSummary kind={selected.kind} choice={selected} onChange={() => setPicker({ kind: selected.kind as OpeningKind, mode: 'change', place: false, id: selected.id, initial: selected })} />}
+            {isStyledKind(selected.kind) && <StyleSummary kind={selected.kind} choice={selected} onChange={() => setPicker({ kind: selected.kind as OpeningKind, mode: 'change', place: false, id: selected.id, initial: selected })} />}
             <StandardSizePicker kind={selected.kind as OpeningKind} widthMm={selected.widthMm} heightMm={selected.heightMm} onPick={(w, h) => p.onUpdate(selected.id, { widthMm: w, heightMm: h })} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <div><div style={tiny}>Reference</div><input value={selected.ref} onChange={e => p.onUpdate(selected.id, { ref: e.target.value })} style={input} /></div>
@@ -287,7 +289,7 @@ export default function OpeningsPanel(p: Props) {
         </div>
       )}
 
-      {picker && <WindowStylePicker kind={picker.kind} initial={picker.initial} confirmLabel={picker.mode === 'change' ? 'Change style' : picker.place ? 'Use this style and place it' : 'Use this style'} onConfirm={onPicked} onCancel={() => setPicker(null)} />}
+      {picker && <OpeningStylePicker kind={picker.kind} initial={picker.initial} confirmLabel={picker.mode === 'change' ? 'Change style' : picker.place ? 'Use this style and place it' : 'Use this style'} onConfirm={onPicked} onCancel={() => setPicker(null)} />}
 
       {p.cards.filter(c => !c.scope || c.scope === mode).map(c => (
         <div key={c.key}>

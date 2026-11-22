@@ -139,7 +139,7 @@ export interface WdOpening {
   fromPlan?: string
   /** drawn on a wall whose own calculator already prices a lintel (and closers) over it: set from the drawing, so the lintel here is not paid for twice */
   wallLintel?: boolean
-  /** a window's style in words ("two-pane, one opening, with Georgian bars") and the name of its frame colour ("anthracite grey"), from the style picked on the drawing: they only word the quote */
+  /** a window or door's style in words ("two-pane, one opening, with Georgian bars") and the name of its frame colour ("anthracite grey"), from the style picked on the drawing: they only word the quote */
   styleText?: string
   colourName?: string
 }
@@ -274,9 +274,10 @@ export function openingWords(o: WdOpening): string {
   if (isInternalDoor(o.kind)) {
     const frame = !!o.existingFrame && o.kind !== 'door-int-pocket'
     const set = [o.lining && !frame && 'lining', o.architrave && 'architrave', o.ironmongery && 'ironmongery'].filter(Boolean) as string[]
-    return `${size} ${k.label.toLowerCase()}${frame ? ' fitted to the existing frame' : ''}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
+    const istyle = o.styleText ? ` (${o.styleText})` : ''
+    return `${size} ${k.label.toLowerCase()}${istyle}${frame ? ' fitted to the existing frame' : ''}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
   }
-  const style = isWindow(o.kind) && o.styleText ? ` (${o.styleText})` : ''
+  const style = o.styleText ? ` (${o.styleText})` : ''
   const colour = o.coloured ? (o.colourName ? o.colourName.toLowerCase() : 'coloured') : 'white'
   return `${size} ${MATERIAL_WORD[o.material]} ${k.label.toLowerCase()}${style}, ${GLAZING_LABEL[o.glazing].toLowerCase()}, ${colour}`
 }
