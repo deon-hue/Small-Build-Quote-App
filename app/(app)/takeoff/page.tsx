@@ -106,7 +106,7 @@ import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, snapBesideNeighbour, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, snapBesideNeighbour, moveWithPanels, panelsAttachedTo, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { cleanOpeningChoice, mullionsFor, panelsFor, openingStyleWords, swatchOf, isColoured, isStyledKind } from '@/lib/opening-styles'
 import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, standardSizesFor, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
@@ -3449,8 +3449,8 @@ export default function TakeoffPage() {
   }
 
   /** a door side panel snaps flush against an outside door it comes near on the same wall (and an outside door against a side panel): the panel's edge meets the door's edge, either side. Returns the centre to use. */
-  function snapBesideDoor(g: { path: TakeoffPoint[]; closed: boolean }, wallId: string, kind: PlacedKind, widthMm: number, distPx: number, excludeId?: string): number {
-    const r = snapBesideNeighbour(g.path, g.closed, allPlaced.filter(q => q.wallId === wallId && q.id !== excludeId).map(q => ({ distPx: q.distPx, widthMm: q.widthMm, kind: q.kind })), kind, widthMm, distPx, project.calibration.mpp, (coarse ? 40 : 26) / zoom)
+  function snapBesideDoor(g: { path: TakeoffPoint[]; closed: boolean }, wallId: string, kind: PlacedKind, widthMm: number, distPx: number, exclude: string[] = []): number {
+    const r = snapBesideNeighbour(g.path, g.closed, allPlaced.filter(q => q.wallId === wallId && !exclude.includes(q.id)).map(q => ({ distPx: q.distPx, widthMm: q.widthMm, kind: q.kind })), kind, widthMm, distPx, project.calibration.mpp, (coarse ? 40 : 26) / zoom)
     return r ?? distPx
   }
 
@@ -3496,7 +3496,8 @@ export default function TakeoffPage() {
     const g = el && wallGeometry(el)
     if (!o || !g) return
     const mpp = project.calibration.mpp
-    changePlaced(list => list.map(q => q.id === id ? { ...q, distPx: clampDist(g.path, g.closed, mm / (mpp * 1000), q.widthMm / (mpp * 1000) / 2) } : q))
+    // an outside door takes the side panels standing against it along with it
+    changePlaced(list => moveWithPanels(list, id, o.wallId, g.path, g.closed, mm / (mpp * 1000), mpp))
   }
 
   /** puts an opening in the middle of its side of the wall (the straight length it is on) */
@@ -3505,7 +3506,7 @@ export default function TakeoffPage() {
     const el = o && project.elements.find(e => e.id === o.wallId)
     const g = el && wallGeometry(el)
     if (!o || !g) return
-    changePlaced(list => list.map(q => (q.id === id ? { ...q, distPx: segmentMiddle(g.path, g.closed, q.distPx) } : q)))
+    changePlaced(list => moveWithPanels(list, id, o.wallId, g.path, g.closed, segmentMiddle(g.path, g.closed, o.distPx), project.calibration.mpp))
     showToast('Centred on its side of the wall')
   }
   /** turns an opening over to face the other side of the wall: a door swings the other way (the hinge stays at the same end), a bay projects the other way, a bi-fold folds the other way */
@@ -3553,8 +3554,11 @@ export default function TakeoffPage() {
       const pt = { x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z }
       const hit = nearestWall(pt)
       if (!hit) return
-      const distPx = snapBesideDoor(hit.g, hit.el.id, o.kind, o.widthMm, clampDist(hit.g.path, hit.g.closed, hit.dist, o.widthMm / (mpp * 1000) / 2), o.id)
-      changePlaced(list => list.map(q => q.id === o.id ? { ...q, wallId: hit.el.id, distPx } : q))
+      // a door carries the side panels standing against it: they are not snapped to (they move with it), and they keep their place beside it
+      const carried = panelsAttachedTo(allPlaced, o.id, mpp).map(p => p.id)
+      const plain = clampDist(hit.g.path, hit.g.closed, hit.dist, o.widthMm / (mpp * 1000) / 2)
+      const distPx = carried.length > 0 ? plain : snapBesideDoor(hit.g, hit.el.id, o.kind, o.widthMm, plain, [o.id])   // a door that already has its panel does not snap to another
+      changePlaced(list => moveWithPanels(list, o.id, hit.el.id, hit.g.path, hit.g.closed, distPx, mpp))
     }
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
     window.addEventListener('mousemove', move)

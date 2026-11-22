@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T22:00:00+00:00',
+    title: 'Door side panels move with their door in Take-off',
+    detail: 'When a door has side panels standing against it, dragging the door, nudging it with the arrow keys, typing its position or centring it now takes the panels with it, each keeping its place beside the door (and onto another wall if you drag the door there). The door and its panels stay together on one straight stretch of wall. Move a panel on its own and it leaves the door, so it is no longer carried.',
+  },
+  {
     at: '2026-11-23T20:00:00+00:00',
     title: 'Door side panels snap to the door in Take-off',
     detail: 'When you place a door side panel, or drag one, and it comes close to a front, back or other outside door on the same wall, it now snaps edge to edge against the door, on whichever side is nearer. It works the other way round too: an outside door placed next to a side panel snaps to it. It only snaps along the same straight stretch of wall, never round a corner.',
