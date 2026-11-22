@@ -12,6 +12,7 @@ import { signedDocUrl, insertJobCost, updateJobCost, deleteJobCost } from '@/lib
 import type { PaymentMethod } from '@/lib/types'
 import { jobDisplayTitle } from '@/lib/utils'
 import { ukToday } from '@/lib/uk-today'
+import { downloadSubInvoice, isInvoiceDay } from '@/lib/sub-invoice-client'
 import './touch.css'
 
 const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
@@ -852,24 +853,9 @@ export default function SubcontractorsPage() {
   async function downloadWeekInvoice(contactId: string, ws: string, logIds: string[], billId?: string) {
     const key = `${contactId}_${ws}`
     setInvoiceBusy(key)
-    try {
-      const res = await fetch('/api/sub-invoice/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, logIds, billId }) })
-      if (!res.ok) {
-        const j = await res.json().catch(() => null) as { error?: string } | null
-        alert(j?.error || 'Could not make the invoice. Try again.')
-        return
-      }
-      const blob = await res.blob()
-      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'Invoice.pdf'
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob); a.download = name
-      document.body.appendChild(a); a.click(); a.remove()
-      setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
-    } catch {
-      alert('Could not reach the server. Check your connection and try again.')
-    } finally {
-      setInvoiceBusy(null)
-    }
+    const err = await downloadSubInvoice({ contactId, logIds, billId })
+    setInvoiceBusy(null)
+    if (err) alert(err)
   }
 
   async function repairWeekBillStatus(contactId: string, ws: string) {
@@ -1730,7 +1716,7 @@ export default function SubcontractorsPage() {
                             >⚠ Fix status</button>
                           )}
                           {!isPayroll(contactId) && (() => {
-                            const invLogs = logs.filter(l => l.status !== 'pending' && !(l.status === 'paid' && !l.xero_bill_id))
+                            const invLogs = logs.filter(isInvoiceDay)
                             if (invLogs.length === 0) return null
                             return (
                               <button
