@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T10:00:00+00:00',
+    title: 'Door styles in Take-off: pick the style, material and colour for every kind of door',
+    detail: 'In Take-off, clicking any kind of door (front, composite, security, back, French, bi-fold, sliding patio, garage, and internal, fire, double and pocket doors) now opens the same style picker as windows: the usual layouts (panels, glazed lights, stable doors, bi-fold with 2 to 6 panels and so on) drawn the standard way, the material for that kind of door (composite, uPVC, timber, aluminium or steel), and a colour, or for internal doors a finish such as natural oak or walnut. The choice goes to the Doors calculator so the price follows the material and colour and the quote wording names the style (for example an aluminium five-panel bi-fold, black). A bi-fold is drawn on the plan with its number of panels. Change style, material or colour on a door already placed changes it later without touching its size.',
+  },
+  {
     at: '2026-11-22T23:00:00+00:00',
     title: 'Window styles in Take-off: pick the layout, uPVC or aluminium, colour and bars',
     detail: 'In Take-off, clicking a kind of window (casement, tilt-and-turn, fixed or picture, sash, bay) now opens a picker of the usual industry layouts, drawn the standard way, with a choice of uPVC (the start) or aluminium, a frame colour and glazing bars. The window is placed with that choice, starts at that layout\'s usual size, shows its dividing bars on the plan, and passes the material and colour to the Windows calculator so the price and the quote wording follow (for example an aluminium, anthracite grey, two-pane window). Change style, material or colour on a window already placed changes it later without touching its size. Doors come next.',
