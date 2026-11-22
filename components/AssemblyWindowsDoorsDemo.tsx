@@ -152,7 +152,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   /** a different kind of opening: its standard size, material and trims (what was typed in the old one's fields is dropped, but the reference, room and number stay) */
   function changeKind(o: WdOpening, kind: OpeningKind) {
     const fresh = newOpening(o.id, nextRef(openings.filter(x => x.id !== o.id), kind), kind, o.location)
-    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan, ...(o.work ? { work: o.work } : {}), ...(isInternalDoor(kind) && kind !== 'door-int-pocket' && o.existingFrame ? { existingFrame: true, lining: false } : {}) } : x)))
+    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan, ...(o.work ? { work: o.work } : {}), ...(isInternalDoor(kind) && o.ironmongerySupply ? { ironmongerySupply: o.ironmongerySupply } : {}), ...(isInternalDoor(kind) && kind !== 'door-int-pocket' && o.existingFrame ? { existingFrame: true, lining: false } : {}) } : x)))
   }
 
   const result = useMemo((): { ok: true; r: WdResult } | { ok: false; error: string } => {
@@ -165,7 +165,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   const descInput: WdDescriptionInput | null = r ? {
     openings: openings.map(o => ({ ref: o.ref, location: o.location, parts: r.openings.find(x => x.openingId === o.id)?.parts ?? [] })).filter(o => o.parts.length > 0),
     windows: count('Windows'), externalDoors: count('External doors'), internalDoors: count('Internal doors'),
-    anyProvisional: openings.some(o => o.supply === 'pc'), anyClientSupplied: openings.some(o => o.supply === 'client'), scope,
+    anyProvisional: openings.some(o => o.supply === 'pc'), anyClientSupplied: openings.some(o => o.supply === 'client'), anyClientFurniture: openings.some(o => isInternalDoor(o.kind) && o.ironmongery && o.ironmongerySupply === 'client'), scope,
     anyOpeningWork: openings.some(o => !!o.work), allOpeningWork: openings.length > 0 && openings.every(o => !!o.work),
   } : null
 
@@ -263,7 +263,8 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                     {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Fit to a frame already in the wall (the door is trimmed to fit it)" on={!!o.existingFrame} set={b => update(o.id, { existingFrame: b, lining: !b })} />}
                     {internal && o.kind !== 'door-int-pocket' && !o.existingFrame && <TilingCheck label="Lining" on={o.lining} set={b => update(o.id, { lining: b })} />}
                     {internal && <TilingCheck label="Architrave" on={o.architrave} set={b => update(o.id, { architrave: b })} />}
-                    {internal && <TilingCheck label="Ironmongery" on={o.ironmongery} set={b => update(o.id, { ironmongery: b })} />}
+                    {internal && <TilingCheck label="Ironmongery (door furniture: handles, hinges, latch)" on={o.ironmongery} set={b => update(o.id, { ironmongery: b })} />}
+                    {internal && o.ironmongery && <TilingCheck label="The client supplies the door furniture (we fit it only)" on={o.ironmongerySupply === 'client'} set={b => update(o.id, { ironmongerySupply: b ? 'client' : 'we' })} />}
                     {o.removeOld && (
                       <>
                         <TilingCheck label="Take out the old one" on={o.removeOld} set={b => update(o.id, { removeOld: b })} />

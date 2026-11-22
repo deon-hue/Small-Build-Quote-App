@@ -130,6 +130,8 @@ export interface WdOpening {
   lining: boolean
   architrave: boolean
   ironmongery: boolean
+  /** an internal door's furniture (handles, hinges, latch): who supplies it. Absent = we do (the sample set price); 'client' = the client buys it and we only fit it (no material line, the fitting time stays). Only matters when `ironmongery` is ticked. */
+  ironmongerySupply?: 'we' | 'client'
   removeOld: boolean
   /** an internal door fitted to a frame (lining) that is already in the wall: no new lining, and the door is trimmed to fit it */
   existingFrame?: boolean
@@ -274,7 +276,7 @@ export function openingWords(o: WdOpening): string {
   const size = `${o.widthMm} x ${o.heightMm}`
   if (isInternalDoor(o.kind)) {
     const frame = !!o.existingFrame && o.kind !== 'door-int-pocket'
-    const set = [o.lining && !frame && 'lining', o.architrave && 'architrave', o.ironmongery && 'ironmongery'].filter(Boolean) as string[]
+    const set = [o.lining && !frame && 'lining', o.architrave && 'architrave', o.ironmongery && o.ironmongerySupply !== 'client' && 'ironmongery'].filter(Boolean) as string[]
     const istyle = o.styleText ? ` (${o.styleText})` : ''
     return `${size} ${k.label.toLowerCase()}${istyle}${frame ? ' fitted to the existing frame' : ''}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
   }
@@ -334,7 +336,13 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
       if (frame) { addHours('trim the door to the existing frame and re-cut the hinge recesses', HOURS.existingFrame * qty); parts.push('the door trimmed to fit the frame') }
       if (o.lining && !frame) { add('lining', 'door lining set', 'nr', rate('liningSet'), qty); addHours('door lining', HOURS.lining * qty) }
       if (o.architrave) { add('architrave', 'architrave set (both sides)', 'nr', rate('architraveSet'), qty); addHours('architrave', HOURS.architrave * qty) }
-      if (o.ironmongery) { add('ironmongery', 'door ironmongery (handles, hinges, latch)', 'nr', rate('ironmongerySet'), qty); addHours('ironmongery', HOURS.ironmongery * qty) }
+      if (o.ironmongery) {
+        if (o.ironmongerySupply === 'client') { addHours('fit the client\'s door furniture', HOURS.ironmongery * qty); parts.push('door furniture (handles, hinges and latch) supplied by the client, fitted by us') }
+        else { add('ironmongery', 'door ironmongery (handles, hinges, latch)', 'nr', rate('ironmongerySet'), qty); addHours('ironmongery', HOURS.ironmongery * qty) }
+      }
+      const clientFurniture = o.ironmongery && o.ironmongerySupply === 'client'
+      if (o.supply === 'client' || clientFurniture) warnings.push(`${label}: ${o.supply === 'client' && clientFurniture ? 'the client supplies the door and its furniture' : o.supply === 'client' ? 'the client supplies the door' : 'the client supplies the door furniture'}: have it on site before the fitter comes, and check the size, which way it is hung, and the hinges and latch (the door may need them cut or bored to suit).`)
+      if (o.kind === 'door-int-fire' && clientFurniture) warnings.push(`${label}: a fire door only works as one with fire-rated hinges and latch (and intumescent strips): check the furniture the client supplies is, or the door is not a fire door once fitted.`)
       if (o.kind === 'door-int-fire' && frame) warnings.push(`${label}: a fire door only works as one in a fire-rated frame: check the existing frame is, or fit a new lining.`)
       if (frame) warnings.push(`${label}: the existing frame may be slightly out of square or not plumb: the door is trimmed to suit it, and a frame that is badly out needs packing or a new lining.`)
       if (o.kind === 'door-int-fire' && !frame && (!o.lining || !o.ironmongery)) warnings.push(`${label}: a fire door needs a fire-rated lining and fire-rated hinges and latch to work as a fire door.`)

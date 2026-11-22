@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T16:00:00+00:00',
+    title: 'Internal doors: the client can supply the door furniture as well as the door',
+    detail: 'In the Doors calculator an internal door can already be supplied by the client (we only fit it). Now, with Ironmongery ticked, there is also a tick for The client supplies the door furniture (handles, hinges and latch): the furniture is then left out of the price, we still allow the time to fit it, the quote wording says it is supplied by the client and fitted by us, and a warning reminds you to have it on site before the fitter comes. The door and the furniture are chosen separately, so the client can supply either or both.',
+  },
+  {
     at: '2026-11-23T14:00:00+00:00',
     title: 'Door side panels in Take-off: pick the style, material and colour',
     detail: 'In Take-off, Windows & Doors now has a Door side panel, the narrow fixed glazed panel that stands beside a front door. Clicking it opens the same style picker as the other windows: full-height glass, glass over a solid lower panel, three-quarter glass, two stacked lights, a fixed top light, or a wider panel. The material (uPVC, aluminium, timber or composite) and colour are the same choices as the door, so a side panel can match it. It goes to the Windows calculator like any other window, with the material and colour in the price and the style in the quote wording, and it does not get an inside window board. You can change the choice later without changing its size.',
