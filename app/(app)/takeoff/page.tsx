@@ -107,6 +107,7 @@ import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, 
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { cleanChoice as cleanWindowChoice, colourById as windowColourById, styleOrDefault as windowStyleOrDefault, mullionFractions, styleWords as windowStyleWords, DEFAULT_STYLE as WINDOW_DEFAULT_STYLE, isWindowKind } from '@/lib/window-styles'
 import { KIND_BY_ID as WD_KIND_BY_ID, SWING_LABEL as WD_SWING_LABEL, planOpeningSig, kindInScope, standardSizesFor, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
@@ -837,7 +838,7 @@ export default function TakeoffPage() {
   const [selectedPlumbPipeId, setSelectedPlumbPipeId] = useState<string | null>(null)
   // Windows & Doors: the kind, size and swing of the next opening, the placed opening that is selected, and where the pointer is (unsnapped) for the ghost
   const [openingKind, setOpeningKind] = useState<OpeningKind>('win-casement')
-  const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
+  const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing; style?: string; material?: 'upvc' | 'aluminium'; colour?: string; bars?: 'none' | 'georgian' | 'astragal' }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
   // the size the next structural opening is placed at (a doorway-sized knock-through to start)
   const [structNext, setStructNext] = useState<{ widthMm: number; heightMm: number }>({ widthMm: 2400, heightMm: 2100 })
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(null)
@@ -3454,7 +3455,9 @@ export default function TakeoffPage() {
     const id = uid()
     const ref = nextOpeningRef(allPlaced, openingKind)
     const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, half)
-    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
+    // a window takes the style, frame material, colour and bars picked in the style picker (a style that is not this kind's, or none picked yet, is the kind's usual one in white uPVC)
+    const win = isWindowKind(openingKind) ? cleanWindowChoice(openingKind, openingNext) : null
+    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(win ? { style: win.style, material: win.material, colour: win.colour, bars: win.bars } : {}), ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
     setSelectedOpeningId(id)
   }
 
@@ -3646,7 +3649,7 @@ export default function TakeoffPage() {
       const el = els.find(e => e.id === o.wallId)
       const g = el && wallGeometry(el)
       const steel = o.kind === STRUCTURAL_KIND ? structSteelFor(o) : undefined
-      const shape = g ? openingShape(g.path, g.closed, steel ? { ...o, beams: steel.beams, posts: steel.posts, postRole: steel.postRole } : o, mpp, g.band, sw(10)) : null
+      const shape = g ? openingShape(g.path, g.closed, steel ? { ...o, beams: steel.beams, posts: steel.posts, postRole: steel.postRole } : { ...o, mullions: o.style ? mullionFractions(o.kind, o.style) : undefined }, mpp, g.band, sw(10)) : null
       if (!shape) return null
       return (
         <g key={'op-' + o.id} opacity={o.notEstimated ? 0.55 : 1} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
@@ -3686,11 +3689,18 @@ export default function TakeoffPage() {
         const wMm = structural ? structNext.widthMm : openingNext.widthMm
         const half = wMm / (mpp * 1000) / 2
         const kind: PlacedKind = structural ? STRUCTURAL_KIND : openingKind
-        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind, widthMm: wMm, swing: openingNext.swing }, mpp, hit.g.band, sw(10))
+        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind, widthMm: wMm, swing: openingNext.swing, mullions: !structural && isWindowKind(openingKind) ? mullionFractions(openingKind, cleanWindowChoice(openingKind, openingNext).style) : undefined }, mpp, hit.g.band, sw(10))
         if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(kind), 'g', nextOpeningRef(allPlaced, kind), false)}</g>
       }
     }
     return <g>{placed}{ghost}{handles}</g>
+  }
+
+  /** what the style picker chose for a window, as the Windows calculator takes it: the frame material, whether the frame is coloured and which colour, and the style in words (nothing for a window placed before the picker existed) */
+  function windowFeed(o: PlacedOpening): { material?: 'upvc' | 'aluminium'; coloured?: boolean; colourName?: string; styleText?: string } {
+    if (!isWindowKind(o.kind) || !o.style) return {}
+    const c = cleanWindowChoice(o.kind, o)
+    return { material: c.material, coloured: c.colour !== 'white', colourName: c.colour !== 'white' ? windowColourById(c.colour).name : undefined, styleText: windowStyleWords(o.kind, c) }
   }
 
   function renderOpeningsPanel() {
@@ -3704,7 +3714,7 @@ export default function TakeoffPage() {
       const c = e ? Object.keys(BUILT_ASSEMBLY_CANON_IDS).find(k => BUILT_ASSEMBLY_CANON_IDS[k] === e) : undefined
       return !!c && WALL_LINTEL_CALCS.has(c)
     }
-    const plan: PlanOpening[] = livePlacedWd.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing, wallPricesLintel: wallPricesLintel(o.wallId) }))
+    const plan: PlanOpening[] = livePlacedWd.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing, wallPricesLintel: wallPricesLintel(o.wallId), ...windowFeed(o) }))
     const planKey = plan.map(planOpeningSig).join(';') + '#' + plan.map(o => o.id).join(',')
     const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
     // the Windows card and the Doors card: each is fed only the openings that belong to it (a window or bi-fold or sliding door system to Windows, any other door to Doors) and has its own saved price
@@ -3765,7 +3775,7 @@ export default function TakeoffPage() {
         placing={tool === 'opening'}
         onPlacing={on => { setTool(on ? 'opening' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false); setRawMouse(null) } }}
         kind={openingKind} onKind={pickOpeningKind}
-        widthMm={openingNext.widthMm} heightMm={openingNext.heightMm} swing={openingNext.swing}
+        widthMm={openingNext.widthMm} heightMm={openingNext.heightMm} swing={openingNext.swing} next={openingNext}
         onNext={patch => setOpeningNext(n => ({ ...n, ...patch }))}
         selectedId={selectedOpeningId} onSelect={setSelectedOpeningId}
         onUpdate={(id, patch) => changePlaced(list => list.map(q => q.id === id ? { ...q, ...patch } : q))}

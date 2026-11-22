@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-22T23:00:00+00:00',
+    title: 'Window styles in Take-off: pick the layout, uPVC or aluminium, colour and bars',
+    detail: 'In Take-off, clicking a kind of window (casement, tilt-and-turn, fixed or picture, sash, bay) now opens a picker of the usual industry layouts, drawn the standard way, with a choice of uPVC (the start) or aluminium, a frame colour and glazing bars. The window is placed with that choice, starts at that layout\'s usual size, shows its dividing bars on the plan, and passes the material and colour to the Windows calculator so the price and the quote wording follow (for example an aluminium, anthracite grey, two-pane window). Change style, material or colour on a window already placed changes it later without touching its size. Doors come next.',
+  },
+  {
     at: '2026-11-22T20:00:00+00:00',
     title: 'Resize doors and windows on the Take-off plan, and standard internal door sizes',
     detail: 'In Take-off, a door or window you have picked now has a round handle at each end: drag one along the wall to make it wider or narrower (the other end stays put) and the Width box follows. Typing a size in the panel already redrew it. Internal doors, fire doors, pocket doors and internal double doors also have a Standard size list (metric 526 to 926mm, imperial 2\'0" to 2\'8", pairs of doors), which sets the width and height in one go. The Next door to place box now says its sizes are for the next one you place, not the picked one.',

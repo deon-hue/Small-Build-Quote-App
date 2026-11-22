@@ -52,6 +52,11 @@ export interface PlacedOpening {
   tagDy?: number
   /** a structural opening's steel: the beam section, posts and connections chosen for it */
   struct?: PlacedStruct
+  /** a window's style (a layout from lib/window-styles.ts), frame material, frame colour and glazing bars, as picked in the style picker: absent on a window placed before the picker existed (it is then a plain window) */
+  style?: string
+  material?: 'upvc' | 'aluminium'
+  colour?: string
+  bars?: 'none' | 'georgian' | 'astragal'
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -157,7 +162,7 @@ export const bifoldPanels = (widthMm: number) => Math.max(2, Math.round(widthMm 
  * How an opening is drawn. `path` is the wall's line, `band` its two faces, `mpp` the plan's metres per pixel, `labelGapPx` how far clear of the wall the label sits (a screen size divided by the zoom).
  * Returns null if the wall has no length. Coordinates are plan pixels; with `p(a, b)` = the point `a` along the wall and `b` across it from the line.
  */
-export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean; /** a structural opening's steel: how many beams, and how many posts and where */ beams?: number; posts?: number; postRole?: 'ends' | 'mid' }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
+export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean; /** a structural opening's steel: how many beams, and how many posts and where */ beams?: number; posts?: number; postRole?: 'ends' | 'mid'; /** where the dividing bars of a window fall across its width, as fractions (0 to 1, ends left out): drawn as bars across the frame */ mullions?: number[] }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
   if (!(mpp > 0)) return null
   const w = o.widthMm / (mpp * 1000)
   const half = w / 2
@@ -196,6 +201,8 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
     prims.push({ type: 'line', a: p(-half, hi), b: p(half, hi), style: 'frame' })
     prims.push({ type: 'line', a: p(-half, mid - thick * 0.08), b: p(half, mid - thick * 0.08), style: 'glass' })
     prims.push({ type: 'line', a: p(-half, mid + thick * 0.08), b: p(half, mid + thick * 0.08), style: 'glass' })
+    // the dividing bars of the chosen style, across the frame
+    for (const f of o.mullions ?? []) if (f > 0 && f < 1) prims.push({ type: 'line', a: p(-half + w * f, lo), b: p(-half + w * f, hi), style: 'frame' })
     if (kind === 'win-bay') {
       // the bay's projection, dashed: outside the wall, or inside it when the window is turned over
       const faceOut = inside === 1 ? lo : hi, faceIn = inside === 1 ? hi : lo
