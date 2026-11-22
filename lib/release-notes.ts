@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-22T12:00:00+00:00',
+    title: 'Subcontractor invoices made from their times',
+    detail: 'When a subcontractor\'s times go on a bill (Send to Bills, or the Xero push of a week or a day) the app now makes an invoice from those times and attaches the PDF to the Xero bill. Subcontractors download their invoices from a new My invoices tile in their portal, and set up what is on them under My invoice details: logo, trading name, UTR, bank details, invoice number prefix and payment terms (name, address, email, phone and CIS are filled in from your contact). VAT only appears if they tick VAT registered and give a VAT number; the CIS deduction is shown as on the bill. Time paid in cash gets no invoice: they can download a Record of cash payments for a month instead. The Xero bill itself is still created without VAT. New SQL: supabase/sub-invoices.sql.',
+  },
+  {
     at: '2026-11-19T12:00:00+00:00',
     title: 'Customer discount now comes off the quote total',
     detail: 'A customer discount set in the payment plan now also reduces the quote total. Everywhere the totals are shown (the quote builder summary and footer, the online quote, the PDF, the portal quote and its print-out, the portal quotes list and approval box, your portal preview, and the lists and dashboards) the block reads Subtotal, Customer discount (a minus line), VAT on the discounted amount, then Total, and the total matches the plan Total to pay. It follows the quote if you reprice a sub-phase. The discount only comes off the quote total while the payment plan is shown to the customer. The plan now starts with Price before discount. An invoice made from the job quote also gets a Customer discount line for the phases it bills. No new SQL.',
