@@ -23,6 +23,7 @@ import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
 import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
 import { snippet } from '@/lib/note-attention'
+import { downloadSubInvoice, isInvoiceDay } from '@/lib/sub-invoice-client'
 
 const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', postcode: '', notes: '', accountNumber: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
@@ -126,7 +127,7 @@ function ClientsPageInner() {
   interface SubTimeLog {
     id: string; contact_id: string; job_id: string | null; entry_date: string; week_start: string
     rate_type: string; rate_amount: number; amount: number; notes: string; status: string
-    entry_type: string
+    entry_type: string; xero_bill_id?: string | null
   }
   interface SubContract {
     id: string; description: string; type: string; quoted_amount: number | null
@@ -137,6 +138,7 @@ function ClientsPageInner() {
   const [subTimeLogs, setSubTimeLogs] = useState<SubTimeLog[]>([])
   const [subContracts, setSubContracts] = useState<SubContract[]>([])
   const [subHistoryLoading, setSubHistoryLoading] = useState(false)
+  const [subInvoiceBusy, setSubInvoiceBusy] = useState<string | null>(null)
   const [subHistoryTab, setSubHistoryTab] = useState<'logs' | 'bills' | 'quotes' | 'notes'>('logs')
   // a subcontractor's notes sent from their portal, and the timesheets of theirs waiting for review
   const [subNotes, setSubNotes] = useState<{ id: string; job_id: string; note: string; created_at: string }[]>([])
@@ -162,7 +164,7 @@ function ClientsPageInner() {
       .then(({ data }) => setSubPending((data ?? []) as typeof subPending))
     Promise.all([
       supabase.from('sub_admin_time_logs')
-        .select('id, contact_id, job_id, entry_date, week_start, rate_type, rate_amount, amount, notes, status, entry_type')
+        .select('id, contact_id, job_id, entry_date, week_start, rate_type, rate_amount, amount, notes, status, entry_type, xero_bill_id')
         .eq('contact_id', selected.id)
         .order('entry_date', { ascending: false })
         .limit(100),
@@ -948,6 +950,21 @@ function ClientsPageInner() {
                                   }}>
                                     {allPaid ? '✓ Cash paid' : allPending ? '⏳ Pending' : '↗ To bills'}
                                   </span>
+                                  {selected && logs.some(isInvoiceDay) && (
+                                    <div style={{ marginTop: 4 }}>
+                                      <button
+                                        className="btn btn-sm btn-outline"
+                                        disabled={subInvoiceBusy === wk}
+                                        title="Download the invoice for this week as a PDF (days paid in cash and days still pending are left off)"
+                                        onClick={async () => {
+                                          setSubInvoiceBusy(wk)
+                                          const err = await downloadSubInvoice({ contactId: selected.id, logIds: logs.filter(isInvoiceDay).map(l => l.id) })
+                                          setSubInvoiceBusy(null)
+                                          if (err) alert(err)
+                                        }}
+                                      >{subInvoiceBusy === wk ? '…' : '🧾 Invoice'}</button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <div style={{ marginTop: 6, paddingLeft: 8 }}>
@@ -992,6 +1009,21 @@ function ClientsPageInner() {
                                 background: b.status === 'paid' ? '#dcfce7' : b.status === 'approved' ? '#dbeafe' : '#f3f4f6',
                                 color: b.status === 'paid' ? '#166534' : b.status === 'approved' ? '#1e40af' : '#374151',
                               }}>{b.status}</span>
+                              {selected && b.description.startsWith('Week of ') && (
+                                <div style={{ marginTop: 4 }}>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    disabled={subInvoiceBusy === b.id}
+                                    title="Download the subcontractor's own invoice that was made for this bill"
+                                    onClick={async () => {
+                                      setSubInvoiceBusy(b.id)
+                                      const err = await downloadSubInvoice({ contactId: selected.id, billId: b.id })
+                                      setSubInvoiceBusy(null)
+                                      if (err) alert(err)
+                                    }}
+                                  >{subInvoiceBusy === b.id ? '…' : '🧾 Invoice'}</button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}

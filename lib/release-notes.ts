@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-22T18:00:00+00:00',
+    title: 'Subcontractor invoice button on Bills and the contact card',
+    detail: 'A subcontractor bill made with Send to Bills now has a Sub invoice button on its row in Bills, and the subcontractor\'s contact card has an Invoice button on each week in Time Logs and on each bill in Bills. On Bills and the contact card\'s Bills tab it downloads the invoice that was made for that bill; a bill made before invoices started has none, and the message points you to the Invoice button on that week in Subcontractors. No new SQL beyond supabase/sub-invoices.sql.',
+  },
+  {
     at: '2026-11-22T16:00:00+00:00',
     title: 'Download a subcontractor invoice from the Subcontractors page',
     detail: 'Each subcontractor week on the Subcontractors page now has an Invoice button that downloads that week\'s invoice as a PDF, for any week, old or new. If the week has no invoice yet one is made then (dated that day, next number); if it has one you get the same invoice again. Days still pending and days paid in cash are left off, and an all-cash week has no invoice. Not shown for PAYE or direct labour people. No new SQL beyond supabase/sub-invoices.sql.',

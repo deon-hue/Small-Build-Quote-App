@@ -13,6 +13,7 @@ import './touch.css'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
+import { downloadSubInvoice } from '@/lib/sub-invoice-client'
 
 let lineCounter = 0
 const BLANK_LINE = (): BillLineItem => ({ id: ++lineCounter, desc: '', category: 'labour', amount: 0 })
@@ -72,6 +73,7 @@ export default function BillsPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | BillStatus>('all')
   const [search, setSearch]           = useState('')
   const [openBillId, setOpenBillId]   = useState<string | null>(null)
+  const [invoiceBillBusy, setInvoiceBillBusy] = useState<string | null>(null)
 
   // Form state
   const [supplierId, setSupplierId]   = useState('')
@@ -519,6 +521,19 @@ export default function BillsPage() {
                           if (url && !showUrlDocument(url, { title: 'Invoice' })) window.open(url, '_blank')
                         }}>
                         📄 Invoice
+                      </button>
+                    )}
+                    {b.supplierId && b.description.startsWith('Week of ') && (
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
+                        title="Download the subcontractor's own invoice that was made for this bill (from their times)"
+                        disabled={invoiceBillBusy === b.id}
+                        onClick={async () => {
+                          setInvoiceBillBusy(b.id)
+                          const err = await downloadSubInvoice({ contactId: b.supplierId, billId: b.id })
+                          setInvoiceBillBusy(null)
+                          if (err) alert(err)
+                        }}>
+                        {invoiceBillBusy === b.id ? '…' : '🧾 Sub invoice'}
                       </button>
                     )}
                     {b.status !== 'paid' && (
