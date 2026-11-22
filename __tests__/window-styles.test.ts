@@ -15,7 +15,7 @@ const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.l
 
 // ---- the lists
 t('every window kind has styles', WINDOW_KINDS.every(k => stylesFor(k).length >= 4))
-t('the five kinds are exactly the Windows calculator kinds', WINDOW_KINDS.length === 5 && WINDOW_KINDS.every(k => KINDS.some(x => x.id === k && x.group === 'Windows')))
+t('the six kinds are exactly the Windows calculator kinds', WINDOW_KINDS.length === 6 && WINDOW_KINDS.every(k => KINDS.some(x => x.id === k && x.group === 'Windows')))
 t('doors have no styles (yet)', stylesFor('door-front').length === 0 && stylesFor('door-int-single').length === 0 && !isWindowKind('door-front'))
 for (const k of WINDOW_KINDS) {
   const ids = WINDOW_STYLES[k].map(s => s.id)

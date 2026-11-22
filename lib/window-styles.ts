@@ -1,10 +1,10 @@
 // The styles (layouts) of window you can pick in Take-off & Draw for each kind of window: casement, tilt-and-turn, fixed (picture), sash and bay, with a frame material (uPVC or aluminium), a frame colour and glazing bars.
 // Pure data and rules, no screen: the picker (components/WindowStylePicker.tsx) draws a thumbnail from the panes, the plan draws the mullions (`mullionFractions`), the Windows calculator is told the material, colour and the style in words.
-// A style's panes are polygons in fractions of the frame (0 to 1 across and down); `t` says how a pane opens: F fixed, L / R side-hung (hinged on the left or right), T top-hung, TL / TR tilt-and-turn (hinged left or right), SU / SD sliding sash (moves up or down).
+// A style's panes are polygons in fractions of the frame (0 to 1 across and down); `t` says how a pane opens: F fixed, L / R side-hung (hinged on the left or right), T top-hung, TL / TR tilt-and-turn (hinged left or right), SU / SD sliding sash (moves up or down), S a solid infill panel (no glass, as under a door side panel's glazing).
 
 import type { OpeningKind, WdMaterial } from './wd-units'
 
-export type PaneType = 'F' | 'L' | 'R' | 'T' | 'TL' | 'TR' | 'SU' | 'SD'
+export type PaneType = 'F' | 'L' | 'R' | 'T' | 'TL' | 'TR' | 'SU' | 'SD' | 'S'
 export interface WinPane { p: [number, number][]; t: PaneType }
 export interface WinStyle {
   id: string
@@ -21,8 +21,8 @@ export interface WinStyle {
   bars?: [number, number]
 }
 
-export type WindowKind = 'win-casement' | 'win-tilt-turn' | 'win-fixed' | 'win-sash' | 'win-bay'
-export const WINDOW_KINDS: WindowKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay']
+export type WindowKind = 'win-casement' | 'win-tilt-turn' | 'win-fixed' | 'win-sash' | 'win-bay' | 'win-side-panel'
+export const WINDOW_KINDS: WindowKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay', 'win-side-panel']
 export const isWindowKind = (k: string): k is WindowKind => (WINDOW_KINDS as string[]).includes(k)
 
 const R = (x0: number, y0: number, x1: number, y1: number, t: PaneType): WinPane => ({ p: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], t })
@@ -72,11 +72,20 @@ export const WINDOW_STYLES: Record<WindowKind, WinStyle[]> = {
       P([[0, 0.14], [0.15, 0.07], [0.15, 0.93], [0, 0.86]], 'F'), P([[0.15, 0.07], [0.32, 0], [0.32, 1], [0.15, 0.93]], 'L'), R(0.32, 0, 0.68, 1, 'F'),
       P([[0.68, 0], [0.85, 0.07], [0.85, 0.93], [0.68, 1]], 'R'), P([[0.85, 0.07], [1, 0.14], [1, 0.86], [0.85, 0.93]], 'F')] },
   ],
+  // the fixed glazed panel that stands beside a front door (a sidelight): narrow and as tall as the door, all fixed
+  'win-side-panel': [
+    { id: 'sp-full-glass', name: 'Full-height glass', words: 'full-height fixed glazed side panel', ar: 0.3, w: 450, h: 2100, panes: [R(0, 0, 1, 1, 'F')] },
+    { id: 'sp-glass-over-solid', name: 'Glass over solid panel', words: 'fixed glazed side panel over a solid lower panel', ar: 0.3, w: 450, h: 2100, panes: [R(0, 0, 1, 0.68, 'F'), R(0, 0.68, 1, 1, 'S')] },
+    { id: 'sp-three-quarter', name: 'Three-quarter glass', words: 'three-quarter glazed side panel with a solid base', ar: 0.3, w: 450, h: 2100, panes: [R(0, 0, 1, 0.78, 'F'), R(0, 0.78, 1, 1, 'S')] },
+    { id: 'sp-two-lights', name: 'Two stacked lights', words: 'side panel with two stacked fixed lights', ar: 0.3, w: 450, h: 2100, panes: [R(0, 0, 1, 0.5, 'F'), R(0, 0.5, 1, 1, 'F')] },
+    { id: 'sp-top-light', name: 'Glass with top light', words: 'full-height glazed side panel with a fixed top light', ar: 0.3, w: 450, h: 2100, panes: [R(0, 0, 1, 0.2, 'F'), R(0, 0.2, 1, 1, 'F')] },
+    { id: 'sp-wide', name: 'Wide full-height glass', words: 'wide full-height fixed glazed side panel', ar: 0.4, w: 650, h: 2100, panes: [R(0, 0, 1, 1, 'F')] },
+  ],
 }
 
 /** the style each kind starts on (the one nearest the kind's usual size) */
 export const DEFAULT_STYLE: Record<WindowKind, string> = {
-  'win-casement': 'two-one-opens', 'win-tilt-turn': 'tt-fixed-side', 'win-fixed': 'fixed-single', 'win-sash': 'sash-1-1', 'win-bay': 'bay-splay-3',
+  'win-casement': 'two-one-opens', 'win-tilt-turn': 'tt-fixed-side', 'win-fixed': 'fixed-single', 'win-sash': 'sash-1-1', 'win-bay': 'bay-splay-3', 'win-side-panel': 'sp-full-glass',
 }
 
 export const stylesFor = (kind: string): WinStyle[] => (isWindowKind(kind) ? WINDOW_STYLES[kind] : [])
@@ -138,4 +147,4 @@ export function mullionFractions(kind: string, styleId: string | undefined): num
 }
 
 /** How the opening panes of a style are described for the calculator or a short label: how many open */
-export const openingPaneCount = (s: WinStyle): number => s.panes.filter(p => p.t !== 'F').length
+export const openingPaneCount = (s: WinStyle): number => s.panes.filter(p => p.t !== 'F' && p.t !== 'S').length

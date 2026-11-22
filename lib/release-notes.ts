@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T14:00:00+00:00',
+    title: 'Door side panels in Take-off: pick the style, material and colour',
+    detail: 'In Take-off, Windows & Doors now has a Door side panel, the narrow fixed glazed panel that stands beside a front door. Clicking it opens the same style picker as the other windows: full-height glass, glass over a solid lower panel, three-quarter glass, two stacked lights, a fixed top light, or a wider panel. The material (uPVC, aluminium, timber or composite) and colour are the same choices as the door, so a side panel can match it. It goes to the Windows calculator like any other window, with the material and colour in the price and the style in the quote wording, and it does not get an inside window board. You can change the choice later without changing its size.',
+  },
+  {
     at: '2026-11-23T10:00:00+00:00',
     title: 'Door styles in Take-off: pick the style, material and colour for every kind of door',
     detail: 'In Take-off, clicking any kind of door (front, composite, security, back, French, bi-fold, sliding patio, garage, and internal, fire, double and pocket doors) now opens the same style picker as windows: the usual layouts (panels, glazed lights, stable doors, bi-fold with 2 to 6 panels and so on) drawn the standard way, the material for that kind of door (composite, uPVC, timber, aluminium or steel), and a colour, or for internal doors a finish such as natural oak or walnut. The choice goes to the Doors calculator so the price follows the material and colour and the quote wording names the style (for example an aluminium five-panel bi-fold, black). A bi-fold is drawn on the plan with its number of panels. Change style, material or colour on a door already placed changes it later without touching its size.',
