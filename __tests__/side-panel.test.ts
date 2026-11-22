@@ -6,7 +6,7 @@
 import { KINDS, KIND_BY_ID, currentKind, WINDOWS_SCOPE_KINDS, kindInScope, newOpening, openingWords, planOpeningSig, mergePlanOpenings, isWindow, type PlanOpening } from '../lib/wd-units'
 import { WINDOW_STYLES, stylesFor, mullionFractions, openingPaneCount } from '../lib/window-styles'
 import { styleCards, materialsFor, swatchesFor, cleanOpeningChoice, openingStyleWords, isColoured, styleSize, defaultStyleId, isStyledKind, mullionsFor } from '../lib/opening-styles'
-import { openingShape, snapBesideNeighbour, snapsBeside } from '../lib/wall-openings'
+import { openingShape, snapBesideNeighbour, snapsBeside, panelsAttachedTo, moveWithPanels } from '../lib/wall-openings'
 
 let ok = 0, bad = 0
 const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.log('FAIL', n, x ?? '')) }
@@ -76,6 +76,40 @@ t('a plain side panel signature has nothing added', planOpeningSig(base) === pla
   t('it never snaps round a corner (the right side would not fit before the bend, so the left side is used)', snap(K, 450, 600, [{ distPx: 540, widthMm: 900, kind: 'door-front' }], 150, bent) === 540 - 45 - 22.5, snap(K, 450, 600, [{ distPx: 540, widthMm: 900, kind: 'door-front' }], 150, bent))
   t('no scale: no snap', snapBesideNeighbour(wall, false, [door], K, 450, 575, 0, 25) === null)
   t('no neighbours: no snap', snap(K, 450, 575, []) === null)
+}
+
+// a door carries the side panels standing against it (1 plan pixel = 10mm)
+{
+  type P = { id: string; wallId: string; distPx: number; widthMm: number; kind: string }
+  const wall = [{ x: 0, y: 0 }, { x: 1000, y: 0 }]
+  const wall2 = [{ x: 0, y: 500 }, { x: 800, y: 500 }]
+  const door: P = { id: 'd', wallId: 'w1', distPx: 500, widthMm: 900, kind: 'door-front' }
+  const left: P = { id: 'l', wallId: 'w1', distPx: 432.5, widthMm: 450, kind: K }       // flush on the door's left
+  const right: P = { id: 'r', wallId: 'w1', distPx: 567.5, widthMm: 450, kind: K }      // flush on its right
+  const far: P = { id: 'f', wallId: 'w1', distPx: 800, widthMm: 450, kind: K }          // a panel elsewhere on the wall
+  const win: P = { id: 'x', wallId: 'w1', distPx: 432.5, widthMm: 450, kind: 'win-casement' }
+  const ids = (a: { id: string }[]) => a.map(p => p.id).sort().join(',')
+  t('panels attached: the ones flush against the door, either side', ids(panelsAttachedTo([door, left, right, far], 'd', 0.01)) === 'l,r')
+  t('a panel a hand away is not attached; one 20mm out still is', ids(panelsAttachedTo([door, { ...left, distPx: 400 }], 'd', 0.01)) === '' && ids(panelsAttachedTo([door, { ...left, distPx: 430.5 }], 'd', 0.01)) === 'l')
+  t('a panel on another wall, a window, or a door asked for a panel is not attached', ids(panelsAttachedTo([door, { ...left, wallId: 'w2' }, win], 'd', 0.01)) === '' && panelsAttachedTo([door, left], 'l', 0.01).length === 0 && panelsAttachedTo([{ ...door, kind: 'door-int-single' }, left], 'd', 0.01).length === 0)
+  const moved = moveWithPanels([door, left, right, far], 'd', 'w1', wall, false, 300, 0.01)
+  const at = (l: P[], i: string) => l.find(q => q.id === i)!.distPx
+  t('moving the door moves both panels by the same amount', at(moved, 'd') === 300 && at(moved, 'l') === 232.5 && at(moved, 'r') === 367.5, moved.map(q => q.distPx))
+  t('a panel elsewhere on the wall stays', at(moved, 'f') === 800)
+  t('the panels are still flush after the move', Math.abs((at(moved, 'r') - 22.5) - (at(moved, 'd') + 45)) < 1e-9 && Math.abs((at(moved, 'l') + 22.5) - (at(moved, 'd') - 45)) < 1e-9)
+  const nearEnd = moveWithPanels([door, left, right], 'd', 'w1', wall, false, 990, 0.01)
+  t('near the wall end the whole group stops with its outer panel on the wall (door at 1000 - 45 - 45)', at(nearEnd, 'd') === 910 && at(nearEnd, 'r') === 977.5 && at(nearEnd, 'l') === 842.5, nearEnd.map(q => q.distPx))
+  const toWall2 = moveWithPanels([door, left, right], 'd', 'w2', wall2, false, 400, 0.01)
+  t('moving the door to another wall takes the panels to it with their places beside it', toWall2.every(q => q.wallId === 'w2') && at(toWall2, 'd') === 400 && at(toWall2, 'l') === 332.5 && at(toWall2, 'r') === 467.5, toWall2)
+  const bent = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }]
+  const bentMove = moveWithPanels([door, right], 'd', 'w1', bent, false, 560, 0.01)
+  t('the group never wraps a corner: the door stops short so its panel stays on the same length', Math.abs(at(bentMove, 'r') + 22.5 - 600) < 1e-9 && at(bentMove, 'r') - at(bentMove, 'd') === 67.5 && at(bentMove, 'd') === 510, bentMove.map(q => q.distPx))
+  const alone = moveWithPanels([door], 'd', 'w1', wall, false, 300, 0.01)
+  t('a door with no panel moves alone and is kept on the wall as before', at(alone, 'd') === 300 && at(moveWithPanels([door], 'd', 'w1', wall, false, 2000, 0.01), 'd') === 955)
+  const panelOnly = moveWithPanels([door, left], 'l', 'w1', wall, false, 100, 0.01)
+  t('moving a side panel moves only the panel (it leaves the door)', at(panelOnly, 'l') === 100 && at(panelOnly, 'd') === 500)
+  t('moving a window next to a door does not carry anything', at(moveWithPanels([door, win], 'x', 'w1', wall, false, 100, 0.01), 'd') === 500)
+  t('the list is unchanged for an unknown id or no scale', moveWithPanels([door], 'zzz', 'w1', wall, false, 100, 0.01)[0].distPx === 500 && moveWithPanels([door], 'd', 'w1', wall, false, 100, 0)[0].distPx === 500)
 }
 
 console.log(`${ok} passed, ${bad} failed`)

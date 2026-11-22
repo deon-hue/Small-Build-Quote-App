@@ -142,6 +142,38 @@ export function snapBesideNeighbour(points: Pt[], closed: boolean, neighbours: {
   return best ? best.d : null
 }
 
+/** The side panels standing against an outside door: those on the same wall whose edge touches the door's (within about 30mm either way), with how far each sits from the door's centre (plan pixels, negative = before it along the wall). */
+export function panelsAttachedTo<T extends { id: string; wallId: string; distPx: number; widthMm: number; kind: string }>(list: T[], doorId: string, mpp: number): { id: string; offsetPx: number; halfPx: number }[] {
+  const door = list.find(q => q.id === doorId)
+  if (!door || !(mpp > 0) || !isOutsideDoor(door.kind)) return []
+  const pxPerMm = 1 / (mpp * 1000)
+  const tol = 30 * pxPerMm
+  const hd = door.widthMm * pxPerMm / 2
+  return list.filter(q => q.id !== doorId && q.wallId === door.wallId && q.kind === 'door-side-panel').flatMap(q => {
+    const hp = q.widthMm * pxPerMm / 2
+    const off = q.distPx - door.distPx
+    return Math.abs(Math.abs(off) - (hd + hp)) <= tol ? [{ id: q.id, offsetPx: off, halfPx: hp }] : []
+  })
+}
+
+/**
+ * Moves an opening to a wall and a distance along it. An OUTSIDE DOOR takes the side panels standing against it along with it (each keeps its place beside the door, on the new wall too), and the door and its panels are
+ * kept together on one straight length of the wall; any other opening just moves. `wantedPx` is where the door's centre should go. Pure: returns the new list.
+ */
+export function moveWithPanels<T extends { id: string; wallId: string; distPx: number; widthMm: number; kind: string }>(list: T[], id: string, wallId: string, points: Pt[], closed: boolean, wantedPx: number, mpp: number): T[] {
+  const o = list.find(q => q.id === id)
+  if (!o || !(mpp > 0)) return list
+  const attached = panelsAttachedTo(list, id, mpp)
+  const hd = o.widthMm / (mpp * 1000) / 2
+  let lo = -hd, hi = hd
+  for (const p of attached) { lo = Math.min(lo, p.offsetPx - p.halfPx); hi = Math.max(hi, p.offsetPx + p.halfPx) }
+  const c0 = (lo + hi) / 2
+  const centre = clampDist(points, closed, wantedPx + c0, (hi - lo) / 2)
+  const door = centre - c0
+  const byId = new Map(attached.map(p => [p.id, p.offsetPx]))
+  return list.map(q => (q.id === id ? { ...q, wallId, distPx: door } : byId.has(q.id) ? { ...q, wallId, distPx: door + (byId.get(q.id) as number) } : q))
+}
+
 /** Keeps an opening's centre where the whole opening stays on ONE straight length of the wall (an opening never wraps a corner). If the length is shorter than the opening it sits in the middle of it. */
 export function clampDist(points: Pt[], closed: boolean, d: number, halfPx: number): number {
   const ls = legs(points, closed)
