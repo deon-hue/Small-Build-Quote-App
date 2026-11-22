@@ -195,7 +195,7 @@ function SubPortalPreviewInner() {
       {/* The same big tiles the subcontractor has on their home screen (here each one opens its tab below). They choose their own style; this shows the default. */}
       <div style={{ marginBottom: 20 }}>
         <SubHomeTiles style="soft" calendarLabel={companyCalendar ? 'Company calendar' : 'Calendar'}
-          onSelect={k => setTab(k === 'time' ? 'addtime' : k === 'timesheets' ? 'timesheets' : k === 'schedule' ? 'schedule' : k === 'calendar' ? 'calendar' : k === 'notes' ? 'notes' : 'payments')} />
+          onSelect={k => k === 'invoices' ? alert('Invoices are made from the subcontractor\'s own login, so this preview does not show them.') : setTab(k === 'time' ? 'addtime' : k === 'timesheets' ? 'timesheets' : k === 'schedule' ? 'schedule' : k === 'calendar' ? 'calendar' : k === 'notes' ? 'notes' : 'payments')} />
       </div>
 
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => setTab('schedule')} />

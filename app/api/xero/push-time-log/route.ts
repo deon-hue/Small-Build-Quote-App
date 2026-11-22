@@ -4,6 +4,8 @@ import { getValidConnection, xeroFetch } from '@/lib/xero'
 import type { XeroAccountCodes } from '@/lib/types'
 import { DEFAULT_XERO_ACCOUNT_CODES } from '@/lib/types'
 import { rowIsOnPayroll } from '@/lib/payroll'
+import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { invoiceAndAttach } from '@/lib/sub-invoice-server'
 
 interface XeroInvoiceResponse { InvoiceID?: string }
 interface XeroResponse { Invoices?: XeroInvoiceResponse[] }
@@ -71,6 +73,9 @@ export async function POST(req: NextRequest) {
     if (!xeroBillId) return NextResponse.json({ error: 'Xero did not return an invoice ID' }, { status: 500 })
 
     await sb.from('sub_admin_time_logs').update({ xero_bill_id: xeroBillId }).eq('id', logId)
+
+    // The subcontractor's own invoice for this day goes on the Xero bill (never blocks the bill)
+    if (log.contact_id) await invoiceAndAttach(createServiceRoleClient(), conn, { ownerId: user.id, contactId: log.contact_id as string, logIds: [logId], xeroBillId })
 
     return NextResponse.json({ xeroBillId })
   } catch (e) {

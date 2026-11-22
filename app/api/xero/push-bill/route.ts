@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
 import type { Bill, XeroAccountCodes } from '@/lib/types'
 import { DEFAULT_XERO_ACCOUNT_CODES } from '@/lib/types'
+import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { attachInvoiceToXero, renderInvoicePdf } from '@/lib/sub-invoice-server'
 
 interface XeroValidationError { Message: string }
 interface XeroElement { ValidationErrors?: XeroValidationError[] }
@@ -146,6 +148,20 @@ export async function POST(req: NextRequest) {
         }
       } catch (attachErr) {
         console.warn('push-bill: attachment failed (non-fatal)', attachErr)
+      }
+    }
+
+    // A bill made from a subcontractor's times (Send to Bills) has their own invoice made for it: it goes on the Xero bill too (best effort)
+    if (!bill.documentId) {
+      try {
+        const admin = createServiceRoleClient()
+        const { data: inv } = await admin.from('sub_invoices').select('id, contact_id').eq('owner_id', user.id).eq('bill_id', String(bill.id)).maybeSingle()
+        if (inv) {
+          const pdf = await renderInvoicePdf(admin, user.id, inv.contact_id as string, inv.id as string)
+          if (pdf && (await attachInvoiceToXero(conn, xeroBill.InvoiceID, pdf))) await admin.from('sub_invoices').update({ xero_bill_id: xeroBill.InvoiceID }).eq('id', inv.id)
+        }
+      } catch (invErr) {
+        console.warn('push-bill: subcontractor invoice not attached (non-fatal)', invErr)
       }
     }
 

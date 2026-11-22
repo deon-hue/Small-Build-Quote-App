@@ -828,7 +828,7 @@ export default function SubcontractorsPage() {
       // The bill deliberately carries NO job: each timesheet day already has its own job cost (against the right
       // job, even when the week spans several), so a job on the bill would add a second, duplicate cost.
       void dominantJobId
-      await addBill({
+      const madeBill = await addBill({
         supplierId: contactId, supplierName: contactName(contactId),
         jobId: '',
         billDate: ukToday(), dueDate: '',
@@ -837,6 +837,10 @@ export default function SubcontractorsPage() {
         subtotal: total, cisRate, cisDeduction, totalPayable: total - cisDeduction,
         status: 'draft', notes: 'Awaiting subcontractor invoice', syncToXero: false,
       })
+      // The subcontractor's own invoice for these days is made now, tied to this bill, so it goes on the Xero bill when the bill is sent there (never blocks the bill)
+      try {
+        await fetch('/api/sub-invoice/make', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, logIds: billableLogs.map(l => l.id), billId: madeBill?.id }) })
+      } catch { /* the bill is made; the invoice can be made again from the same days */ }
       router.push('/bills')
     } finally {
       setSendingToBills(null)

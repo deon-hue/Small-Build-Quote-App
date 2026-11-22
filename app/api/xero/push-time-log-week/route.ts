@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
 import { rowIsOnPayroll } from '@/lib/payroll'
 import { ukToday } from '@/lib/uk-today'
+import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { invoiceAndAttach } from '@/lib/sub-invoice-server'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -101,6 +103,9 @@ export async function POST(req: NextRequest) {
 
     // Update all entries with the Xero bill ID
     await sb.from('sub_admin_time_logs').update({ xero_bill_id: xeroBillId }).in('id', logs.map(l => l.id as string))
+
+    // The subcontractor's own invoice for these days goes on the Xero bill (made from their times and details; never blocks the bill)
+    await invoiceAndAttach(createServiceRoleClient(), conn, { ownerId: user.id, contactId, logIds: logs.map(l => l.id as string), xeroBillId })
 
     return NextResponse.json({ xeroBillId })
   } catch (e) {

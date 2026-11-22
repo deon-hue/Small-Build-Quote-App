@@ -4,10 +4,10 @@
 // in the style the subcontractor has chosen. A plain display component used by BOTH the real portal and the builder's preview of it.
 
 import type { LucideIcon } from 'lucide-react'
-import { ClockPlus, Camera, CalendarDays, CalendarRange, ClipboardList, PoundSterling } from 'lucide-react'
+import { ClockPlus, Camera, CalendarDays, CalendarRange, ClipboardList, PoundSterling, FileText } from 'lucide-react'
 import type { LookStyle } from '@/lib/sub-look'
 
-export type SubTileKey = 'time' | 'notes' | 'schedule' | 'calendar' | 'timesheets' | 'payments'
+export type SubTileKey = 'time' | 'notes' | 'schedule' | 'calendar' | 'timesheets' | 'invoices' | 'payments'
 
 interface TileDef { key: SubTileKey; label: string; Icon: LucideIcon; colour: string }
 
@@ -17,6 +17,7 @@ export const SUB_TILES: TileDef[] = [
   { key: 'schedule',   label: 'Schedule',         Icon: CalendarDays,  colour: '#d9822b' },
   { key: 'calendar',   label: 'Company calendar', Icon: CalendarRange, colour: '#7c5cc4' },
   { key: 'timesheets', label: 'Timesheets',       Icon: ClipboardList, colour: '#2a9d8f' },
+  { key: 'invoices',   label: 'My invoices',      Icon: FileText,      colour: '#4f6bd8' },
   { key: 'payments',   label: 'Fixed-price payments',       Icon: PoundSterling, colour: '#c2503f' },
 ]
 
