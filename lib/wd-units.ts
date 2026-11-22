@@ -139,6 +139,9 @@ export interface WdOpening {
   fromPlan?: string
   /** drawn on a wall whose own calculator already prices a lintel (and closers) over it: set from the drawing, so the lintel here is not paid for twice */
   wallLintel?: boolean
+  /** a window's style in words ("two-pane, one opening, with Georgian bars") and the name of its frame colour ("anthracite grey"), from the style picked on the drawing: they only word the quote */
+  styleText?: string
+  colourName?: string
 }
 
 export interface OpeningWork {
@@ -273,7 +276,9 @@ export function openingWords(o: WdOpening): string {
     const set = [o.lining && !frame && 'lining', o.architrave && 'architrave', o.ironmongery && 'ironmongery'].filter(Boolean) as string[]
     return `${size} ${k.label.toLowerCase()}${frame ? ' fitted to the existing frame' : ''}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
   }
-  return `${size} ${MATERIAL_WORD[o.material]} ${k.label.toLowerCase()}, ${GLAZING_LABEL[o.glazing].toLowerCase()}, ${o.coloured ? 'coloured' : 'white'}`
+  const style = isWindow(o.kind) && o.styleText ? ` (${o.styleText})` : ''
+  const colour = o.coloured ? (o.colourName ? o.colourName.toLowerCase() : 'coloured') : 'white'
+  return `${size} ${MATERIAL_WORD[o.material]} ${k.label.toLowerCase()}${style}, ${GLAZING_LABEL[o.glazing].toLowerCase()}, ${colour}`
 }
 
 export function calculateWindowsDoors(input: WdInput): WdResult {
@@ -448,8 +453,20 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
 
 // ── Openings placed on the Take-off drawing ──────────────────────────────────────────────────────────────────────────
 /** An opening as the drawing knows it (lib/wall-openings.ts PlacedOpening, without where on the wall it is) */
-export interface PlanOpening { id: string; ref: string; location?: string; kind: OpeningKind; widthMm: number; heightMm: number; swing: WdSwing; /** the wall it is drawn on has a calculator that already prices a lintel over each opening */ wallPricesLintel?: boolean }
-export const planOpeningSig = (p: PlanOpening) => [p.kind, p.widthMm, p.heightMm, p.swing, p.ref, p.location ?? ''].join('|')
+export interface PlanOpening { id: string; ref: string; location?: string; kind: OpeningKind; widthMm: number; heightMm: number; swing: WdSwing; /** the wall it is drawn on has a calculator that already prices a lintel over each opening */ wallPricesLintel?: boolean
+  /** a window's frame material, colour and style as picked on the drawing (absent = nothing picked: the calculator's own start or what is typed there) */
+  material?: WdMaterial; coloured?: boolean; colourName?: string; styleText?: string }
+export const planOpeningSig = (p: PlanOpening) => {
+  const base = [p.kind, p.widthMm, p.heightMm, p.swing, p.ref, p.location ?? ''].join('|')
+  // the window style parts are only added when something was picked, so an opening placed before the picker existed keeps the signature it was saved with (and what was typed over in the calculator stays)
+  const extra = [p.material ?? '', p.coloured === undefined ? '' : p.coloured ? 'c' : 'w', p.colourName ?? '', p.styleText ?? ''].join('|')
+  return extra === '|||' ? base : base + '|' + extra
+}
+const fromDrawing = (p: PlanOpening): Partial<WdOpening> => ({
+  ...(p.material ? { material: p.material } : {}),
+  ...(p.coloured !== undefined ? { coloured: p.coloured } : {}),
+  styleText: p.styleText, colourName: p.colourName,
+})
 
 /**
  * The calculator's openings brought in step with the drawing: an opening placed on the plan is added (with the usual trims for its kind), one that is already in the calculator follows the drawing when the drawing's opening
@@ -467,11 +484,11 @@ export function mergePlanOpenings(existing: WdOpening[], plan: PlanOpening[]): W
     const sig = planOpeningSig(p)
     if (e.fromPlan === sig) { out.push(e.wallLintel === !!p.wallPricesLintel ? e : { ...e, wallLintel: !!p.wallPricesLintel }); continue }
     const base = e.kind === p.kind ? e : { ...newOpening(e.id, p.ref, p.kind, e.location), qty: e.qty, supply: e.supply, pcEach: e.pcEach, removeOld: e.removeOld, ...(e.work ? { work: e.work } : {}) }
-    out.push({ ...base, ref: p.ref, location: p.location ?? base.location, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: sig, wallLintel: !!p.wallPricesLintel })
+    out.push({ ...base, ref: p.ref, location: p.location ?? base.location, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: sig, wallLintel: !!p.wallPricesLintel, ...fromDrawing(p) })
   }
   for (const p of plan) {
     if (seen.has(p.id)) continue
-    out.push({ ...newOpening('op-' + p.id, p.ref, p.kind, p.location ?? ''), widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: planOpeningSig(p), wallLintel: !!p.wallPricesLintel })
+    out.push({ ...newOpening('op-' + p.id, p.ref, p.kind, p.location ?? ''), widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: planOpeningSig(p), wallLintel: !!p.wallPricesLintel, ...fromDrawing(p) })
   }
   return out
 }
