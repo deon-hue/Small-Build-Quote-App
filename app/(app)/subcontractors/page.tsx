@@ -232,6 +232,7 @@ export default function SubcontractorsPage() {
   const [closedWeeks, setClosedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
   const [sendingToBills, setSendingToBills] = useState<string | null>(null)
+  const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null)
   const [fixingCosts, setFixingCosts] = useState(false)
   const [fixingLabour, setFixingLabour] = useState(false)
 
@@ -844,6 +845,30 @@ export default function SubcontractorsPage() {
       router.push('/bills')
     } finally {
       setSendingToBills(null)
+    }
+  }
+
+  // Download the subcontractor's invoice for a week (made now if it has none, else the same one). Days still pending and days paid in cash are left off: an invoice is for approved time that is on a bill.
+  async function downloadWeekInvoice(contactId: string, ws: string, logIds: string[], billId?: string) {
+    const key = `${contactId}_${ws}`
+    setInvoiceBusy(key)
+    try {
+      const res = await fetch('/api/sub-invoice/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, logIds, billId }) })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        alert(j?.error || 'Could not make the invoice. Try again.')
+        return
+      }
+      const blob = await res.blob()
+      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'Invoice.pdf'
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob); a.download = name
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+    } catch {
+      alert('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setInvoiceBusy(null)
     }
   }
 
@@ -1704,6 +1729,20 @@ export default function SubcontractorsPage() {
                               title="Fix days incorrectly marked as cash — resets them so Bill paid shows correctly"
                             >⚠ Fix status</button>
                           )}
+                          {!isPayroll(contactId) && (() => {
+                            const invLogs = logs.filter(l => l.status !== 'pending' && !(l.status === 'paid' && !l.xero_bill_id))
+                            if (invLogs.length === 0) return null
+                            return (
+                              <button
+                                onClick={() => downloadWeekInvoice(contactId, ws, invLogs.map(l => l.id), wb?.id)}
+                                disabled={invoiceBusy === key}
+                                title="Download this subcontractor's invoice for the week as a PDF (days paid in cash and days still pending are left off)"
+                                style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: invoiceBusy === key ? 0.6 : 1 }}
+                              >
+                                {invoiceBusy === key ? '…' : '🧾 Invoice'}
+                              </button>
+                            )
+                          })()}
                           <button onClick={() => openWeekSheet(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
                         </div>
