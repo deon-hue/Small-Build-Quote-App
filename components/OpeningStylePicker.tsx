@@ -48,7 +48,8 @@ function WindowSvg({ def, hex: F, alu, bars, height }: { def: WinStyle; hex: str
     const cx = pts.reduce((a, q) => a + q[0], 0) / pts.length, cy = pts.reduce((a, q) => a + q[1], 0) / pts.length
     const sc = (k: number) => pts.map(q => [cx + (q[0] - cx) * k, cy + (q[1] - cy) * k] as [number, number])
     const str = (a: [number, number][]) => a.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ')
-    const opens = pn.t !== 'F'
+    const solid = pn.t === 'S'
+    const opens = pn.t !== 'F' && !solid
     const g = sc(opens ? gScale : gFixed)
     const xs = g.map(q => q[0]), ys = g.map(q => q[1])
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), mx = (x0 + x1) / 2, my = (y0 + y1) / 2
@@ -73,8 +74,8 @@ function WindowSvg({ def, hex: F, alu, bars, height }: { def: WinStyle; hex: str
     els.push(
       <g key={pi}>
         <polygon points={str(sc(0.97))} fill={F} stroke={LINE} strokeWidth={0.5} />
-        <polygon points={str(g)} fill={GLASS} stroke="rgba(0,0,0,.4)" strokeWidth={0.5} />
-        {barEls}{marks}
+        <polygon points={str(g)} fill={solid ? 'rgba(255,255,255,.14)' : GLASS} stroke="rgba(0,0,0,.4)" strokeWidth={0.5} />
+        {!solid && barEls}{marks}
       </g>,
     )
   })

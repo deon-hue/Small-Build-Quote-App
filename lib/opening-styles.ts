@@ -7,8 +7,11 @@ import {
   type WinStyle, type GlazingBars,
 } from './window-styles'
 import {
-  isDoorKind, isInternalDoorKind, doorStylesFor, doorStyleOrDefault, doorSwatches, DOOR_MATERIALS, DEFAULT_DOOR_STYLE, type DoorStyle, type Swatch,
+  isDoorKind, isInternalDoorKind, doorStylesFor, doorStyleOrDefault, doorSwatches, DOOR_MATERIALS, DEFAULT_DOOR_STYLE, DOOR_COLOURS, type DoorStyle, type Swatch,
 } from './door-styles'
+
+/** a side panel stands beside a front door, so it is offered the door's materials and colours to match it */
+export const isSidePanel = (k: string): boolean => k === 'win-side-panel'
 
 export const isStyledKind = (k: string): boolean => isWindowKind(k) || isDoorKind(k)
 
@@ -34,13 +37,13 @@ export const defaultStyleId = (kind: string): string => (isWindowKind(kind) ? WI
 export const MATERIAL_NAME: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'Aluminium', timber: 'Timber', composite: 'Composite', steel: 'Steel' }
 /** the materials a kind offers in the picker, the first is the start (windows: uPVC or aluminium) */
 export function materialsFor(kind: string): { id: WdMaterial; name: string }[] {
-  const ids: WdMaterial[] = isWindowKind(kind) ? ['upvc', 'aluminium'] : isDoorKind(kind) ? DOOR_MATERIALS[kind] : []
+  const ids: WdMaterial[] = isSidePanel(kind) ? ['upvc', 'aluminium', 'timber', 'composite'] : isWindowKind(kind) ? ['upvc', 'aluminium'] : isDoorKind(kind) ? DOOR_MATERIALS[kind] : []
   return ids.map(id => ({ id, name: MATERIAL_NAME[id] }))
 }
 export const defaultMaterialFor = (kind: string): WdMaterial => materialsFor(kind)[0]?.id ?? (KIND_BY_ID[kind]?.defaultMaterial ?? 'upvc')
 
 /** the colours (windows and external doors) or finishes (internal doors) to pick from */
-export const swatchesFor = (kind: string): Swatch[] => (isWindowKind(kind) ? FRAME_COLOURS : isDoorKind(kind) ? doorSwatches(kind) : [])
+export const swatchesFor = (kind: string): Swatch[] => (isSidePanel(kind) ? DOOR_COLOURS : isWindowKind(kind) ? FRAME_COLOURS : isDoorKind(kind) ? doorSwatches(kind) : [])
 export const colourLabelFor = (kind: string): string => (isWindowKind(kind) ? 'Frame colour' : isInternalDoorKind(kind) ? 'Finish' : 'Door colour')
 export const materialLabelFor = (kind: string): string => (isWindowKind(kind) ? 'Frame material' : 'Door material')
 /** only windows have glazing bars to pick */
@@ -54,7 +57,11 @@ export const defaultChoice = (kind: string): OpeningChoice => ({ style: defaultS
 /** A choice made safe: a style that belongs to another kind becomes this kind's usual one, a material this kind does not offer its usual one, an unknown colour the plain one, unknown bars none (and none for a door) */
 export function cleanOpeningChoice(kind: string, c: LooseOpeningChoice | undefined): OpeningChoice {
   const d = defaultChoice(kind)
-  if (isWindowKind(kind)) { const w = cleanWindowChoice(kind, c); return { style: w.style, material: w.material, colour: w.colour, bars: w.bars } }
+  if (isWindowKind(kind)) {
+    const w = cleanWindowChoice(kind, c)
+    if (isSidePanel(kind)) return { style: w.style, material: materialsFor(kind).find(m => m.id === c?.material)?.id ?? d.material, colour: swatchesFor(kind).find(s => s.id === c?.colour)?.id ?? d.colour, bars: w.bars }
+    return { style: w.style, material: w.material, colour: w.colour, bars: w.bars }
+  }
   return {
     style: doorStyleOrDefault(kind, c?.style)?.id ?? d.style,
     material: materialsFor(kind).find(m => m.id === c?.material)?.id ?? d.material,

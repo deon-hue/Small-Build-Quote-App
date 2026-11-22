@@ -14,6 +14,8 @@ export interface WdDescriptionInput {
   internalDoors: number
   anyProvisional: boolean
   anyClientSupplied: boolean
+  /** an internal door's furniture is supplied by the client (we fit it only) */
+  anyClientFurniture?: boolean
   /** which calculator it is: the windows one, the doors one, or the older one with both (the default) */
   scope?: 'all' | 'windows' | 'doors'
   /** some openings are formed in a new wall or cut in an existing one here (with what goes over them), and whether every opening is */
@@ -37,6 +39,7 @@ export function describeWd(i: WdDescriptionInput): string {
   for (const o of i.openings) lines.push(`${o.ref.trim() || 'Opening'}${o.location.trim() ? ` (${o.location.trim()})` : ''}: ${o.parts[0] ?? ''}${o.parts.length > 1 ? `, with ${list(o.parts.slice(1))}` : ''}.`)
   if (i.anyProvisional) lines.push('Where a unit is a provisional sum, the price is an allowance: the final price follows the unit chosen.')
   if (i.anyClientSupplied) lines.push('Where the client supplies the unit, we fit it only: the size and delivery are to be confirmed before the opening is closed up.')
+  if (i.anyClientFurniture) lines.push('Where the client supplies the door furniture (handles, hinges and latch), we fit it only: it is to be on site before the doors are fitted.')
   if (i.windows > 0 || i.externalDoors > 0) lines.push(i.scope === 'doors' ? 'Replacement external doors need FENSA or Building Control approval: the certificate is issued after fitting.' : i.scope === 'windows' ? 'Replacement windows and doors need FENSA or Building Control approval: the certificate is issued after fitting.' : 'Replacement windows and external doors need FENSA or Building Control approval: the certificate is issued after fitting.')
   if (i.allOpeningWork) lines.push('Not included: plastering the reveals, painting and decorating, making good plaster, or any structural design beyond the lintels and beams listed (the structural engineer\'s calculations only where stated).')
   else if (i.anyOpeningWork) lines.push('Where an opening is formed or cut in the wall it is described above, with what goes over it; the lintels, cavity closers and reveals of the other openings are priced with their walls. Not included: plastering the reveals, painting and decorating, making good plaster, or any structural design beyond the lintels and beams listed.')
