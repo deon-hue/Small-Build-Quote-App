@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-22T16:00:00+00:00',
+    title: 'Download a subcontractor invoice from the Subcontractors page',
+    detail: 'Each subcontractor week on the Subcontractors page now has an Invoice button that downloads that week\'s invoice as a PDF, for any week, old or new. If the week has no invoice yet one is made then (dated that day, next number); if it has one you get the same invoice again. Days still pending and days paid in cash are left off, and an all-cash week has no invoice. Not shown for PAYE or direct labour people. No new SQL beyond supabase/sub-invoices.sql.',
+  },
+  {
     at: '2026-11-22T12:00:00+00:00',
     title: 'Subcontractor invoices made from their times',
     detail: 'When a subcontractor\'s times go on a bill (Send to Bills, or the Xero push of a week or a day) the app now makes an invoice from those times and attaches the PDF to the Xero bill. Subcontractors download their invoices from a new My invoices tile in their portal, and set up what is on them under My invoice details: logo, trading name, UTR, bank details, invoice number prefix and payment terms (name, address, email, phone and CIS are filled in from your contact). VAT only appears if they tick VAT registered and give a VAT number; the CIS deduction is shown as on the bill. Time paid in cash gets no invoice: they can download a Record of cash payments for a month instead. The Xero bill itself is still created without VAT. New SQL: supabase/sub-invoices.sql.',
