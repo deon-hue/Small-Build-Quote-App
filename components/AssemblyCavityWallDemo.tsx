@@ -83,6 +83,10 @@ export const beamPerM = (size: string | undefined): number => +(BEAM_CHOICE_BY_L
 const steelItemsOf = (openings: CavityOpening[]): WallSteelItem[] => openings.filter(o => o.lintelType === 'steel-beam' && o.steelSpec).map(o => ({
   id: o.id, ref: `${o.kind === 'bifold' ? 'Bi-fold' : o.kind === 'door' ? 'Door' : o.kind === 'window' ? 'Window' : 'Opening'} ${(o.widthMm / 1000).toFixed(2)}m`, widthMm: o.widthMm, heightMm: o.heightMm, steel: cleanWallSteel(o.steelSpec),
 }))
+/** the steel words for the openings that have the steel calculators' options (the whole wall's thickness only sets the width of a welded plate) */
+const steelWordsOf = (openings: CavityOpening[], wallMm: number): Record<string, string> => {
+  try { const r = priceWallSteel(steelItemsOf(openings), wallMm); return Object.fromEntries(Object.entries(r.byOpening).map(([id, v]) => [id, v.words])) } catch { return {} }
+}
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 const INSULATION_LABEL: Record<CavityInsulationType, string> = {
   none: 'None (empty cavity)',
@@ -226,6 +230,8 @@ interface DescribeOpts {
   innerThicknessMm: number; innerType: InnerBlockType; finishType: FinishType; openings: CavityOpening[]
   /** the reveals are finished (board returns and beads) */
   reveals?: boolean
+  /** the steel over an opening set up with the steel calculators' options, in words, by opening id (lib/wall-steel.ts) */
+  steelWords?: Record<string, string>
 }
 
 /** The one-line quote description. Shared by the screen and by priceCavityWallFromBasics so the two never word it differently. */
@@ -246,7 +252,7 @@ export function cavityAutoDescription(o: DescribeOpts): string {
   let text = parts.join(', ') + '.'
   if (o.openings.length) {
     const kindName = (k: string) => (k === 'bifold' ? 'bi-fold door' : k)
-    const lintelName = (op: CavityOpening) => (op.lintelType === 'steel-beam' ? `${beamLabelOf(op.steelSize)} steel beam over` : LINTEL_LABEL[op.lintelType].split(' (')[0].toLowerCase())
+    const lintelName = (op: CavityOpening) => (op.lintelType === 'steel-beam' ? (o.steelWords?.[op.id] || `${beamLabelOf(op.steelSize)} steel beam over`) : LINTEL_LABEL[op.lintelType].split(' (')[0].toLowerCase())
     const list = o.openings.map(op => `${kindName(op.kind)} (${op.widthMm}×${op.heightMm}mm, ${lintelName(op)})`).join(', ')
     text += ` Includes ${o.openings.length} opening${o.openings.length !== 1 ? 's' : ''}: ${list}, with cavity closers${o.reveals ? ' and plastered or boarded reveals' : ''}.`
   }
@@ -309,7 +315,7 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
 
   return {
     name: isFull ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill', qty: 1, location: '',
-    description: cavityAutoDescription({ lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, externalFinish, insulation: o.insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: g.revealAreaM2 > 0 }),
+    description: cavityAutoDescription({ lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, externalFinish, insulation: o.insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: g.revealAreaM2 > 0, steelWords: steelWordsOf(openings, g.overallThicknessMm) }),
     lines,
   }
 }
@@ -374,9 +380,17 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   function buildAutoDescription(): string {
-    return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: finishReveals })
+    return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: finishReveals, steelWords: steelWordsOf(openings, innerThicknessMm + cavityWidthMm + (outerLeaf === 'brick' ? BRICK_OUTER_LEAF_MM : BLOCK_OUTER_LEAF_MM)) })
   }
   const [description, setDescription] = useCalcState('AssemblyCavityWallDemo', 'description', buildAutoDescription)
+  // the quote words follow the settings (the steel over an opening included) until they are edited by hand; Regenerate puts them back
+  const autoDescription = buildAutoDescription()
+  const lastAutoDescription = React.useRef(autoDescription)
+  useEffect(() => {
+    if (autoDescription === lastAutoDescription.current) return
+    if (description === lastAutoDescription.current) setDescription(autoDescription)
+    lastAutoDescription.current = autoDescription
+  }, [autoDescription]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const input: CavityWallInput = {
     lengthMm, heightMm, outerLeaf, innerLeafThicknessMm: innerThicknessMm, cavityWidthMm,

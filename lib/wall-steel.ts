@@ -4,7 +4,7 @@
 // Pure: no screen, no wall geometry. (Type and engine imports only from the steel engine, which has none of its own.)
 
 import {
-  calculateStructuralOpenings, newStructuralOpening, POST_SECTIONS, DEFAULT_STRUCTURAL_SITUATIONS, BEAM_CHOICE_BY_LABEL, POST_BY_LABEL, CONNECTION_BY_ID,
+  calculateStructuralOpenings, newStructuralOpening, POST_SECTIONS, DEFAULT_STRUCTURAL_SITUATIONS, BEAM_CHOICE_BY_LABEL, POST_BY_LABEL, CONNECTION_BY_ID, beamPlateFor, beamPlateWords,
   type StructuralLine, type LoadAbove, type SteelFinish, type SteelBy, type PostRole, type OpeningConnection, type BeamPlate,
 } from './structural-openings-units'
 
@@ -73,8 +73,35 @@ export interface WallSteelResult {
   /** the hours the steel needs that the wall's own labour does not include: setting the steel and padstones, digging pads, casing it */
   hours: { bricklayer: number; labourer: number; carpenter: number }
   warnings: string[]
-  byOpening: Record<string, { beamLabel: string; steelKg: number; parts: string[] }>
+  byOpening: Record<string, { beamLabel: string; steelKg: number; parts: string[]; /** the steel in words for the quote: X)' */ words: string }>
   totalSteelKg: number
+}
+
+const NUMBER_WORD = ['no', 'one', 'two', 'three', 'four', 'five', 'six']
+const countWords = (n: number): string => NUMBER_WORD[n] ?? String(n)
+const joinList = (a: string[]): string => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`)
+
+/**
+ * The steel over a wall opening in words, for the quote: 'one 203 × 133 UB 25 steel beam over, on two padstones, with a 10mm x 328mm steel plate welded to the underside of the beam to spread the load over the wall, 2 end plates,
+ * two 152 × 152 UC 23 steel posts on concrete pads, the steel cased in two layers of fire-resisting board, supplied and fixed by a steelwork contractor'. `beamLabel` is the section the engine chose (it picks one when the steel says 'auto').
+ */
+export function wallSteelWords(steel: WallSteel, beamLabel: string, widthMm: number, wallThicknessMm: number): string {
+  if (steel.beams <= 0 && steel.posts <= 0) return ''
+  const bits: string[] = []
+  if (steel.beams > 0) {
+    const pads = steel.padstones ?? Math.max(0, 2 * steel.beams - (steel.postRole === 'ends' ? steel.posts : 0))
+    if (pads > 0) bits.push(`on ${countWords(pads)} padstone${pads === 1 ? '' : 's'}`)
+    if (steel.plate) bits.push('with ' + beamPlateWords(steel.plate, beamPlateFor(steel.plate, widthMm / 1000 + 0.3, wallThicknessMm).widthMm, steel.beams))
+  }
+  const conns = steel.connections.filter(c => CONNECTION_BY_ID[c.kind] && c.qty > 0)
+  if (conns.length) bits.push(joinList(conns.map(c => { const i = CONNECTION_BY_ID[c.kind]; return i.unit === 'h' ? `${c.qty} hour${c.qty === 1 ? '' : 's'} of fabrication` : `${c.qty} ${i.short}${c.qty === 1 ? '' : 's'}` })))
+  if (steel.posts > 0) bits.push(`${countWords(steel.posts)} ${steel.postSection} steel post${steel.posts === 1 ? '' : 's'} on concrete pads`)
+  if (steel.finish === 'board') bits.push('the steel cased in two layers of fire-resisting board')
+  else if (steel.finish === 'intumescent') bits.push('an intumescent coating to the steel')
+  if (steel.steelBy === 'sub') bits.push('supplied and fixed by a steelwork contractor')
+  if (steel.hiab) bits.push('lifted in by Hiab')
+  const head = steel.beams > 0 ? `${countWords(steel.beams)} ${beamLabel} steel beam${steel.beams === 1 ? '' : 's'} over` : 'steel posts'
+  return bits.length ? `${head}, ${bits.join(", ")}` : head
 }
 
 /** warnings from the steel engine that make no sense inside a wall calculator: it IS the wall, the steel is built in as a lintel (no casing unless asked), and the door or window is not this calculator's */
@@ -95,7 +122,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number):
   out.lines = r.lines
   for (const t of r.labour) out.hours[t.trade] += t.hours
   out.warnings = r.warnings.filter(w => !NOT_FOR_A_WALL.some(n => w.includes(n)))
-  for (const s of r.openings) out.byOpening[s.openingId] = { beamLabel: s.beamLabel, steelKg: s.steelKg, parts: s.parts }
+  for (const s of r.openings) { const it = items.find(i => i.id === s.openingId); out.byOpening[s.openingId] = { beamLabel: s.beamLabel, steelKg: s.steelKg, parts: s.parts, words: it ? wallSteelWords(cleanWallSteel(it.steel), s.beamLabel, it.widthMm, wallThicknessMm) : '' } }
   out.totalSteelKg = r.totalSteelKg
   return out
 }

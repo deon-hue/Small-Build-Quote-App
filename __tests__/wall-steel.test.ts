@@ -57,5 +57,15 @@ t('only real connections survive', junk.connections.length === 1 && junk.connect
 t('a missing value is the start', JSON.stringify(cleanWallSteel(undefined)) === JSON.stringify(newWallSteel()) && JSON.stringify(cleanWallSteel(null)) === JSON.stringify(newWallSteel()))
 t('a saved good one is kept as it is', JSON.stringify(cleanWallSteel(pl.lines.length ? { ...newWallSteel('406 × 178 UB 54'), beams: 2, plate: { position: 'both', thicknessMm: 12, widthMm: 300, lengthMm: null } } : null)) === JSON.stringify({ ...newWallSteel('406 × 178 UB 54'), beams: 2, plate: { position: 'both', thicknessMm: 12, widthMm: 300, lengthMm: null } }))
 
+// the steel in words for the quote
+const words = (steel: WallSteel, w = 2700) => price(steel, w).byOpening.o1?.words ?? ''
+t('words: the default is one beam over on two padstones', words(newWallSteel()) === 'one 203 × 133 UB 25 steel beam over, on two padstones', words(newWallSteel()))
+const full = words({ ...newWallSteel('406 × 178 UB 54'), beams: 2, posts: 2, finish: 'board', steelBy: 'sub', hiab: true, connections: [{ kind: 'end-plate', qty: 4 }, { kind: 'fabrication', qty: 3 }], plate: { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } })
+t('words: a pair, padstones less the posts, the plate (as wide as the wall), connections, posts, casing, contractor and Hiab', full.startsWith('two 406 × 178 UB 54 steel beams over, on two padstones, with a 10mm x 300mm steel plate welded to the underside of each beam to spread the load over the wall,') && full.includes('4 end plates and 3 hours of fabrication') && full.includes('two 152 × 152 UC 23 steel posts on concrete pads') && full.includes('the steel cased in two layers of fire-resisting board') && full.includes('supplied and fixed by a steelwork contractor') && full.includes('lifted in by Hiab'), full)
+t('words: a section picked from the span is named in them', words(newWallSteel(), 3600).includes('steel beam over') && !words(newWallSteel(), 3600).includes('auto'))
+t('words: intumescent and a single plate on top', words({ ...newWallSteel(), finish: 'intumescent', plate: { position: 'top', thicknessMm: 8, widthMm: 215, lengthMm: null } }).includes('an 8mm x 215mm steel plate welded to the top of the beam') && words({ ...newWallSteel(), finish: 'intumescent' }).includes('an intumescent coating to the steel'))
+t('words: no beams and no posts say nothing', words({ ...newWallSteel(), beams: 0 }) === '')
+t('words: posts without a beam', words({ ...newWallSteel(), beams: 0, posts: 1 }).startsWith('steel posts, one 152 × 152 UC 23 steel post on concrete pads'))
+
 console.log(`${ok} passed, ${bad} failed`)
 if (bad) process.exit(1)
