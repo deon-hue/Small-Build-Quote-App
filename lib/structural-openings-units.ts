@@ -155,6 +155,15 @@ export function beamPlateWords(p: BeamPlate, widthMm: number, beams: number): st
   const t = Math.round(p.thicknessMm * 10) / 10
   return `${/^(8|11|18)/.test(String(t)) ? 'an' : 'a'} ${t}mm x ${Math.round(widthMm)}mm steel plate welded ${where} to spread the load over the wall`
 }
+/** the size a plate on a column or post starts at, and its length when none is typed: a plate welded to the foot (a base plate) or the head (a cap plate) is square, 300 x 300 */
+export const DEFAULT_POST_PLATE_MM = 300
+/** the words for a plate welded to a column or post: 'a 15mm x 300mm x 300mm steel plate welded to the foot of each steel column (a base plate)' */
+export function postPlateWords(p: BeamPlate, widthMm: number, lengthMm: number, count: number, word: string): string {
+  const each = count === 1 ? `the ${word}` : `each ${word}`
+  const where = p.position === 'bottom' ? `to the foot of ${each} (a base plate)` : p.position === 'top' ? `to the head of ${each} (a cap plate)` : `to the foot and the head of ${each}`
+  const t = Math.round(p.thicknessMm * 10) / 10
+  return `${/^(8|11|18)/.test(String(t)) ? 'an' : 'a'} ${t}mm x ${Math.round(widthMm)}mm x ${Math.round(lengthMm)}mm steel plate welded ${where}`
+}
 export const PLATE_RATE_NOTE = 'The welded plate (its size, steel grade and weld) is for the engineer to specify: the figures here are samples to price from.'
 
 /** one kind of connection on an opening, and how many (for the fabrication: how many hours) */

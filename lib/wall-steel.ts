@@ -8,7 +8,7 @@ import {
   calculateSteelwork, sectionsFor, defaultSection, KIND_BY_ID, DEFAULT_STRUCTURAL_SITUATIONS, RATES as STEEL_RATES, STEEL_BEAMS, STEEL_COLUMNS,
   type SteelMember, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy, type SteelLine,
 } from './structural-steel-units'
-import { beamFor, beamPlateFor, beamPlateWords, CONNECTION_BY_ID, type LoadAbove, type OpeningConnection, type BeamPlate } from './structural-openings-units'
+import { beamFor, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, CONNECTION_BY_ID, type LoadAbove, type OpeningConnection, type BeamPlate } from './structural-openings-units'
 
 /** One piece of steel (or timber) over or beside a wall opening: the Steel Beams, Columns & Posts calculator's member, with a length that can follow the opening */
 export interface WallMember {
@@ -32,7 +32,7 @@ export interface WallMember {
   by: MemberBy
   /** needles and Acrow props while a beam is fixed */
   propped: boolean
-  /** a steel beam: a plate welded to it to spread its load over the wall */
+  /** a steel beam: a plate welded to it to spread its load over the wall; a steel column or box section post: a plate welded to its foot (a base plate) or head (a cap plate) */
   plate: BeamPlate | null
 }
 
@@ -103,7 +103,7 @@ function cleanMember(x: unknown): WallMember {
     padLengthMm: num(s.padLengthMm, 100, 3000, d.padLengthMm), padWidthMm: num(s.padWidthMm, 100, 3000, d.padWidthMm), padDepthMm: num(s.padDepthMm, 100, 2000, d.padDepthMm),
     by: s.by === 'sub' ? 'sub' : 'us',
     propped: s.propped === true,
-    plate: kind === 'beam' ? cleanPlate(s.plate) : null,
+    plate: KIND_BY_ID[kind].steel ? cleanPlate(s.plate) : null,
   }
 }
 
@@ -182,6 +182,7 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
     const k = KIND_BY_ID[m.kind]
     const sec = resolvedSection(m, span, steel.loadAbove)
     bits.push(`${countWords(m.qty)} ${sec} ${k.word}${m.qty === 1 ? '' : 's'}${m.pad ? ' on concrete pads' : ''}`)
+    if (m.plate && k.steel) { const pl = beamPlateFor(m.plate, DEFAULT_POST_PLATE_MM / 1000, DEFAULT_POST_PLATE_MM); bits.push('with ' + postPlateWords(m.plate, pl.widthMm, pl.lengthM * 1000, m.qty, k.word)) }
     const f = finishWord(m); if (f) finishes.add(f)
   })
   for (const f of finishes) bits.push(f)
@@ -212,7 +213,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number):
       members.push({
         id, ref: it.ref, location: '', kind: m.kind, section, lengthMm: m.lengthMm ?? (post ? it.heightMm : it.widthMm + 2 * BEARING_EACH_END_MM), qty: m.qty, finish: m.finish, ends: m.ends, padstones: m.padstones,
         pad: m.pad, padLengthMm: m.padLengthMm, padWidthMm: m.padWidthMm, padDepthMm: m.padDepthMm, by: m.by, propped: m.propped,
-        plate: m.plate ? { ...m.plate, widthMm: m.plate.widthMm ?? wallThicknessMm } : null,
+        plate: m.plate ? (post ? m.plate : { ...m.plate, widthMm: m.plate.widthMm ?? wallThicknessMm }) : null,
       })
     }
   }

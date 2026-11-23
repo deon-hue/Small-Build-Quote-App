@@ -119,6 +119,7 @@ export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wa
                 ))}
               </div>
             )}
+            {k.steel && k.post && <BeamPlateFields plate={m.plate} onChange={plate => setMember(m.id, { plate })} post />}
             {m.kind === 'beam' && (
               <>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer' }}>

@@ -163,10 +163,10 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
                       </select>
                     </PropRow>
                   </div>
-                  {k.steel && !k.post && (
+                  {k.steel && (
                     <>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Welded plate (load spreader)</div>
-                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} />
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>{k.post ? 'Welded plate (base or cap plate)' : 'Welded plate (load spreader)'}</div>
+                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} post={k.post} />
                     </>
                   )}
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>

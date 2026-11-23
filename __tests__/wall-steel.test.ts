@@ -89,5 +89,23 @@ t('a section from the wrong kind is replaced by the kind\'s usual one', cleanWal
 t('a missing value is the start (one beam)', (() => { const a = cleanWallSteel(undefined); return a.members.length === 1 && a.members[0].kind === 'beam' && a.members[0].section === 'auto' })())
 t('a saved good one is kept as it is', (() => { const g = withMembers(beam({ section: '406 × 178 UB 54', qty: 2, plate: { position: 'both', thicknessMm: 12, widthMm: 300, lengthMm: null } }), mem('hollow', { section: '150 × 150 × 6.3 SHS', lengthMm: 2100 })); return JSON.stringify(cleanWallSteel(g)) === JSON.stringify(g) })())
 
+// ---- a plate welded to a column or box section post (a base plate at the foot, a cap plate at the head)
+const colPlate = (patch: Partial<NonNullable<WallMember['plate']>> = {}, extra: Partial<WallMember> = {}) => price(withMembers(mem('column', { plate: { position: 'bottom', thicknessMm: 15, widthMm: null, lengthMm: null }, ...extra } as Partial<WallMember>), ...[]), 2700)
+const cp = colPlate()
+t('a column with a welded base plate: the plate is steel by weight (15mm x 300 x 300 = 10.6kg), welded, and the standard plate set is only bolts and grout', (() => {
+  const p = line(cp, 'plate'); const w = line(cp, 'plate-weld'); const pl = line(cp, 'plates')
+  return !!p && near(p.qty, 10.6) && p.name.includes('15mm x 300mm x 300mm') && p.name.includes('to the foot') && !!w && w.category === 'subcontractors' && near(w.qty, 0.68) && !!pl && pl.name.includes('holding-down bolts and grout (the welded plate is priced separately)') && near(pl.unitCost, 25)
+})(), cp.lines.map(l => l.id + ' ' + l.name + ' ' + l.qty + ' ' + l.unitCost))
+t('without a plate the standard base and cap plate set is as before', (() => { const r = price(withMembers(mem('column'))); const pl = line(r, 'plates'); return !!pl && pl.name.includes('base plate, cap plate') && near(pl.unitCost, 55) && !line(r, 'plate') })())
+t('the plate steel counts in the kilos', cp.totalSteelKg > price(withMembers(mem('column'))).totalSteelKg)
+const both = price(withMembers(mem('column', { qty: 2, plate: { position: 'both', thicknessMm: 12, widthMm: 250, lengthMm: 250 } })))
+t('a plate on the foot and the head of two columns is four plates', near(line(both, 'plate')!.qty, 4 * 12 * 7.85 * 0.25 * 0.25) && line(both, 'plate')!.name.includes('(4 plates') && line(both, 'plate')!.name.includes('to the foot and the head'), line(both, 'plate')?.name)
+t('a plate on a cap only reads as a cap plate in the words', price(withMembers(mem('column', { plate: { position: 'top', thicknessMm: 10, widthMm: null, lengthMm: null } }))).byOpening.o1.words.includes('welded to the head of the steel column (a base plate)') === false && price(withMembers(mem('column', { plate: { position: 'top', thicknessMm: 10, widthMm: null, lengthMm: null } }))).byOpening.o1.words.includes('to the head of the steel column (a cap plate)'))
+t('the plate on a box section post', (() => { const r = price(withMembers(mem('hollow', { section: '100 × 100 × 5 SHS', plate: { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } }))); return !!line(r, 'plate') && r.byOpening.o1.words.includes('steel post') && r.byOpening.o1.words.includes('mm steel plate welded to the foot of the steel post') })())
+t('a contractor supplies the plate steel by the kilo', (() => { const r = price(withMembers(mem('column', { by: 'sub', plate: { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } }))); return !!line(r, 'plate-sub') && !line(r, 'plate') && !!line(r, 'plate-weld') })())
+t('the plate on a column carries the engineer note', cp.warnings.some(w => w.includes('welded plate')))
+t('a plate on a beam is as before (as wide as the wall, the length of the beam)', (() => { const r = price(withMembers(beam({ plate: { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } }))); return line(r, 'plate')!.name.includes('300mm') })())
+t('a column keeps its plate when saved and read back, a timber post does not', (() => { const c = cleanWallSteel({ members: [{ kind: 'column', plate: { position: 'top', thicknessMm: 12, widthMm: null, lengthMm: null } }, { kind: 'timber-post', plate: { position: 'top', thicknessMm: 12, widthMm: null, lengthMm: null } }] }); return c.members[0].plate?.thicknessMm === 12 && c.members[1].plate === null })())
+
 console.log(`${ok} passed, ${bad} failed`)
 if (bad) process.exit(1)
