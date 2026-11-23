@@ -8,7 +8,7 @@
 //
 // Every rate and hour is a SAMPLE, editable in the calculator, to be checked against real jobs. The sections' weights and surfaces are rounded catalogue values.
 
-import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
+import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
 
 export type MemberKind = 'beam' | 'column' | 'hollow' | 'lvl' | 'timber-post'
 export type MemberFinish = 'primed' | 'galvanised' | 'intumescent' | 'cased' | 'none'
@@ -76,6 +76,7 @@ export const RATES = {
   ...OPEN_RATES,
   galvanisedPerKg: 0.7,        // £ per kg extra for hot-dip galvanising
   endPlateSet: 28,             // £ per beam end: end plate, bolts and nuts
+  boltsGrout: 25,              // £ per post: holding-down bolts and grout, when the plate welded to it is priced separately
   timberFixings: 12,           // £ per timber member: hangers, bolts, straps and shoes
   sundries: 8,                 // £ per member: shims, grout, touch-up primer
   engineerJob: 350,            // £: the structural engineer's calculations, once for the job
@@ -110,7 +111,7 @@ export interface SteelMember {
   by: MemberBy
   /** needles and Acrow props while a beam is fixed */
   propped: boolean
-  /** a beam: a steel plate welded to the bottom, the top or both to spread its load over the wall it bears on (none to start) */
+  /** a steel beam: a plate welded to the bottom, the top or both to spread its load over the wall it bears on; a steel column or post: a plate welded to its foot (a base plate), its head (a cap plate) or both (none to start) */
   plate?: BeamPlate | null
   situationId?: string | null
   /** the length last given to this member by the line drawn in Take-off: it follows the line until a length is typed over it */
@@ -241,9 +242,28 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
         if (m.propped) { add('props', 'needles and Acrow props hired (a week)', 'nr', rate('propsHire') + rate('propsPerExtraM') * Math.max(0, lengthM - 1.5 - 0.3), qty, 'plant'); labourHours += (HOURS.props + HOURS.propsPerM * lengthM) * qty }
       } else {
         // a column or post: on a base plate, on a pad
-        add('plates', 'base plate, cap plate, holding-down bolts and grout', 'nr', rate('plateSet'), qty)
+        // a plate welded to the foot or the head is priced as steel and welding, so the standard base and cap plate set is then only the holding-down bolts and grout
+        let postPlateText = ''
+        if (m.plate) add('plates', 'holding-down bolts and grout (the welded plate is priced separately)', 'nr', rate('boltsGrout'), qty)
+        else add('plates', 'base plate, cap plate, holding-down bolts and grout', 'nr', rate('plateSet'), qty)
+        if (m.plate) {
+          checkBeamPlate(m.plate, name)
+          const pl = beamPlateFor(m.plate, DEFAULT_POST_PLATE_MM / 1000, DEFAULT_POST_PLATE_MM)
+          const nPlates = pl.plates * qty
+          const plateKg = pl.kg * qty
+          kg += plateKg; totalKg += plateKg
+          const size = `${m.plate.thicknessMm}mm x ${Math.round(pl.widthMm)}mm x ${Math.round(pl.lengthM * 1000)}mm`
+          const where = m.plate.position === 'bottom' ? 'to the foot' : m.plate.position === 'top' ? 'to the head' : 'to the foot and the head'
+          if (m.by === 'us') add('plate', `${size} steel plate welded ${where} of each ${k.word} (${nPlates} plate${nPlates === 1 ? '' : 's'}, ${Math.round(plateKg)}kg)`, 'kg', rate('steelPerKg'), plateKg)
+          if (m.by === 'sub') add('plate-sub', `steelwork contractor: the ${size} plate steel (${Math.round(plateKg)}kg)`, 'kg', rate('steelSubPerKg'), plateKg, 'subcontractors')
+          add('plate-weld', `cutting, drilling and welding the plate${nPlates === 1 ? '' : 's'} to the ${k.word}${qty === 1 ? '' : 's'}`, 'h', rate('fabPerHour'), pl.hours * qty, 'subcontractors')
+          postPlateText = postPlateWords(m.plate, pl.widthMm, pl.lengthM * 1000, m.qty, k.word)
+          if (m.plate.thicknessMm < 5 || m.plate.thicknessMm > 40) warnings.push(`${label}: a ${m.plate.thicknessMm}mm plate on a column is outside the usual 8 to 25mm: check it with the engineer.`)
+          anyPlate = true
+        }
         if (m.by === 'us') { brickHours += HOURS.post * qty; labourHours += HOURS.post * qty * LABOURER_ON_STEEL }
         parts.push(`${countText}${sec.label} ${m.qty === 1 ? k.word : k.word + 's'}, ${n2(lengthM)}m high, on base plates${m.pad ? ' on concrete pads' : ''}`)
+        if (postPlateText) parts.push(postPlateText)
       }
       // the finish
       const surface = sec.surfaceM2PerM * lengthM * qty

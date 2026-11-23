@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T21:00:00+00:00',
+    title: 'Steel columns and box section posts can have a plate welded on',
+    detail: 'In the Steel Beams, Columns & Posts calculator, and in the steel list inside the wall calculator, a steel column or a box section post can now have a plate welded to its foot (a base plate), its head (a cap plate) or both, like a beam can. You choose the thickness and the size of the plate (300 by 300mm to start). It is priced as steel by weight plus the cutting and welding, and the standard base and cap plate set then becomes just the holding-down bolts and grout, so the plate is not paid for twice. The description names the plate.',
+  },
+  {
     at: '2026-11-24T18:00:00+00:00',
     title: 'Wall calculator: the steel over an opening now comes from the Steel Beams, Columns & Posts calculator',
     detail: 'The steel options in the cavity wall calculator were built on the Structural Openings calculator. They now come from the Steel Beams, Columns & Posts calculator, which is the one that works on its own and inside a wall (Structural Openings stays for knocking an opening through an existing wall). An opening with a steel beam over it holds a short list of steel: steel beams (or picked from the span), steel columns, box section posts, engineered timber beams and timber posts, each with its section, length, number, finish, how the ends are held, a welded plate on a beam, pads or padstones, and who supplies it. The connections and fabrication list is kept as an extra. Everything is priced the way that calculator prices it, and the quote description names each member. A wall set up with the earlier version is converted automatically and keeps its price.',
