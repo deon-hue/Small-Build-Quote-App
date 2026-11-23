@@ -22,6 +22,8 @@ import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
 import TilingCalcFrame, { TilingNumInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 import BeamPlateFields from '@/components/BeamPlateFields'
+import SteelProcessFields from '@/components/SteelProcessFields'
+import { flangeWidthMm } from '@/lib/steel-processes'
 
 interface Props {
   onClose?: () => void
@@ -172,7 +174,8 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
                   {k.steel && (
                     <>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>{k.post ? 'Welded plate (base or cap plate)' : 'Welded plate (load spreader)'}</div>
-                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} post={k.post} />
+                      <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} post={k.post} flangeMm={flangeWidthMm(x.section)} startAtFlange />
+                      <SteelProcessFields processes={x.processes ?? []} onChange={processes => update(x.id, { processes })} steel={x.kind === 'beam' ? 'beam' : x.kind === 'column' ? 'column' : 'hollow'} />
                     </>
                   )}
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>

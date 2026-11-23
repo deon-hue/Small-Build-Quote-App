@@ -8,6 +8,8 @@
 import React from 'react'
 import { miniInput } from '@/components/assembly-ui'
 import BeamPlateFields from '@/components/BeamPlateFields'
+import SteelProcessFields from '@/components/SteelProcessFields'
+import { flangeWidthMm } from '@/lib/steel-processes'
 import { MEMBER_KINDS, KIND_BY_ID, sectionsFor, FINISH_LABEL, ENDS_LABEL, BY_LABEL, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy } from '@/lib/structural-steel-units'
 import { CONNECTION_KINDS, CONNECTION_BY_ID, LOAD_LABEL, beamFor, type LoadAbove } from '@/lib/structural-openings-units'
 import { newWallMember, BEARING_EACH_END_MM, type WallSteel, type WallMember } from '@/lib/wall-steel'
@@ -120,12 +122,13 @@ export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wa
               </div>
             )}
             {k.steel && k.post && <BeamPlateFields plate={m.plate} onChange={plate => setMember(m.id, { plate })} post />}
+            {k.steel && <SteelProcessFields processes={m.processes ?? []} onChange={processes => setMember(m.id, { processes })} steel={m.kind === 'beam' ? 'beam' : m.kind === 'column' ? 'column' : 'hollow'} />}
             {m.kind === 'beam' && (
               <>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer' }}>
                   <input type="checkbox" checked={m.propped} onChange={e => setMember(m.id, { propped: e.target.checked })} style={{ width: 'auto' }} /> Needles and Acrow props while it is fixed
                 </label>
-                <BeamPlateFields plate={m.plate} onChange={plate => setMember(m.id, { plate })} wallMm={wallMm} beamLengthM={ownLength / 1000} beams={m.qty} />
+                <BeamPlateFields plate={m.plate} onChange={plate => setMember(m.id, { plate })} wallMm={wallMm} beamLengthM={ownLength / 1000} beams={m.qty} flangeMm={flangeWidthMm(m.section === 'auto' ? sug.section.label : m.section)} />
               </>
             )}
           </div>

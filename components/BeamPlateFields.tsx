@@ -15,7 +15,7 @@ const POST_POSITION_LABEL: Record<PlatePosition, string> = { bottom: 'Welded to 
 
 const chip = (on: boolean): React.CSSProperties => ({ ...tilingSmall, cursor: 'pointer', padding: '2px 8px', background: on ? '#0369a1' : '#fff', color: on ? '#fff' : '#334155', borderColor: on ? '#0369a1' : '#cbd5e1' })
 
-export default function BeamPlateFields({ plate, onChange, wallMm, beamLengthM, beams = 1, post = false }: {
+export default function BeamPlateFields({ plate, onChange, wallMm, beamLengthM, beams = 1, post = false, flangeMm, startAtFlange = false }: {
   plate: BeamPlate | null | undefined
   onChange: (p: BeamPlate | null) => void
   /** the thickness of the wall the beam bears on (for 'as wide as the wall'); not given for a beam on its own */
@@ -25,13 +25,17 @@ export default function BeamPlateFields({ plate, onChange, wallMm, beamLengthM, 
   beams?: number
   /** a plate on a column or post (a base or cap plate, square, 300 x 300 to start) rather than on a beam */
   post?: boolean
+  /** the flange width of the beam's section, mm (a universal beam): offered as a plate width */
+  flangeMm?: number | null
+  /** a plate ticked on now starts as wide as the flange (the Steel Beams calculator); a plate already set up keeps its width */
+  startAtFlange?: boolean
 }) {
   const p = plate ?? null
   const set = (patch: Partial<BeamPlate>) => onChange({ ...(p ?? newBeamPlate()), ...patch })
   const info = p ? (post ? beamPlateFor(p, DEFAULT_POST_PLATE_MM / 1000, DEFAULT_POST_PLATE_MM) : beamLengthM && beamLengthM > 0 ? beamPlateFor(p, beamLengthM, wallMm ?? 215) : null) : null
   return (
     <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6, padding: '6px 8px' }}>
-      <TilingCheck label={post ? 'Weld a plate to the column (a base plate at the foot, a cap plate at the head)' : 'Weld a plate to the beam to spread its load over the wall'} on={!!p} set={b => onChange(b ? newBeamPlate() : null)} />
+      <TilingCheck label={post ? 'Weld a plate to the column (a base plate at the foot, a cap plate at the head)' : 'Weld a plate to the beam to spread its load over the wall'} on={!!p} set={b => onChange(b ? (startAtFlange && !post && flangeMm ? { ...newBeamPlate(), widthMm: flangeMm } : newBeamPlate()) : null)} />
       {p && (
         <div style={{ marginTop: 6, display: 'grid', gap: 8 }}>
           <PropRow label="Where it is welded">
@@ -48,6 +52,7 @@ export default function BeamPlateFields({ plate, onChange, wallMm, beamLengthM, 
           <PropRow label={post ? 'Plate width (mm)' : `Plate width (mm), to suit the wall or the cavity`}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
               <button type="button" onClick={() => set({ widthMm: null })} style={chip(p.widthMm === null)}>{post ? `Standard (${DEFAULT_POST_PLATE_MM})` : wallMm ? `As wide as the wall (${Math.round(wallMm)})` : 'Standard (215)'}</button>
+              {!post && flangeMm ? <button type="button" onClick={() => set({ widthMm: flangeMm })} style={chip(p.widthMm === flangeMm)} title="As wide as the flange of this section">Flange ({flangeMm})</button> : null}
               {PLATE_WIDTHS.map(w => <button key={w} type="button" onClick={() => set({ widthMm: w })} style={chip(p.widthMm === w)}>{w}</button>)}
               <div style={{ width: 70 }}><TilingNumInput v={p.widthMm ?? (post ? DEFAULT_POST_PLATE_MM : wallMm ?? 215)} set={n => set({ widthMm: Math.max(1, n) })} step={5} min={1} /></div>
             </div>

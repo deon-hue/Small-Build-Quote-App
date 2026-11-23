@@ -8,6 +8,7 @@ import {
   calculateSteelwork, sectionsFor, defaultSection, KIND_BY_ID, DEFAULT_STRUCTURAL_SITUATIONS, RATES as STEEL_RATES, STEEL_BEAMS, STEEL_COLUMNS,
   type SteelMember, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy, type SteelLine, type CuttingGroup,
 } from './structural-steel-units'
+import { cleanProcesses, processWords, type MemberProcess } from './steel-processes'
 import { beamFor, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, CONNECTION_BY_ID, type LoadAbove, type OpeningConnection, type BeamPlate } from './structural-openings-units'
 
 /** One piece of steel (or timber) over or beside a wall opening: the Steel Beams, Columns & Posts calculator's member, with a length that can follow the opening */
@@ -34,6 +35,8 @@ export interface WallMember {
   propped: boolean
   /** a steel beam: a plate welded to it to spread its load over the wall; a steel column or box section post: a plate welded to its foot (a base plate) or head (a cap plate) */
   plate: BeamPlate | null
+  /** fabrication processes on a steel member: holes, mitre cuts, notches, cleats, stiffeners, splices, shot blasting, other hours */
+  processes: MemberProcess[]
 }
 
 /** What the steel over one wall opening is set up as */
@@ -56,7 +59,7 @@ export function newWallMember(kind: MemberKind = 'beam', section?: string): Wall
   const k = KIND_BY_ID[kind]
   return {
     id: newId(), kind, section: section ?? (kind === 'beam' ? 'auto' : defaultSection(kind)), lengthMm: null, qty: 1, finish: k.steel ? 'primed' : 'none', ends: 'masonry', padstones: null,
-    pad: k.post, padLengthMm: 600, padWidthMm: 600, padDepthMm: 300, by: 'us', propped: false, plate: null,
+    pad: k.post, padLengthMm: 600, padWidthMm: 600, padDepthMm: 300, by: 'us', propped: false, plate: null, processes: [],
   }
 }
 
@@ -104,6 +107,7 @@ function cleanMember(x: unknown): WallMember {
     by: s.by === 'sub' ? 'sub' : 'us',
     propped: s.propped === true,
     plate: KIND_BY_ID[kind].steel ? cleanPlate(s.plate) : null,
+    processes: KIND_BY_ID[kind].steel ? cleanProcesses(s.processes, kind === 'beam' ? 'beam' : kind === 'column' ? 'column' : 'hollow') : [],
   }
 }
 
@@ -176,6 +180,7 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
     if (i === 0) head = phrase; else bits.push(phrase)
     if (m.ends === 'masonry') { const pads = m.padstones ?? 2 * m.qty; if (pads > 0) bits.push(`on ${countWords(pads)} padstone${pads === 1 ? '' : 's'}`) } else bits.push('bolted through end plates')
     if (m.plate) bits.push('with ' + beamPlateWords(m.plate, beamPlateFor(m.plate, (m.lengthMm ?? widthMm + 2 * BEARING_EACH_END_MM) / 1000, wallThicknessMm).widthMm, m.qty))
+    const pw = processWords(m.processes, m.qty, k.word, 'beam'); if (pw) bits.push('with ' + pw)
     const f = finishWord(m); if (f) finishes.add(f)
   })
   const conns = steel.connections.filter(c => CONNECTION_BY_ID[c.kind] && c.qty > 0)
@@ -185,6 +190,7 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
     const sec = resolvedSection(m, span, steel.loadAbove)
     bits.push(`${countWords(m.qty)} ${sec} ${k.word}${m.qty === 1 ? '' : 's'}${m.pad ? ' on concrete pads' : ''}`)
     if (m.plate && k.steel) { const pl = beamPlateFor(m.plate, DEFAULT_POST_PLATE_MM / 1000, DEFAULT_POST_PLATE_MM); bits.push('with ' + postPlateWords(m.plate, pl.widthMm, pl.lengthM * 1000, m.qty, k.word)) }
+    if (k.steel) { const pw = processWords(m.processes, m.qty, k.word, m.kind === 'hollow' ? 'hollow' : 'column'); if (pw) bits.push('with ' + pw) }
     const f = finishWord(m); if (f) finishes.add(f)
   })
   for (const f of finishes) bits.push(f)
@@ -216,6 +222,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number, 
         id, ref: it.ref, location: '', kind: m.kind, section, lengthMm: m.lengthMm ?? (post ? it.heightMm : it.widthMm + 2 * BEARING_EACH_END_MM), qty: m.qty, finish: m.finish, ends: m.ends, padstones: m.padstones,
         pad: m.pad, padLengthMm: m.padLengthMm, padWidthMm: m.padWidthMm, padDepthMm: m.padDepthMm, by: m.by, propped: m.propped,
         plate: m.plate ? (post ? m.plate : { ...m.plate, widthMm: m.plate.widthMm ?? wallThicknessMm }) : null,
+        processes: m.processes,
       })
     }
   }
