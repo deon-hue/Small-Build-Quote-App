@@ -30,8 +30,8 @@ import {
   type LintelType, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES, type StructuralLine } from '@/lib/structural-openings-units'
-import { priceWallSteel, newWallSteel, cleanWallSteel, type WallSteel, type WallSteelItem } from '@/lib/wall-steel'
+import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES } from '@/lib/structural-openings-units'
+import { priceWallSteel, newWallSteel, cleanWallSteel, type WallSteelItem, type WallSteelLine } from '@/lib/wall-steel'
 import WallSteelFields from '@/components/WallSteelFields'
 import { mergePlanWallOpenings, planWallSig, type PlanWallOpening } from '@/lib/wall-openings'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -109,7 +109,7 @@ interface LayerOpts {
   steel?: { size: string; lengthM: number }[]
   padstones?: number
   /** the lines for steel set up with the steel calculators' options, priced by lib/wall-steel.ts (the beam, its plate, connections, posts, casing ...) */
-  steelLines?: StructuralLine[]
+  steelLines?: WallSteelLine[]
   /** The inside reveals of the openings finished with board (or plaster) returns and beads: their length and area. Left out: no reveal finish is priced. */
   reveals?: { lm: number; areaM2: number } | null
 }
@@ -287,7 +287,7 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
   }
   let g
   try { g = calculateCavityGeometry(input) } catch { return null }
-  let steelLines: StructuralLine[] = []
+  let steelLines: WallSteelLine[] = []
   try { steelLines = priceWallSteel(steelItemsOf(openings), g.overallThicknessMm).lines } catch { steelLines = [] }
   const layers = buildCavityLayers({
     wastePct, outerLeaf, innerType, innerThicknessMm, insulation: o.insulation,
@@ -685,7 +685,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
                     const co = o as CavityOpening
                     if (co.steelSpec) {
                       const sum = wallSteel.ok ? wallSteel.value.byOpening[co.id] : undefined
-                      return <WallSteelFields steel={cleanWallSteel(co.steelSpec)} onChange={st => updateOpening(o.id, { steelSpec: st })} widthMm={co.widthMm} wallMm={g?.overallThicknessMm ?? 300} summary={sum ? { beamLabel: sum.beamLabel, steelKg: sum.steelKg } : undefined} />
+                      return <WallSteelFields steel={cleanWallSteel(co.steelSpec)} onChange={st => updateOpening(o.id, { steelSpec: st })} widthMm={co.widthMm} heightMm={co.heightMm} wallMm={g?.overallThicknessMm ?? 300} summary={sum ? { beamLabel: sum.beamLabel, steelKg: sum.steelKg } : undefined} />
                     }
                     // a beam saved before: the short list, with a way to move it to the steel calculators' options
                     return (

@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T18:00:00+00:00',
+    title: 'Wall calculator: the steel over an opening now comes from the Steel Beams, Columns & Posts calculator',
+    detail: 'The steel options in the cavity wall calculator were built on the Structural Openings calculator. They now come from the Steel Beams, Columns & Posts calculator, which is the one that works on its own and inside a wall (Structural Openings stays for knocking an opening through an existing wall). An opening with a steel beam over it holds a short list of steel: steel beams (or picked from the span), steel columns, box section posts, engineered timber beams and timber posts, each with its section, length, number, finish, how the ends are held, a welded plate on a beam, pads or padstones, and who supplies it. The connections and fabrication list is kept as an extra. Everything is priced the way that calculator prices it, and the quote description names each member. A wall set up with the earlier version is converted automatically and keeps its price.',
+  },
+  {
     at: '2026-11-24T15:00:00+00:00',
     title: 'Wall calculator: the quote description names the steel over an opening',
     detail: 'In the cavity wall calculator, the quote description now says what steel is over each opening when it is set up with the steel options: the beam section and how many, the padstones, a welded plate, connections and fabrication, steel posts, fire protection, a steelwork contractor and a Hiab. The description now also updates itself as you change the steel, the openings or the finish, until you type in it yourself; Regenerate puts the generated words back.',
