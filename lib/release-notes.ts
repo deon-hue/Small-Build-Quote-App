@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T12:00:00+00:00',
+    title: 'Wall calculator: steel over an opening is set up like the steel calculators',
+    detail: 'In the cavity wall calculator, when an opening has a steel beam over it, there is now a Steel from the steel calculators block with the same options as Structural Openings: the beam section (or picked from the span), one beam or a pair, what is above, a steelwork contractor instead of us, fire protection, padstones, a Hiab, steel posts on pads, a plate welded on to spread the load, and connections and fabrication hours. It is priced by the same engine, so a beam costs the same in the wall as in the steel calculators, and the wall no longer adds its own beam and padstones for it (it still prices the cavity tray and weep vents). A note under the openings says how many hours of bricklayer, labourer and carpenter the steel needs, which are not in the wall labour. A wall saved before keeps its beam, with a button to move it to the new options.',
+  },
+  {
     at: '2026-11-24T09:00:00+00:00',
     title: 'Wall calculator: pick the steel beam from the same sections as the steel calculators',
     detail: 'In the cavity wall calculator, when an opening has a steel beam over it, the section list is now the same 14 beam sections as the Structural Openings and Steel Beams calculators, instead of a short list of five. The beam is priced the same way as there (its weight a metre times the steel rate per kg), so a section costs the same in the wall as in the steel calculators. A hint under the list suggests a section for the opening span with one floor above; the designer section still replaces it. A wall saved with one of the older names reads as the matching section, but is priced by weight, so it comes out a little dearer once you Save & Price it again.',

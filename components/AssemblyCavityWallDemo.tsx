@@ -30,7 +30,9 @@ import {
   type LintelType, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES } from '@/lib/structural-openings-units'
+import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES, type StructuralLine } from '@/lib/structural-openings-units'
+import { priceWallSteel, newWallSteel, cleanWallSteel, type WallSteel, type WallSteelItem } from '@/lib/wall-steel'
+import WallSteelFields from '@/components/WallSteelFields'
 import { mergePlanWallOpenings, planWallSig, type PlanWallOpening } from '@/lib/wall-openings'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
@@ -77,6 +79,10 @@ const LEGACY_BEAM_ID: Record<string, string> = Object.fromEntries(Object.entries
 export const beamLabelOf = (size: string | undefined): string => (size && LEGACY_BEAM[size]) || (size && BEAM_CHOICE_BY_LABEL[size] ? size : LEGACY_BEAM[DEFAULT_STEEL_BEAM])
 /** £ per metre of beam, with its bearing: weight a metre times the steel rate per kg */
 export const beamPerM = (size: string | undefined): number => +(BEAM_CHOICE_BY_LABEL[beamLabelOf(size)].kgPerM * STEEL_RATES.steelPerKg).toFixed(2)
+/** the openings whose steel is set up with the steel calculators' options, as the engine wants them (a bi-fold or a door is named for what it is) */
+const steelItemsOf = (openings: CavityOpening[]): WallSteelItem[] => openings.filter(o => o.lintelType === 'steel-beam' && o.steelSpec).map(o => ({
+  id: o.id, ref: `${o.kind === 'bifold' ? 'Bi-fold' : o.kind === 'door' ? 'Door' : o.kind === 'window' ? 'Window' : 'Opening'} ${(o.widthMm / 1000).toFixed(2)}m`, widthMm: o.widthMm, heightMm: o.heightMm, steel: cleanWallSteel(o.steelSpec),
+}))
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 const INSULATION_LABEL: Record<CavityInsulationType, string> = {
   none: 'None (empty cavity)',
@@ -98,6 +104,8 @@ interface LayerOpts {
   /** Steel beams over openings (the section and the length of each with its bearing) and the padstones under them */
   steel?: { size: string; lengthM: number }[]
   padstones?: number
+  /** the lines for steel set up with the steel calculators' options, priced by lib/wall-steel.ts (the beam, its plate, connections, posts, casing ...) */
+  steelLines?: StructuralLine[]
   /** The inside reveals of the openings finished with board (or plaster) returns and beads: their length and area. Left out: no reveal finish is priced. */
   reveals?: { lm: number; areaM2: number } | null
 }
@@ -158,6 +166,7 @@ function buildCavityLayers(o: LayerOpts): AssemblyLayerDef[] {
   const bySize = new Map<string, number>()
   for (const b of o.steel ?? []) { const label = beamLabelOf(b.size); bySize.set(label, (bySize.get(label) ?? 0) + b.lengthM) }
   for (const [size, lm] of bySize) layers.push({ id: 'steel_' + slug(LEGACY_BEAM_ID[size] ?? size), name: `Steel beam ${size} over openings (with bearing)`, category: 'materials', source: 'fixed', fixedQty: +lm.toFixed(3), unit: 'm', unitCost: beamPerM(size) })
+  for (const l of o.steelLines ?? []) layers.push({ id: 'ws_' + slug(l.id), name: l.name, category: l.category, source: 'fixed', fixedQty: l.qty, unit: l.unit, unitCost: l.unitCost })
   if ((o.padstones ?? 0) > 0) layers.push({ id: 'padstones', name: 'Concrete padstones (under the steel beam ends)', category: 'materials', source: 'fixed', fixedQty: o.padstones!, unit: 'nr', unitCost: 22.00, roundToWhole: true })
   // The inside reveals: returns finished the same way as the wall's inside face, and beads on their arrises
   if (o.reveals && o.reveals.areaM2 > 0) {
@@ -272,11 +281,13 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
   }
   let g
   try { g = calculateCavityGeometry(input) } catch { return null }
+  let steelLines: StructuralLine[] = []
+  try { steelLines = priceWallSteel(steelItemsOf(openings), g.overallThicknessMm).lines } catch { steelLines = [] }
   const layers = buildCavityLayers({
     wastePct, outerLeaf, innerType, innerThicknessMm, insulation: o.insulation,
     insulationThicknessMm: g.insulationThicknessMm, tieLengthMm: g.tieLengthMm, externalFinish, finishType,
     counts: { steelCavity: g.steelCavityLintels, concrete: g.concreteLintels, angles: g.steelAngles, trays: g.trayCount, weeps: g.weepCount, closerLm: g.closerLm },
-    steel: g.steelBeams, padstones: g.padstones, reveals: g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
+    steel: g.steelBeams, padstones: g.padstones, steelLines, reveals: g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
   })
   let cost
   try { cost = calculateCavityWallCost(input, layers) } catch { return null }
@@ -328,7 +339,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     if (!planOpenings) return
     // a door and its side panels drawn as one wide opening (over 2.4m) starts under a steel beam, like a bi-fold, since a standard lintel does not span it
     const make = (p: PlanWallOpening): CavityOpening => (p.kind === 'bifold' || (p.kind === 'door' && p.widthMm > 2400)
-      ? { id: newOpeningId(), kind: p.kind === 'bifold' ? 'bifold' : 'door', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM }
+      ? { id: newOpeningId(), kind: p.kind === 'bifold' ? 'bifold' : 'door', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM, steelSpec: newWallSteel() }
       : { id: newOpeningId(), kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: p.kind === 'window' ? 900 : 0, lintelType: 'steel-cavity' })
     // a wall from Take-off has the openings that are DRAWN on it, so the calculator's own sample window (put there by a calculator opened before this) is taken off: no windows or doors drawn means none
     setOpenings(prev => mergePlanWallOpenings(prev.filter(o => !isUntouchedSampleOpening(o)), planOpenings, make))
@@ -396,6 +407,12 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     setLabourOverride(prev => (prev ?? suggestedRef.current).filter(l => l.id !== id))
   }
 
+  // the steel set up with the steel calculators' options, priced by the Structural Openings engine (the wall prices only its own tray and weeps for those openings)
+  const wallSteel = useMemo(() => {
+    if (!geometryResult.ok) return { ok: true as const, value: priceWallSteel([], 0) }
+    try { return { ok: true as const, value: priceWallSteel(steelItemsOf(JSON.parse(openingsKey) as CavityOpening[]), geometryResult.geometry.overallThicknessMm) } }
+    catch (e: any) { return { ok: false as const, error: e.message as string } }
+  }, [geometryResult, openingsKey])
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const g = geometryResult.geometry
@@ -404,10 +421,10 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
       insulationThicknessMm: g.insulationThicknessMm, tieLengthMm: g.tieLengthMm,
       externalFinish, finishType,
       counts: { steelCavity: g.steelCavityLintels, concrete: g.concreteLintels, angles: g.steelAngles, trays: g.trayCount, weeps: g.weepCount, closerLm: g.closerLm },
-      steel: g.steelBeams, padstones: g.padstones, reveals: finishReveals && g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
+      steel: g.steelBeams, padstones: g.padstones, steelLines: wallSteel.ok ? wallSteel.value.lines : [], reveals: finishReveals && g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
     })
     return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [geometryResult, wastePct, outerLeaf, innerType, innerThicknessMm, insulation, externalFinish, finishType, rateOverrides, finishReveals])
+  }, [geometryResult, wastePct, outerLeaf, innerType, innerThicknessMm, insulation, externalFinish, finishType, rateOverrides, finishReveals, wallSteel])
 
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
@@ -461,7 +478,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
 
   function updateOpening(id: string, patch: Partial<CavityOpening>) {
     // a bi-fold door starts as a wide opening to the floor under a steel beam (all of it editable after)
-    const withBifold: Partial<CavityOpening> = patch.kind === 'bifold' ? { widthMm: 3000, heightMm: 2100, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM, ...patch } : patch
+    const withBifold: Partial<CavityOpening> = patch.kind === 'bifold' ? { widthMm: 3000, heightMm: 2100, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM, steelSpec: newWallSteel(), ...patch } : patch
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...withBifold } : o))
   }
   function removeOpening(id: string) {
@@ -647,26 +664,41 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3, width: 34 }}>Lintel</span>
                   <select value={(o as CavityOpening).lintelType}
-                    onChange={e => updateOpening(o.id, { lintelType: e.target.value as LintelType })} style={{ ...miniInput, flex: 1, minWidth: 160 }}>
+                    onChange={e => { const lt = e.target.value as LintelType; updateOpening(o.id, lt === 'steel-beam' && !(o as CavityOpening).steelSpec ? { lintelType: lt, steelSpec: newWallSteel(beamLabelOf((o as CavityOpening).steelSize)) } : { lintelType: lt }) }} style={{ ...miniInput, flex: 1, minWidth: 160 }}>
                     {(Object.keys(LINTEL_LABEL) as LintelType[]).map(k => <option key={k} value={k}>{LINTEL_LABEL[k]}</option>)}
                   </select>
-                  {(o as CavityOpening).lintelType === 'steel-beam' && (
-                    <>
-                      <select value={beamLabelOf((o as CavityOpening).steelSize)} title="The steel section the designer has specified (this only prices it). The same sections and the same price per kg as the Structural Openings and Steel Beams calculators."
-                        onChange={e => updateOpening(o.id, { steelSize: e.target.value })} style={{ ...miniInput, width: 190 }}>
-                        {BEAM_CHOICES.map(b => <option key={b.label} value={b.label}>{b.label} ({b.kgPerM} kg/m)</option>)}
-                      </select>
-                      {(() => {
-                        // an indicative section for this span, from the Structural Openings span table (one floor and the roof above): the designer's section replaces it
-                        const spanM = (o as CavityOpening).widthMm / 1000
-                        const sug = beamFor(spanM, 'floor')
-                        return <span style={{ fontSize: 10, color: '#94a3b8', flexBasis: '100%' }}>{sug.beyond ? `A ${spanM.toFixed(1)}m span is beyond the usual table: the engineer specifies the beam.` : `Indicative for a ${spanM.toFixed(1)}m span with one floor above: ${sug.section.label}. The designer's section replaces it.`}</span>
-                      })()}
-                    </>
-                  )}
+                  {(o as CavityOpening).lintelType === 'steel-beam' && (() => {
+                    const co = o as CavityOpening
+                    if (co.steelSpec) {
+                      const sum = wallSteel.ok ? wallSteel.value.byOpening[co.id] : undefined
+                      return <WallSteelFields steel={cleanWallSteel(co.steelSpec)} onChange={st => updateOpening(o.id, { steelSpec: st })} widthMm={co.widthMm} wallMm={g?.overallThicknessMm ?? 300} summary={sum ? { beamLabel: sum.beamLabel, steelKg: sum.steelKg } : undefined} />
+                    }
+                    // a beam saved before: the short list, with a way to move it to the steel calculators' options
+                    return (
+                      <>
+                        <select value={beamLabelOf(co.steelSize)} title="The steel section the designer has specified (this only prices it). The same sections and the same price per kg as the Structural Openings and Steel Beams calculators."
+                          onChange={e => updateOpening(o.id, { steelSize: e.target.value })} style={{ ...miniInput, width: 190 }}>
+                          {BEAM_CHOICES.map(b => <option key={b.label} value={b.label}>{b.label} ({b.kgPerM} kg/m)</option>)}
+                        </select>
+                        <button type="button" onClick={() => updateOpening(o.id, { steelSpec: newWallSteel(beamLabelOf(co.steelSize)) })} title="Set the steel up like the steel calculators: one beam or a pair, a welded plate, connections, posts, who supplies it. It is then priced by the Structural Openings engine."
+                          style={{ ...miniInput, width: 'auto', cursor: 'pointer', padding: '3px 8px', background: '#eff6ff', borderColor: '#bfdbfe' }}>Use the steel calculator&apos;s options</button>
+                      </>
+                    )
+                  })()}
                 </div>
               )}
             />
+            {!wallSteel.ok && <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 6 }}>The steel over an opening could not be priced: {wallSteel.error}</div>}
+            {wallSteel.ok && wallSteel.value.totalSteelKg > 0 && (() => {
+              const h = wallSteel.value.hours
+              const bits = [h.bricklayer > 0 && `${h.bricklayer}h of bricklayer`, h.labourer > 0 && `${h.labourer}h of labourer`, h.carpenter > 0 && `${h.carpenter}h of carpenter`].filter(Boolean) as string[]
+              return (
+                <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 8px', marginTop: 6, lineHeight: 1.5 }}>
+                  {bits.length > 0 && <div>The steel also needs about {bits.join(', ')} (setting the beams and padstones, and any pads or casing). The wall&apos;s labour below does not include it: add it under Labour.</div>}
+                  {wallSteel.value.warnings.map((w, i) => <div key={i}>• {w}</div>)}
+                </div>
+              )
+            })()}
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer', marginTop: 8 }}>
               <input type="checkbox" checked={finishReveals} onChange={e => setFinishReveals(e.target.checked)} style={{ width: 'auto' }} />
               Finish the inside reveals (board or plaster returns, and beads)
