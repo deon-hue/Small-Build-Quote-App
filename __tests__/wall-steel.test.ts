@@ -107,5 +107,27 @@ t('the plate on a column carries the engineer note', cp.warnings.some(w => w.inc
 t('a plate on a beam is as before (as wide as the wall, the length of the beam)', (() => { const r = price(withMembers(beam({ plate: { position: 'bottom', thicknessMm: 10, widthMm: null, lengthMm: null } }))); return line(r, 'plate')!.name.includes('300mm') })())
 t('a column keeps its plate when saved and read back, a timber post does not', (() => { const c = cleanWallSteel({ members: [{ kind: 'column', plate: { position: 'top', thicknessMm: 12, widthMm: null, lengthMm: null } }, { kind: 'timber-post', plate: { position: 'top', thicknessMm: 12, widthMm: null, lengthMm: null } }] }); return c.members[0].plate?.thicknessMm === 12 && c.members[1].plate === null })())
 
+// ---- buying the steel in whole stock bars (the merchant's wastage charge), sharing bars across the openings
+const STOCK = { barsMm: [6100, 9100, 12200], offcutPct: 100 }
+const priceStock = (items: { id: string; steel: WallSteel; w?: number }[], stock = STOCK) => priceWallSteel(items.map(i => ({ id: i.id, ref: 'Door ' + i.id, widthMm: i.w ?? 2700, heightMm: 2100, steel: i.steel })), 300, stock)
+const off = (r: ReturnType<typeof priceWallSteel>) => r.lines.filter(l => l.id.startsWith('offcut|'))
+const s1 = priceStock([{ id: 'a', steel: newWallSteel() }])
+t('stock: a 3.0m beam bought as a 6.1m bar leaves 3.1m, charged at the steel rate (£60 a metre = £186)', off(s1).length === 1 && near(off(s1)[0].qty, 3.1) && near(off(s1)[0].unitCost, 60) && s1.cutting.length === 1 && s1.cutting[0].bars.length === 1 && s1.cutting[0].bars[0].lengthMm === 6100 && s1.cutting[0].offcutMm === 3100 && near(s1.cutting[0].offcutCost, 186), [off(s1), s1.cutting])
+t('stock: the member line is still the cut length (the offcut is an extra line)', near(line(s1, 'steel')!.qty, 3) && s1.lines.length === d.lines.length + 1)
+t('stock: a share of the offcut can be charged (50%) and the line says so', (() => { const r = priceStock([{ id: 'a', steel: newWallSteel() }], { ...STOCK, offcutPct: 50 }); return near(off(r)[0].unitCost, 30) && off(r)[0].name.includes('50% charged') })())
+t('stock: with 0% the offcut is kept and not charged (no line) but the cutting list is still there', (() => { const r = priceStock([{ id: 'a', steel: newWallSteel() }], { ...STOCK, offcutPct: 0 }); return off(r).length === 0 && r.cutting.length === 1 })())
+const sh = priceStock([{ id: 'a', steel: newWallSteel() }, { id: 'b', steel: newWallSteel() }])
+t('stock: two openings with the same beam share ONE 6.1m bar (3.0m + 3.0m + a saw cut), 0.095m left', sh.cutting.length === 1 && sh.cutting[0].bars.length === 1 && sh.cutting[0].bars[0].cuts.length === 2 && near(off(sh)[0].qty, 0.095), [sh.cutting[0].bars, off(sh)])
+t('stock: three share ONE 9.1m bar (9.0m and two saw cuts) rather than buying two 6.1m', (() => { const r = priceStock([{ id: 'a', steel: newWallSteel() }, { id: 'b', steel: newWallSteel() }, { id: 'c', steel: newWallSteel() }]); return r.cutting[0].bars.length === 1 && r.cutting[0].bars[0].lengthMm === 9100 && r.cutting[0].bars[0].cuts.length === 3 })())
+t('stock: different sections are separate groups with their own offcut lines', (() => { const r = priceStock([{ id: 'a', steel: newWallSteel() }, { id: 'b', steel: withMembers(beam({ section: '406 × 178 UB 54' })) }]); return r.cutting.length === 2 && off(r).length === 2 })())
+t('stock: steel a contractor supplies is not planned in bars (they price their own)', priceStock([{ id: 'a', steel: withMembers(beam({ by: 'sub' })) }]).cutting.length === 0)
+t('stock: timber is not planned in bars', priceStock([{ id: 'a', steel: withMembers(mem('lvl')) }]).cutting.length === 0)
+t('stock: a column is cut from a bar too (2.1m tall from a 6.1m bar of UC)', (() => { const r = priceStock([{ id: 'a', steel: withMembers(mem('column', { qty: 2 })) }]); return r.cutting.length === 1 && r.cutting[0].bars.length === 1 && r.cutting[0].bars[0].cuts.length === 2 })())
+t('stock: a piece longer than the longest bar is priced by its cut length and warned', (() => { const r = priceStock([{ id: 'a', steel: withMembers(beam({ lengthMm: 13000 })) }]); return r.cutting[0].tooLong.length === 1 && off(r).length === 0 && r.warnings.some(w => w.includes('longer than the longest bar')) })())
+t('stock: custom bar lengths (4m and 8m)', priceStock([{ id: 'a', steel: newWallSteel() }], { barsMm: [4000, 8000], offcutPct: 100 }).cutting[0].bars[0].lengthMm === 4000)
+t('stock: off (not given) is exactly as before: no offcut lines, no cutting list', (() => { const r = price(newWallSteel()); return off(r).length === 0 && r.cutting.length === 0 })())
+t('stock: the engineer and the per-opening lines are not affected', s1.byOpening.a.steelKg === 75 && s1.hours.bricklayer === d.hours.bricklayer)
+t('the old note about Structural Openings is gone from a wall (the new one is filtered too)', !d.warnings.some(w => w.includes('Structural Openings') && w.includes('so it is not counted twice')))
+
 console.log(`${ok} passed, ${bad} failed`)
 if (bad) process.exit(1)

@@ -15,6 +15,7 @@ import {
   calculateSteelwork, newMember, sectionsFor, MEMBER_KINDS, KIND_BY_ID, FINISH_LABEL, ENDS_LABEL, BY_LABEL, DEFAULT_STRUCTURAL_SITUATIONS,
   type SteelMember, type SteelResult, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy,
 } from '@/lib/structural-steel-units'
+import { parseStockLengths } from '@/lib/steel-stock'
 import { describeSteelwork, describeSteelworkShort, type SteelDescriptionInput } from '@/lib/structural-steel-description'
 import { suggestSteelworkLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -44,6 +45,11 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
   const [engineer, setEngineer] = useCalcState(ID, 'engineer', true)
   const [buildingControl, setBuildingControl] = useCalcState(ID, 'buildingControl', true)
   const [hiabVisits, setHiabVisits] = useCalcState(ID, 'hiabVisits', 0)
+  // buying the steel in whole stock bars, as a merchant sells it: the cuts of one section share bars and the offcut is charged (off to start: the steel is priced by its cut length)
+  const [stockOn, setStockOn] = useCalcState(ID, 'stockOn', false)
+  const [stockText, setStockText] = useCalcState(ID, 'stockBars', '6100, 9100, 12200')
+  const [offcutPct, setOffcutPct] = useCalcState(ID, 'offcutPct', 100)
+  const stock = useMemo(() => (stockOn ? { barsMm: parseStockLengths(stockText), offcutPct } : undefined), [stockOn, stockText, offcutPct])
 
   function addMember() { setMembers(p => [...p, newMember('sm-' + uid(), `${KIND_BY_ID[addKind].post ? 'P' : 'B'}${p.filter(x => KIND_BY_ID[x.kind].post === KIND_BY_ID[addKind].post).length + 1}`, addKind)]) }
   function update(id: string, patch: Partial<SteelMember>) { setMembers(p => p.map(x => (x.id === id ? { ...x, ...patch } : x))) }
@@ -66,9 +72,9 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
   }, [externalLengthMm])
 
   const result = useMemo((): { ok: true; r: SteelResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculateSteelwork({ members, jobSituationId, situations: DEFAULT_STRUCTURAL_SITUATIONS, engineer, buildingControl, hiabVisits, rates: {} }) } }
+    try { return { ok: true, r: calculateSteelwork({ members, jobSituationId, situations: DEFAULT_STRUCTURAL_SITUATIONS, engineer, buildingControl, hiabVisits, rates: {}, stock }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [members, jobSituationId, engineer, buildingControl, hiabVisits])
+  }, [members, jobSituationId, engineer, buildingControl, hiabVisits, stock])
   const r = result.ok ? result.r : null
 
   const descInput: SteelDescriptionInput | null = r ? {
@@ -177,6 +183,18 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
               )
             })}
 
+            {r && stockOn && r.cutting.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginTop: 4, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Bars to order (cutting list)</div>
+                {r.cutting.map(g => (
+                  <div key={g.section} style={{ fontSize: 12, color: '#334155', marginBottom: 6, lineHeight: 1.5 }}>
+                    <b>{g.section}</b>: {g.bars.length === 0 ? 'nothing to order from stock' : `${(g.buyMm / 1000).toFixed(2)}m bought, ${(g.cutMm / 1000).toFixed(2)}m cut, ${(g.offcutMm / 1000).toFixed(2)}m left over${g.offcutCost > 0 ? ` (£${g.offcutCost.toFixed(2)} charged)` : ''}`}
+                    {g.bars.map((b, i) => <div key={i} style={{ fontSize: 11.5, color: '#64748b', paddingLeft: 12 }}>Bar {i + 1}: {(b.lengthMm / 1000).toFixed(2)}m: cut {b.cuts.map(c => (c / 1000).toFixed(2) + 'm').join(', ')}, {(b.offcutMm / 1000).toFixed(2)}m left</div>)}
+                    {g.tooLong.length > 0 && <div style={{ fontSize: 11.5, color: '#b45309', paddingLeft: 12 }}>{g.tooLong.map(c => (c / 1000).toFixed(2) + 'm').join(', ')}: longer than the longest bar, priced by cut length (needs a splice).</div>}
+                  </div>
+                ))}
+              </div>
+            )}
             {r && members.length > 0 && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
                 {r.totalMembers} member{r.totalMembers === 1 ? '' : 's'}{r.totalSteelKg > 0 ? `, about ${r.totalSteelKg}kg of steel` : ''}, about {r.totalHours} hours of labour. The sections are samples to price from: the engineer designs the real ones.
@@ -194,11 +212,21 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
               </PropRow>
               <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>The extra is added to the labour hours. A single member can have its own.</div>
             </CollapsibleSection>
+            <CollapsibleSection title="Buy in stock lengths" borderColor="#bae6fd">
+              <TilingCheck label="Price the steel as whole bars (a merchant sells whole bars, so the offcut is paid for too)" on={stockOn} set={setStockOn} />
+              {stockOn && (
+                <>
+                  <PropRow label="Stock bar lengths (mm)"><input value={stockText} onChange={e => setStockText(e.target.value)} style={propInput} title="The lengths the merchant sells, separated by commas: 6100, 9100, 12200" /></PropRow>
+                  <PropRow label="Offcut charged (%)"><TilingNumInput v={offcutPct} set={n => setOffcutPct(Math.min(100, Math.max(0, n)))} min={0} /></PropRow>
+                </>
+              )}
+              <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>{stockOn ? 'Cuts of the same section share bars, shown under the members as a cutting list. 100% charges the offcut as the merchant does; 0% means you keep it and use it on another job. Steel a contractor supplies is not included (they price their own).' : 'Off: each member is priced by its cut length.'}</div>
+            </CollapsibleSection>
             <CollapsibleSection title="For the whole job" borderColor="#bae6fd">
               <TilingCheck label="The structural engineer's calculations (once)" on={engineer} set={setEngineer} />
               <TilingCheck label="Building Control notice and inspections (once)" on={buildingControl} set={setBuildingControl} />
               <PropRow label="Hiab or lorry crane visits"><TilingNumInput v={hiabVisits} set={n => setHiabVisits(Math.max(0, Math.round(n)))} min={0} /></PropRow>
-              <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>Beams over an opening in a wall are priced with the opening, in Structural Openings. Use this list for steel that is not over one.</div>
+              <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>Steel over an opening in a wall is set up in that wall&apos;s calculator (or in Structural Openings when knocking one through an existing wall). Use this list for steel that is not over one, so it is not counted twice.</div>
             </CollapsibleSection>
           </>
         ),

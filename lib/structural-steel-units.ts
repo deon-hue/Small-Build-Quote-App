@@ -10,6 +10,8 @@
 
 import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
 
+import { planBars, type Bar } from './steel-stock'
+
 export type MemberKind = 'beam' | 'column' | 'hollow' | 'lvl' | 'timber-post'
 export type MemberFinish = 'primed' | 'galvanised' | 'intumescent' | 'cased' | 'none'
 export type MemberEnds = 'masonry' | 'steel'
@@ -129,6 +131,8 @@ export function newMember(id: string, ref: string, kind: MemberKind = 'beam'): S
 export interface SteelLine { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors' | 'other'; unit: string; unitCost: number; qty: number; roomId?: string }
 export interface SteelLabourTask { key: string; roomId: string; trade: 'bricklayer' | 'labourer' | 'carpenter'; task: string; hours: number; basis: string }
 export interface SteelSummary { memberId: string; ref: string; name: string; parts: string[]; steelKg: number; hours: number }
+/** One section's bars when the steel is bought in whole stock lengths: the bars to order, how much is cut and how much is left over */
+export interface CuttingGroup { section: string; bars: Bar[]; /** pieces longer than the longest bar: priced by cut length, they need a splice */ tooLong: number[]; buyMm: number; cutMm: number; offcutMm: number; /** £ of the offcut charged (what the merchant adds for the metres not used) */ offcutCost: number }
 export interface SteelResult {
   lines: SteelLine[]
   labour: SteelLabourTask[]
@@ -137,6 +141,8 @@ export interface SteelResult {
   totalSteelKg: number
   totalHours: number
   warnings: string[]
+  /** when the steel is bought in stock lengths: the bars to order for each section (empty otherwise) */
+  cutting: CuttingGroup[]
 }
 export interface SteelInput {
   members: SteelMember[]
@@ -149,6 +155,8 @@ export interface SteelInput {
   /** Hiab or lorry crane visits to lift the steel in */
   hiabVisits: number
   rates: Partial<Record<SteelRateKey, number>>
+  /** buy the steel we supply in whole stock bars (the merchant sells whole bars): the cuts of one section share bars, and the offcut is charged at this share of its steel value (100 = as the merchant charges; 0 = the offcut is kept and used). Absent = priced by the cut length, as before. */
+  stock?: { barsMm: number[]; offcutPct: number }
 }
 
 const money = (n: number) => +n.toFixed(2)
@@ -316,6 +324,33 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
     summaries.push({ memberId: m.id, ref: name, name: label, parts: parts.length > 0 ? [parts.join(', ')] : [], steelKg: Math.round(kg), hours: hrs })
   }
 
+  // bought in whole stock bars: the cuts of one section share bars, and the metres left over are charged like the merchant's wastage charge (the member lines above stay as the cut lengths)
+  const cutting: CuttingGroup[] = []
+  if (input.stock && input.stock.barsMm.length > 0) {
+    const pct = Math.min(100, Math.max(0, Number.isFinite(input.stock.offcutPct) ? input.stock.offcutPct : 100))
+    const groups = new Map<string, { sec: SteelSection; pieces: number[] }>()
+    for (const m of input.members) {
+      const k = KIND_BY_ID[m.kind]
+      if (!k?.steel || m.by !== 'us') continue
+      const sec = steelSection(m.kind, m.section)
+      if (!sec) continue
+      const g = groups.get(sec.label) ?? { sec, pieces: [] }
+      for (let i = 0; i < m.qty; i++) g.pieces.push(m.lengthMm)
+      groups.set(sec.label, g)
+    }
+    for (const [label, g] of groups) {
+      const plan = planBars(g.pieces, input.stock.barsMm)
+      const perM = g.sec.kgPerM * rate('steelPerKg')
+      const offcutCost = money((plan.offcutMm / 1000) * perM * pct / 100)
+      cutting.push({ section: label, bars: plan.bars, tooLong: plan.tooLong, buyMm: plan.buyMm, cutMm: plan.cutMm, offcutMm: plan.offcutMm, offcutCost })
+      if (plan.offcutMm > 0 && pct > 0) {
+        const barText = Array.from(new Set(plan.bars.map(b => b.lengthMm))).map(L => `${plan.bars.filter(b => b.lengthMm === L).length} x ${n2(L / 1000)}m`).join(' and ')
+        lines.push({ id: `offcut|${label.replace(/[^A-Za-z0-9]+/g, '_')}`, name: `${label}: offcut from whole bars (${barText} bought, ${n2(plan.offcutMm / 1000)}m left over${pct < 100 ? `, ${Math.round(pct)}% charged` : ''})`, category: 'materials', unit: 'm', unitCost: money(perM * pct / 100), qty: +(plan.offcutMm / 1000).toFixed(3) })
+      }
+      if (plan.tooLong.length > 0) warnings.push(`${label}: ${plan.tooLong.length === 1 ? 'a piece is' : plan.tooLong.length + ' pieces are'} longer than the longest bar (${n2(Math.max(...input.stock.barsMm) / 1000)}m): priced by its cut length, and it needs a splice. Check it with the engineer.`)
+    }
+  }
+
   // once for the job
   if (input.hiabVisits > 0) lines.push({ id: 'hiab|job', name: 'Hiab or lorry crane to lift the steel in', category: 'plant', unit: 'visit', unitCost: money(rate('hiab')), qty: input.hiabVisits })
   if (input.engineer && input.members.length > 0) lines.push({ id: 'engineer|job', name: "structural engineer: calculations for the steelwork", category: 'subcontractors', unit: 'sum', unitCost: money(rate('engineerJob')), qty: 1 })
@@ -329,11 +364,11 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
     if (anyBareSteel) warnings.push('No finish is priced to some of the steel: confirm with the engineer and Building Control whether it needs fire protection or a paint system.')
     if (anyPostNoPad) warnings.push('A post or column with no pad priced stands on a foundation priced elsewhere: it must not bear on the floor slab alone.')
     if (anySub) warnings.push('A steelwork contractor\'s price covers supplying, delivering and fixing the steel: the pads, fire protection and lifting stay here.')
-    if (anySteel) warnings.push('Beams over an opening in a wall are priced with the opening in Structural Openings (by opening): use this list for steel that is not over one, so it is not counted twice.')
+    if (anySteel) warnings.push('Steel over an opening in a wall is priced with that wall\'s calculator or in Structural Openings: do not list it here as well, so it is not counted twice.')
     if (anyTimber) warnings.push('Engineered timber beams and posts are sized by their maker\'s software or the engineer: check the span, the bearing and the fire rating.')
     warnings.push('Not included: the foundation under a column beyond the pad shown, floor or roof timbers carried by the beam, making good, plastering or decorating.')
   }
-  return { lines, labour, members: summaries, totalMembers, totalSteelKg: Math.round(totalKg), totalHours: money(totalHours), warnings }
+  return { lines, labour, members: summaries, totalMembers, totalSteelKg: Math.round(totalKg), totalHours: money(totalHours), warnings, cutting }
 }
 
 export { DEFAULT_STRUCTURAL_SITUATIONS }

@@ -6,7 +6,7 @@
 
 import {
   calculateSteelwork, sectionsFor, defaultSection, KIND_BY_ID, DEFAULT_STRUCTURAL_SITUATIONS, RATES as STEEL_RATES, STEEL_BEAMS, STEEL_COLUMNS,
-  type SteelMember, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy, type SteelLine,
+  type SteelMember, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy, type SteelLine, type CuttingGroup,
 } from './structural-steel-units'
 import { beamFor, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, CONNECTION_BY_ID, type LoadAbove, type OpeningConnection, type BeamPlate } from './structural-openings-units'
 
@@ -146,6 +146,8 @@ export interface WallSteelResult {
   warnings: string[]
   byOpening: Record<string, { beamLabel: string; steelKg: number; parts: string[]; /** the steel in words for the quote */ words: string }>
   totalSteelKg: number
+  /** when the steel is bought in stock lengths: the bars to order for the whole wall (cuts of the same section share bars across its openings) */
+  cutting: CuttingGroup[]
 }
 
 const NUMBER_WORD = ['no', 'one', 'two', 'three', 'four', 'five', 'six']
@@ -193,11 +195,11 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
 }
 
 /** warnings from the steel engine that make no sense inside a wall calculator: the steel here IS over an opening in the wall, and the foundation is not this calculator's */
-const NOT_FOR_A_WALL = ['Beams over an opening in a wall are priced with the opening', 'Not included: the foundation under a column']
+const NOT_FOR_A_WALL = ['Steel over an opening in a wall is priced with', 'Beams over an opening in a wall are priced with the opening', 'Not included: the foundation under a column']
 
 /** Prices the steel over each of these wall openings with the Steel Beams, Columns & Posts engine, then adds the connections list. `wallThicknessMm` is the whole wall (a welded plate is as wide as it unless a width is typed). */
-export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number): WallSteelResult {
-  const out: WallSteelResult = { lines: [], hours: { bricklayer: 0, labourer: 0, carpenter: 0 }, warnings: [], byOpening: {}, totalSteelKg: 0 }
+export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number, stock?: { barsMm: number[]; offcutPct: number }): WallSteelResult {
+  const out: WallSteelResult = { lines: [], hours: { bricklayer: 0, labourer: 0, carpenter: 0 }, warnings: [], byOpening: {}, totalSteelKg: 0, cutting: [] }
   if (items.length === 0) return out
   const cleaned = items.map(it => ({ it, steel: cleanWallSteel(it.steel) }))
   const members: SteelMember[] = []
@@ -219,12 +221,13 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number):
   }
   const hiabVisits = cleaned.filter(c => c.steel.hiab && c.steel.members.length > 0).length
   const r = members.length === 0
-    ? { lines: [] as SteelLine[], labour: [] as { trade: 'bricklayer' | 'labourer' | 'carpenter'; hours: number }[], members: [] as { memberId: string; steelKg: number; parts: string[] }[], totalSteelKg: 0, warnings: [] as string[] }
-    : calculateSteelwork({ members, jobSituationId: DEFAULT_STRUCTURAL_SITUATIONS[0].id, situations: DEFAULT_STRUCTURAL_SITUATIONS, engineer: false, buildingControl: false, hiabVisits, rates: {} })
+    ? { lines: [] as SteelLine[], labour: [] as { trade: 'bricklayer' | 'labourer' | 'carpenter'; hours: number }[], members: [] as { memberId: string; steelKg: number; parts: string[] }[], totalSteelKg: 0, warnings: [] as string[], cutting: [] as CuttingGroup[] }
+    : calculateSteelwork({ members, jobSituationId: DEFAULT_STRUCTURAL_SITUATIONS[0].id, situations: DEFAULT_STRUCTURAL_SITUATIONS, engineer: false, buildingControl: false, hiabVisits, rates: {}, stock })
   out.lines = r.lines.map(l => ({ ...l }))
   for (const t of r.labour) out.hours[t.trade] += t.hours
   out.warnings = r.warnings.filter(w => !NOT_FOR_A_WALL.some(n => w.includes(n)))
   out.totalSteelKg = r.totalSteelKg
+  out.cutting = r.cutting
   const kgBy = new Map<string, number>()
   for (const s of r.members) { const o = owner.get(s.memberId); if (o) kgBy.set(o, (kgBy.get(o) ?? 0) + s.steelKg) }
 

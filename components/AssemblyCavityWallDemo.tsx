@@ -31,6 +31,7 @@ import {
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES } from '@/lib/structural-openings-units'
+import { parseStockLengths } from '@/lib/steel-stock'
 import { priceWallSteel, newWallSteel, cleanWallSteel, type WallSteelItem, type WallSteelLine } from '@/lib/wall-steel'
 import WallSteelFields from '@/components/WallSteelFields'
 import WallSteelModal from '@/components/WallSteelModal'
@@ -339,6 +340,8 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [boardThicknessMm, setBoardThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'boardThicknessMm', 75)
   const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyCavityWallDemo', 'finishType', 'dot-dab')
   const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
+  // the steel bought in whole stock bars across this wall's openings (off to start: priced by the cut length)
+  const [steelStock, setSteelStock] = useCalcState('AssemblyCavityWallDemo', 'steelStock', { on: false, bars: '6100, 9100, 12200', offcutPct: 100 })
   // which opening's steel window is open (none to start)
   const [steelOpenId, setSteelOpenId] = useState<string | null>(null)
   const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings || planOpenings !== undefined ? [] : sampleOpenings)
@@ -427,9 +430,9 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   // the steel set up with the steel calculators' options, priced by the Structural Openings engine (the wall prices only its own tray and weeps for those openings)
   const wallSteel = useMemo(() => {
     if (!geometryResult.ok) return { ok: true as const, value: priceWallSteel([], 0) }
-    try { return { ok: true as const, value: priceWallSteel(steelItemsOf(JSON.parse(openingsKey) as CavityOpening[]), geometryResult.geometry.overallThicknessMm) } }
+    try { return { ok: true as const, value: priceWallSteel(steelItemsOf(JSON.parse(openingsKey) as CavityOpening[]), geometryResult.geometry.overallThicknessMm, steelStock.on ? { barsMm: parseStockLengths(steelStock.bars), offcutPct: steelStock.offcutPct } : undefined) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [geometryResult, openingsKey])
+  }, [geometryResult, openingsKey, steelStock])
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const g = geometryResult.geometry
@@ -722,6 +725,28 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
                 </div>
               )}
             />
+            {wallSteel.ok && wallSteel.value.totalSteelKg > 0 && (
+              <div style={{ fontSize: 11, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', marginTop: 6, lineHeight: 1.5 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={steelStock.on} onChange={e => setSteelStock(p => ({ ...p, on: e.target.checked }))} style={{ width: 'auto' }} />
+                  Buy the steel in stock lengths (cuts of the same section share bars across these openings, and the offcut is paid for)
+                </label>
+                {steelStock.on && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>BAR LENGTHS (MM)</span>
+                    <input value={steelStock.bars} onChange={e => setSteelStock(p => ({ ...p, bars: e.target.value }))} style={{ ...miniInput, width: 150 }} />
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>OFFCUT CHARGED (%)</span>
+                    <input type="number" min={0} max={100} value={steelStock.offcutPct} onChange={e => setSteelStock(p => ({ ...p, offcutPct: Math.min(100, Math.max(0, +e.target.value || 0)) }))} style={{ ...miniInput, width: 60 }} />
+                  </div>
+                )}
+                {steelStock.on && wallSteel.value.cutting.map(g => (
+                  <div key={g.section} style={{ marginTop: 4 }}>
+                    <b>{g.section}</b>: {g.bars.length === 0 ? 'nothing to order from stock' : `${g.bars.length} bar${g.bars.length === 1 ? '' : 's'} (${g.bars.map(b => (b.lengthMm / 1000).toFixed(2) + 'm').join(', ')}), ${(g.cutMm / 1000).toFixed(2)}m cut, ${(g.offcutMm / 1000).toFixed(2)}m left over${g.offcutCost > 0 ? `, £${g.offcutCost.toFixed(2)} charged` : ''}`}
+                    {g.tooLong.length > 0 && <span style={{ color: '#b45309' }}> {g.tooLong.map(c => (c / 1000).toFixed(2) + 'm').join(', ')} is longer than the longest bar: priced by cut length (needs a splice).</span>}
+                  </div>
+                ))}
+              </div>
+            )}
             {!wallSteel.ok && <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 6 }}>The steel over an opening could not be priced: {wallSteel.error}</div>}
             {wallSteel.ok && wallSteel.value.totalSteelKg > 0 && (() => {
               const h = wallSteel.value.hours

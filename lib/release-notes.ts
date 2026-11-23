@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-25T14:00:00+00:00',
+    title: 'Steel can be priced as whole bars, sharing cuts between beams and openings',
+    detail: 'A steel merchant sells whole bars, so a 3.2m beam from a 6.1m bar still costs the whole bar. The Steel Beams, Columns & Posts calculator now has a Buy in stock lengths option: it works out the cheapest bars to order so beams of the same section share bars, and adds the left-over metres as an offcut line (you choose the stock lengths and how much of the offcut to charge, from all of it to none). A cutting list shows the bars and the cuts in each. The wall calculator has the same tick across all the openings in a wall, so the steel over two openings can share a bar. It is off to start, so existing prices do not change.',
+  },
+  {
     at: '2026-11-25T09:00:00+00:00',
     title: 'Wall calculator: the steel for an opening opens in a pop-up',
     detail: 'In the cavity wall calculator the steel options for an opening no longer run down the page. Each opening with steel shows one summary line (what steel, its weight and cost) and a Set up the steel button, which opens the full options in a pop-up window with the cost for that opening at the bottom. Press Done, or Escape, to close it. A wall with two or three doors and windows with steel stays short.',
