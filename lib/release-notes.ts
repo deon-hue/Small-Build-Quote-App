@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-25T09:00:00+00:00',
+    title: 'Wall calculator: the steel for an opening opens in a pop-up',
+    detail: 'In the cavity wall calculator the steel options for an opening no longer run down the page. Each opening with steel shows one summary line (what steel, its weight and cost) and a Set up the steel button, which opens the full options in a pop-up window with the cost for that opening at the bottom. Press Done, or Escape, to close it. A wall with two or three doors and windows with steel stays short.',
+  },
+  {
     at: '2026-11-24T21:00:00+00:00',
     title: 'Steel columns and box section posts can have a plate welded on',
     detail: 'In the Steel Beams, Columns & Posts calculator, and in the steel list inside the wall calculator, a steel column or a box section post can now have a plate welded to its foot (a base plate), its head (a cap plate) or both, like a beam can. You choose the thickness and the size of the plate (300 by 300mm to start). It is priced as steel by weight plus the cutting and welding, and the standard base and cap plate set then becomes just the holding-down bolts and grout, so the plate is not paid for twice. The description names the plate.',

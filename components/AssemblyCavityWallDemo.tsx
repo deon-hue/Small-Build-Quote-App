@@ -33,6 +33,7 @@ import { fmt } from '@/lib/utils'
 import { BEAM_CHOICES, BEAM_CHOICE_BY_LABEL, beamFor, RATES as STEEL_RATES } from '@/lib/structural-openings-units'
 import { priceWallSteel, newWallSteel, cleanWallSteel, type WallSteelItem, type WallSteelLine } from '@/lib/wall-steel'
 import WallSteelFields from '@/components/WallSteelFields'
+import WallSteelModal from '@/components/WallSteelModal'
 import { mergePlanWallOpenings, planWallSig, type PlanWallOpening } from '@/lib/wall-openings'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
@@ -338,6 +339,8 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [boardThicknessMm, setBoardThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'boardThicknessMm', 75)
   const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyCavityWallDemo', 'finishType', 'dot-dab')
   const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
+  // which opening's steel window is open (none to start)
+  const [steelOpenId, setSteelOpenId] = useState<string | null>(null)
   const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings || planOpenings !== undefined ? [] : sampleOpenings)
   // the doors and windows drawn on this wall: added with their kind's usual lintel, and they follow the drawing (position, size, kind) until typed over
   const planKey = planOpenings ? planOpenings.map(planWallSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
@@ -684,8 +687,25 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
                   {(o as CavityOpening).lintelType === 'steel-beam' && (() => {
                     const co = o as CavityOpening
                     if (co.steelSpec) {
+                      // the steel opens in its own pop-up window, so a wall with several doors and windows stays short: a one-line summary here, the full options there
                       const sum = wallSteel.ok ? wallSteel.value.byOpening[co.id] : undefined
-                      return <WallSteelFields steel={cleanWallSteel(co.steelSpec)} onChange={st => updateOpening(o.id, { steelSpec: st })} widthMm={co.widthMm} heightMm={co.heightMm} wallMm={g?.overallThicknessMm ?? 300} summary={sum ? { beamLabel: sum.beamLabel, steelKg: sum.steelKg } : undefined} />
+                      const cost = wallSteel.ok ? +wallSteel.value.lines.filter(l => l.id.endsWith('|' + co.id) || l.id.includes('|' + co.id + '~')).reduce((t, l) => t + l.unitCost * l.qty, 0).toFixed(2) : undefined
+                      const kindWord = co.kind === 'bifold' ? 'Bi-fold' : co.kind === 'door' ? 'Door' : co.kind === 'window' ? 'Window' : 'Opening'
+                      return (
+                        <>
+                          <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px' }}>
+                            <span style={{ fontSize: 11, color: '#334155', flex: '1 1 220px', lineHeight: 1.4 }}>
+                              <b>Steel:</b> {sum?.words || 'none set up yet'}{sum?.steelKg ? ` · ${sum.steelKg}kg` : ''}{cost ? ` · £${cost.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
+                            </span>
+                            <button type="button" data-open-wall-steel onClick={() => setSteelOpenId(co.id)} style={{ ...miniInput, width: 'auto', cursor: 'pointer', padding: '4px 12px', background: '#eff6ff', borderColor: '#bfdbfe' }}>Set up the steel…</button>
+                          </div>
+                          {steelOpenId === co.id && (
+                            <WallSteelModal title={`Steel over the ${kindWord.toLowerCase()} (${(co.widthMm / 1000).toFixed(2)} × ${(co.heightMm / 1000).toFixed(2)}m)`} subtitle="Beams, columns, box section posts and timber, priced the way the Steel Beams, Columns & Posts calculator prices them." cost={cost} onClose={() => setSteelOpenId(null)}>
+                              <WallSteelFields steel={cleanWallSteel(co.steelSpec)} onChange={st => updateOpening(o.id, { steelSpec: st })} widthMm={co.widthMm} heightMm={co.heightMm} wallMm={g?.overallThicknessMm ?? 300} summary={sum ? { beamLabel: sum.beamLabel, steelKg: sum.steelKg } : undefined} />
+                            </WallSteelModal>
+                          )}
+                        </>
+                      )
                     }
                     // a beam saved before: the short list, with a way to move it to the steel calculators' options
                     return (
