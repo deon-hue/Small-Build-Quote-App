@@ -408,6 +408,8 @@ export interface CavityOpening extends AssemblyOpening {
   lintelType: LintelType
   /** For a 'steel-beam' lintel: the section specified, e.g. 'UB 178x102x19' (the designer's choice; this only prices it). */
   steelSize?: string
+  /** For a 'steel-beam' lintel set up with the steel calculators' options (lib/wall-steel.ts): the steel is priced by the Structural Openings engine, so the wall adds no beam or padstones of its own for it (it still prices the cavity tray and weeps). */
+  steelSpec?: object
   /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
   planId?: string
   fromPlan?: string
@@ -550,8 +552,10 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
         trayCount += 1
         break
       case 'steel-beam':
-        steelBeams.push({ openingId: o.id, size: o.steelSize || DEFAULT_STEEL_BEAM, lengthM: toM(o.widthMm + bearing * 2) })
-        padstones += 2       // one under each end
+        if (!o.steelSpec) {   // (a beam set up with the steel calculators' options is priced, with its padstones, by lib/wall-steel.ts)
+          steelBeams.push({ openingId: o.id, size: o.steelSize || DEFAULT_STEEL_BEAM, lengthM: toM(o.widthMm + bearing * 2) })
+          padstones += 2       // one under each end
+        }
         trayCount += 1       // a cavity tray over the beam, as over any separate lintel
         break
     }
