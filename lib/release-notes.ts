@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-26T14:00:00+00:00',
+    title: 'Steel: fabrication processes (holes, mitres, notches, cleats and more) and a plate that matches the flange',
+    detail: 'Each steel beam, column or box section post now has a Processes menu, in the Steel Beams, Columns & Posts calculator and in the steel inside a wall calculator: holes drilled in the web or flange (with the size), mitre cuts at an angle, notches, cleats, bearing stiffeners, splice plates, shot blasting and other fabrication by the hour. Each is priced as the fabricator\'s time plus any steel or fittings and appears in the quote wording. The welded plate also has a Flange width choice, and a new plate in the Steel Beams calculator starts as wide as the beam\'s flange. All figures are samples to check against a fabricator\'s quote. Nothing already priced changes.',
+  },
+  {
     at: '2026-11-25T14:00:00+00:00',
     title: 'Steel can be priced as whole bars, sharing cuts between beams and openings',
     detail: 'A steel merchant sells whole bars, so a 3.2m beam from a 6.1m bar still costs the whole bar. The Steel Beams, Columns & Posts calculator now has a Buy in stock lengths option: it works out the cheapest bars to order so beams of the same section share bars, and adds the left-over metres as an offcut line (you choose the stock lengths and how much of the offcut to charge, from all of it to none). A cutting list shows the bars and the cuts in each. The wall calculator has the same tick across all the openings in a wall, so the steel over two openings can share a bar. It is off to start, so existing prices do not change.',

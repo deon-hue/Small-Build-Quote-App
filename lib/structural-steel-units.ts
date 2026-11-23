@@ -11,6 +11,7 @@
 import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
 
 import { planBars, type Bar } from './steel-stock'
+import { PROCESS_BY_ID, priceProcess, processWords, type MemberProcess } from './steel-processes'
 
 export type MemberKind = 'beam' | 'column' | 'hollow' | 'lvl' | 'timber-post'
 export type MemberFinish = 'primed' | 'galvanised' | 'intumescent' | 'cased' | 'none'
@@ -115,6 +116,8 @@ export interface SteelMember {
   propped: boolean
   /** a steel beam: a plate welded to the bottom, the top or both to spread its load over the wall it bears on; a steel column or post: a plate welded to its foot (a base plate), its head (a cap plate) or both (none to start) */
   plate?: BeamPlate | null
+  /** fabrication processes on a steel member: holes, mitre cuts, notches, cleats, stiffeners, splices, shot blasting, other hours (none to start) */
+  processes?: MemberProcess[]
   situationId?: string | null
   /** the length last given to this member by the line drawn in Take-off: it follows the line until a length is typed over it */
   planLengthMm?: number
@@ -177,7 +180,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
   const summaries: SteelSummary[] = []
   const warnings: string[] = []
   let totalKg = 0, totalHours = 0, totalMembers = 0
-  let anyPlate = false
+  let anyPlate = false, anyProcess = false, anyCutsSteel = false
   let anyHeavy = false, anySteel = false, anyBoard = false, anySub = false, anyBareSteel = false, anyPostNoPad = false, anyTimber = false
 
   for (const m of input.members) {
@@ -273,6 +276,28 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
         parts.push(`${countText}${sec.label} ${m.qty === 1 ? k.word : k.word + 's'}, ${n2(lengthM)}m high, on base plates${m.pad ? ' on concrete pads' : ''}`)
         if (postPlateText) parts.push(postPlateText)
       }
+      // fabrication processes: the fabricator's time (and any steel or fittings they add) for each
+      if (m.processes && m.processes.length > 0) {
+        const steelKind = m.kind === 'beam' ? 'beam' : m.kind === 'column' ? 'column' : 'hollow'
+        const seenKinds: Record<string, number> = {}
+        const usable: MemberProcess[] = []
+        for (const p of m.processes) {
+          const info = PROCESS_BY_ID[p.kind]
+          if (!info) throw new Error(`${name}: unknown fabrication process.`)
+          if (!info.forKinds.includes(steelKind)) continue
+          usable.push(p)
+          const pr = priceProcess(p, qty, sec.surfaceM2PerM * lengthM, k.word, steelKind === 'hollow')
+          const n = (seenKinds[p.kind] = (seenKinds[p.kind] ?? -1) + 1)
+          const key = `proc-${p.kind}${n ? n : ''}`
+          add(key, `${pr.what}: fabrication`, 'h', rate('fabPerHour'), pr.hours, 'subcontractors')
+          if (pr.material > 0) add(`${key}-mat`, `${pr.what}: steel and fittings`, 'sum', pr.material, 1)
+          for (const w of pr.warnings) warnings.push(`${label}: ${w}`)
+          anyProcess = true
+          if (p.kind === 'holes' || p.kind === 'notch' || p.kind === 'splice') anyCutsSteel = true
+        }
+        const pw = processWords(usable, qty, k.word, steelKind, sec.surfaceM2PerM * lengthM)
+        if (pw) parts.push(`with ${pw}`)
+      }
       // the finish
       const surface = sec.surfaceM2PerM * lengthM * qty
       if (m.finish === 'intumescent') { add('intumescent', 'intumescent coating (applied by a specialist)', 'm²', rate('intumescentPerM2'), surface, 'subcontractors'); parts.push('an intumescent coating') }
@@ -361,6 +386,8 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
     if (anyHeavy) warnings.push(`A beam heavier than about ${LIGHT_LIFT_KG}kg needs a Hiab or crane, or a big team and needles to lift it: add a Hiab visit if one is coming.`)
     if (anyBoard) warnings.push('Fire protection to structural steel has a rating set by the engineer or Building Control: confirm the board, the layers and the fixings. If the Boxing-in calculator also cases a beam, count it in one place only.')
     if (anyPlate) warnings.push(PLATE_RATE_NOTE)
+    if (anyProcess) warnings.push('Fabrication processes (holes, cuts, notches, cleats, stiffeners, splices, blasting) are sample prices: get the fabricator\'s quote for the real figure.')
+    if (anyCutsSteel) warnings.push('Holes, notches and splices change how a beam carries load: the engineer must approve the position and size of each one.')
     if (anyBareSteel) warnings.push('No finish is priced to some of the steel: confirm with the engineer and Building Control whether it needs fire protection or a paint system.')
     if (anyPostNoPad) warnings.push('A post or column with no pad priced stands on a foundation priced elsewhere: it must not bear on the floor slab alone.')
     if (anySub) warnings.push('A steelwork contractor\'s price covers supplying, delivering and fixing the steel: the pads, fire protection and lifting stay here.')
