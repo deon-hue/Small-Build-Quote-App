@@ -412,18 +412,40 @@ export function wallOpeningTypeFor(kind: PlacedKind): 'window' | 'door' | 'bifol
 /** An opening as the cavity wall calculator knows it: where it is along the wall (mm from the wall's first end to its LEFT edge), its size and its kind */
 export interface PlanWallOpening { id: string; ref: string; kind: 'window' | 'door' | 'bifold' | 'custom'; widthMm: number; heightMm: number; offsetMm: number }
 
-/** The openings placed on one wall, as that wall's calculator wants them (a garage door is a custom opening, and any door that is not a bi-fold is a door) */
+/**
+ * The openings placed on one wall, as that wall's calculator wants them (a garage door is a custom opening, and any door that is not a bi-fold is a door).
+ * A door with side panels standing against it is ONE opening in the wall (one hole, one lintel or beam over the whole width): it comes out as a single opening as wide as the door and its panels together,
+ * under the door's own kind and reference, and the panels are not listed separately. (The doors calculator still prices the door and each panel as the separate units they are.)
+ */
 export function planWallOpenings(placed: PlacedOpening[], wallId: string, mpp: number): PlanWallOpening[] {
   if (!(mpp > 0)) return []
-  return placed.filter(o => o.wallId === wallId).sort((a, b) => a.distPx - b.distPx).map(o => ({
-    id: o.id,
-    ref: o.ref,
-    // (a structural opening is a custom opening to a wall's calculator: its steel beam is priced in Structural Openings, so the wall does not price a lintel of its own for it)
-    kind: o.kind.startsWith('win-') ? 'window' : o.kind === 'door-bifold' ? 'bifold' : o.kind === 'door-garage' || o.kind === STRUCTURAL_KIND ? 'custom' : 'door',
-    widthMm: o.widthMm,
-    heightMm: o.heightMm,
-    offsetMm: Math.max(0, Math.round(o.distPx * mpp * 1000 - o.widthMm / 2)),
-  }))
+  const mine = placed.filter(o => o.wallId === wallId)
+  const kindOf = (k: string): PlanWallOpening['kind'] => (k.startsWith('win-') ? 'window' : k === 'door-bifold' ? 'bifold' : k === 'door-garage' || k === STRUCTURAL_KIND ? 'custom' : 'door')
+  // the panels that belong to a door (touching it), and for each such door the whole group's left and right edge (plan pixels along the wall)
+  const attachedTo = new Map<string, ReturnType<typeof panelsAttachedTo>>()
+  const taken = new Set<string>()
+  for (const o of mine) {
+    const a = panelsAttachedTo(mine, o.id, mpp)
+    if (a.length > 0) { attachedTo.set(o.id, a); for (const p of a) taken.add(p.id) }
+  }
+  return mine.filter(o => !taken.has(o.id)).sort((a, b) => a.distPx - b.distPx).map(o => {
+    const panels = attachedTo.get(o.id)
+    if (!panels) {
+      return { id: o.id, ref: o.ref, kind: kindOf(o.kind), widthMm: o.widthMm, heightMm: o.heightMm, offsetMm: Math.max(0, Math.round(o.distPx * mpp * 1000 - o.widthMm / 2)) }
+    }
+    const hd = o.widthMm / (mpp * 1000) / 2
+    let lo = -hd, hi = hd
+    for (const p of panels) { lo = Math.min(lo, p.offsetPx - p.halfPx); hi = Math.max(hi, p.offsetPx + p.halfPx) }
+    const heights = [o.heightMm, ...panels.map(p => mine.find(q => q.id === p.id)?.heightMm ?? 0)]
+    return {
+      id: o.id,
+      ref: `${o.ref} + ${panels.length} side panel${panels.length === 1 ? '' : 's'}`,
+      kind: kindOf(o.kind),
+      widthMm: Math.round((hi - lo) * mpp * 1000),
+      heightMm: Math.max(...heights),
+      offsetMm: Math.max(0, Math.round((o.distPx + lo) * mpp * 1000)),
+    }
+  })
 }
 
 export const planWallSig = (p: PlanWallOpening) => [p.kind, p.widthMm, p.heightMm, p.offsetMm, p.ref].join('|')

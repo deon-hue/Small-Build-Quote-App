@@ -319,8 +319,9 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const planKey = planOpenings ? planOpenings.map(planWallSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
   useEffect(() => {
     if (!planOpenings) return
-    const make = (p: PlanWallOpening): CavityOpening => (p.kind === 'bifold'
-      ? { id: newOpeningId(), kind: 'bifold', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM }
+    // a door and its side panels drawn as one wide opening (over 2.4m) starts under a steel beam, like a bi-fold, since a standard lintel does not span it
+    const make = (p: PlanWallOpening): CavityOpening => (p.kind === 'bifold' || (p.kind === 'door' && p.widthMm > 2400)
+      ? { id: newOpeningId(), kind: p.kind === 'bifold' ? 'bifold' : 'door', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM }
       : { id: newOpeningId(), kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: p.kind === 'window' ? 900 : 0, lintelType: 'steel-cavity' })
     // a wall from Take-off has the openings that are DRAWN on it, so the calculator's own sample window (put there by a calculator opened before this) is taken off: no windows or doors drawn means none
     setOpenings(prev => mergePlanWallOpenings(prev.filter(o => !isUntouchedSampleOpening(o)), planOpenings, make))
