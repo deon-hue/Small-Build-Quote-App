@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-23T23:00:00+00:00',
+    title: 'A door with side panels is one opening in the wall calculator',
+    detail: 'A French door (or any outside door) with side panels attached used to arrive in the wall calculator as three separate openings, each with its own lintel or steel. It is now one opening, as wide as the door and its panels together, with one lintel or beam over the whole width. If that width is over 2.4m it starts under a steel beam, like a bi-fold. The Doors calculator still prices the door and each panel as separate units.',
+  },
+  {
     at: '2026-11-23T22:00:00+00:00',
     title: 'Door side panels move with their door in Take-off',
     detail: 'When a door has side panels standing against it, dragging the door, nudging it with the arrow keys, typing its position or centring it now takes the panels with it, each keeping its place beside the door (and onto another wall if you drag the door there). The door and its panels stay together on one straight stretch of wall. Move a panel on its own and it leaves the door, so it is no longer carried.',

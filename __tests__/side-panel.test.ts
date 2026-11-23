@@ -6,7 +6,7 @@
 import { KINDS, KIND_BY_ID, currentKind, WINDOWS_SCOPE_KINDS, kindInScope, newOpening, openingWords, planOpeningSig, mergePlanOpenings, isWindow, type PlanOpening } from '../lib/wd-units'
 import { WINDOW_STYLES, stylesFor, mullionFractions, openingPaneCount } from '../lib/window-styles'
 import { styleCards, materialsFor, swatchesFor, cleanOpeningChoice, openingStyleWords, isColoured, styleSize, defaultStyleId, isStyledKind, mullionsFor } from '../lib/opening-styles'
-import { openingShape, snapBesideNeighbour, snapsBeside, panelsAttachedTo, moveWithPanels } from '../lib/wall-openings'
+import { openingShape, snapBesideNeighbour, snapsBeside, panelsAttachedTo, moveWithPanels, planWallOpenings } from '../lib/wall-openings'
 
 let ok = 0, bad = 0
 const t = (n: string, c: boolean, x?: unknown) => { c ? ok++ : (bad++, console.log('FAIL', n, x ?? '')) }
@@ -110,6 +110,29 @@ t('a plain side panel signature has nothing added', planOpeningSig(base) === pla
   t('moving a side panel moves only the panel (it leaves the door)', at(panelOnly, 'l') === 100 && at(panelOnly, 'd') === 500)
   t('moving a window next to a door does not carry anything', at(moveWithPanels([door, win], 'x', 'w1', wall, false, 100, 0.01), 'd') === 500)
   t('the list is unchanged for an unknown id or no scale', moveWithPanels([door], 'zzz', 'w1', wall, false, 100, 0.01)[0].distPx === 500 && moveWithPanels([door], 'd', 'w1', wall, false, 100, 0)[0].distPx === 500)
+}
+
+// a door with side panels is ONE opening to the wall's calculator (1 plan pixel = 10mm)
+{
+  type PO = Parameters<typeof planWallOpenings>[0][number]
+  const mk = (id: string, ref: string, kind: string, distPx: number, widthMm: number, heightMm = 2100, wallId = 'w1'): PO => ({ id, ref, kind, distPx, widthMm, heightMm, wallId, swing: 'in-left' } as PO)
+  const french = mk('f', 'D1', 'door-french', 500, 1500)
+  const pl = mk('p1', 'D2', K, 402.5, 450), pr = mk('p2', 'D3', K, 597.5, 450)
+  const one = planWallOpenings([french, pl, pr], 'w1', 0.01)
+  t('a French door with a panel each side is ONE opening', one.length === 1, one)
+  t('as wide as the door and both panels together, starting at the left panel edge', one[0].widthMm === 2400 && one[0].offsetMm === 3800, one[0])
+  t('under the door own id and kind, and its ref says how many panels', one[0].id === 'f' && one[0].kind === 'door' && one[0].ref === 'D1 + 2 side panels' && one[0].heightMm === 2100, one[0])
+  const left = planWallOpenings([french, pl], 'w1', 0.01)
+  t('one panel only: one opening, 1950 wide, starting at the panel edge', left.length === 1 && left[0].widthMm === 1950 && left[0].offsetMm === 3800 && left[0].ref === 'D1 + 1 side panel', left[0])
+  const apart = planWallOpenings([french, mk('p3', 'D4', K, 700, 450)], 'w1', 0.01)
+  t('a panel NOT touching the door is its own opening', apart.length === 2 && apart[0].id === 'f' && apart[0].widthMm === 1500 && apart[1].id === 'p3', apart)
+  const mixed = planWallOpenings([french, pl, pr, mk('w', 'W1', 'win-casement', 900, 1200, 1200)], 'w1', 0.01)
+  t('a window on the same wall stays its own opening', mixed.length === 2 && mixed[1].id === 'w' && mixed[1].kind === 'window')
+  t('a lone door is exactly as before', (() => { const r = planWallOpenings([french], 'w1', 0.01); return r.length === 1 && r[0].ref === 'D1' && r[0].widthMm === 1500 && r[0].offsetMm === 4250 })())
+  t('a bi-fold with panels stays a bi-fold, a garage door stays custom', planWallOpenings([mk('b', 'D1', 'door-bifold', 500, 3000), mk('q', 'D2', K, 500 + 150 + 22.5, 450)], 'w1', 0.01)[0].kind === 'bifold' && planWallOpenings([mk('g', 'D1', 'door-garage', 500, 2400), mk('q', 'D2', K, 500 + 120 + 22.5, 450)], 'w1', 0.01)[0].kind === 'custom')
+  t('openings on another wall are left out, and panels on another wall do not join this door', planWallOpenings([french, { ...pl, wallId: 'w2' }], 'w1', 0.01).length === 1 && planWallOpenings([french, { ...pl, wallId: 'w2' }], 'w1', 0.01)[0].widthMm === 1500)
+  t('no scale: nothing', planWallOpenings([french, pl, pr], 'w1', 0).length === 0)
+  t('an internal door is not grouped with a panel', planWallOpenings([mk('i', 'ID1', 'door-int-single', 500, 826), mk('q', 'D2', K, 500 + 41.3 + 22.5, 450)], 'w1', 0.01).length === 2)
 }
 
 console.log(`${ok} passed, ${bad} failed`)
