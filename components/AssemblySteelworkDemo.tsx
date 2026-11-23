@@ -23,6 +23,7 @@ import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui
 import TilingCalcFrame, { TilingNumInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 import BeamPlateFields from '@/components/BeamPlateFields'
 import SteelProcessFields from '@/components/SteelProcessFields'
+import CalcSummaryCard from '@/components/CalcSummaryCard'
 import { flangeWidthMm } from '@/lib/steel-processes'
 
 interface Props {
@@ -92,7 +93,7 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
       descShort={descInput ? describeSteelworkShort(descInput) : ''} descFull={descInput ? describeSteelwork(descInput) : ''}
       hasResult={!!r} onClose={onClose} onSave={onSave} labourTrades={labourTrades}
     >
-      {({ roomCost }) => ({
+      {({ roomCost, totals }) => ({
         main: (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -207,6 +208,7 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
         ),
         side: (
           <>
+            {r && members.length > 0 && <CalcSummaryCard id={ID} totals={totals} kg={r.totalSteelKg} members={r.totalMembers} />}
             <CollapsibleSection title="Job situation" borderColor="#bae6fd">
               <PropRow label="The work is">
                 <select value={jobSituationId} onChange={e => setJobSituationId(e.target.value)} style={propInput}>
