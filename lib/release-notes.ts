@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T09:00:00+00:00',
+    title: 'Wall calculator: pick the steel beam from the same sections as the steel calculators',
+    detail: 'In the cavity wall calculator, when an opening has a steel beam over it, the section list is now the same 14 beam sections as the Structural Openings and Steel Beams calculators, instead of a short list of five. The beam is priced the same way as there (its weight a metre times the steel rate per kg), so a section costs the same in the wall as in the steel calculators. A hint under the list suggests a section for the opening span with one floor above; the designer section still replaces it. A wall saved with one of the older names reads as the matching section, but is priced by weight, so it comes out a little dearer once you Save & Price it again.',
+  },
+  {
     at: '2026-11-23T23:00:00+00:00',
     title: 'A door with side panels is one opening in the wall calculator',
     detail: 'A French door (or any outside door) with side panels attached used to arrive in the wall calculator as three separate openings, each with its own lintel or steel. It is now one opening, as wide as the door and its panels together, with one lintel or beam over the whole width. If that width is over 2.4m it starts under a steel beam, like a bi-fold. The Doors calculator still prices the door and each panel as separate units.',
