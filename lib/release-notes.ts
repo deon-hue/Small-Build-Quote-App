@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T15:00:00+00:00',
+    title: 'Wall calculator: the quote description names the steel over an opening',
+    detail: 'In the cavity wall calculator, the quote description now says what steel is over each opening when it is set up with the steel options: the beam section and how many, the padstones, a welded plate, connections and fabrication, steel posts, fire protection, a steelwork contractor and a Hiab. The description now also updates itself as you change the steel, the openings or the finish, until you type in it yourself; Regenerate puts the generated words back.',
+  },
+  {
     at: '2026-11-24T12:00:00+00:00',
     title: 'Wall calculator: steel over an opening is set up like the steel calculators',
     detail: 'In the cavity wall calculator, when an opening has a steel beam over it, there is now a Steel from the steel calculators block with the same options as Structural Openings: the beam section (or picked from the span), one beam or a pair, what is above, a steelwork contractor instead of us, fire protection, padstones, a Hiab, steel posts on pads, a plate welded on to spread the load, and connections and fabrication hours. It is priced by the same engine, so a beam costs the same in the wall as in the steel calculators, and the wall no longer adds its own beam and padstones for it (it still prices the cavity tray and weep vents). A note under the openings says how many hours of bricklayer, labourer and carpenter the steel needs, which are not in the wall labour. A wall saved before keeps its beam, with a button to move it to the new options.',
