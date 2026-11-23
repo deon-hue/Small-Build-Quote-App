@@ -8,12 +8,12 @@ export interface ReleaseNote {
   detail: string
 }
 
+export const RELEASE_NOTES: ReleaseNote[] = [
   {
     at: '2026-11-26T18:00:00+00:00',
     title: 'Steel calculator: a live summary with an ex VAT / inc VAT switch',
     detail: 'The Steel Beams, Columns & Posts calculator now has a Summary card at the top of its side panel that updates as you change anything: steel and materials, subcontractors, plant, labour, profit and the total, plus the price per kilo of steel. Switch between ex VAT and inc VAT (rate typed in the card) to compare with a merchant\'s price. The price is still saved to the quote ex VAT: the quote adds the VAT.',
   },
-export const RELEASE_NOTES: ReleaseNote[] = [
   {
     at: '2026-11-26T14:00:00+00:00',
     title: 'Steel: fabrication processes (holes, mitres, notches, cleats and more) and a plate that matches the flange',
