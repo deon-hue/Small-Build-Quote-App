@@ -14,6 +14,7 @@ import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { suggestTilingLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import { fmt } from '@/lib/utils'
+import { totalsFromLines, type CalcTotals } from '@/lib/calc-summary'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { TILE_SIZES, TILE_SIZE_BY_ID, TILE_LAYOUTS, GROUT_KINDS, ROOM_SHAPE_LABEL, roomFootprint, type RoomShape, type RoomShapeExtras, type TilingLabourTask, type TilingLine, type TileSizeId, type TileLayoutId, type GroutId } from '@/lib/tiling-common'
 import {
@@ -50,7 +51,7 @@ interface FrameProps {
   onSave?: (result: TilingSaveResult) => void
   labourTrades: BOLabourTrade[]
   /** the rooms editor (left) and the side sections (right: job situation and so on); given the cost of one room */
-  children: (ctx: { roomCost: (roomId: string) => number; /** the materials of one part of a room: the lines of that room whose key (the part of the line id before the room) passes the test */ partCost: (roomId: string, test: (key: string) => boolean) => number }) => { main: React.ReactNode; side: React.ReactNode }
+  children: (ctx: { roomCost: (roomId: string) => number; /** the materials of one part of a room: the lines of that room whose key (the part of the line id before the room) passes the test */ partCost: (roomId: string, test: (key: string) => boolean) => number; /** what the job comes to by kind of cost, the profit and the total (ex VAT), live, for a summary */ totals: CalcTotals }) => { main: React.ReactNode; side: React.ReactNode }
 }
 
 export default function TilingCalcFrame({ id, defaultName, subject, lines, labourTasks, error, warnings, descShort, descFull, hasResult, onClose, onSave, labourTrades, suggestLabour, children }: FrameProps) {
@@ -121,7 +122,8 @@ export default function TilingCalcFrame({ id, defaultName, subject, lines, labou
     ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the rooms</span>
     : <button onClick={reset} title={`Go back to the ${what} written from the rooms — overwrites your edits below`} style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Edited by you — regenerate</button>
 
-  const { main, side } = children({ roomCost, partCost })
+  const totals = totalsFromLines([...enabledMaterialLines, ...labourCostedLines], profitPct, qty)
+  const { main, side } = children({ roomCost, partCost, totals })
 
   return (
     <div style={{ border: '2px dashed #0369a1', borderRadius: 10, background: '#f5fbff', padding: 14, marginBottom: 20 }}>

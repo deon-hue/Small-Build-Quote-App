@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-26T18:00:00+00:00',
+    title: 'Steel calculator: a live summary with an ex VAT / inc VAT switch',
+    detail: 'The Steel Beams, Columns & Posts calculator now has a Summary card at the top of its side panel that updates as you change anything: steel and materials, subcontractors, plant, labour, profit and the total, plus the price per kilo of steel. Switch between ex VAT and inc VAT (rate typed in the card) to compare with a merchant\'s price. The price is still saved to the quote ex VAT: the quote adds the VAT.',
+  },
+  {
     at: '2026-11-26T14:00:00+00:00',
     title: 'Steel: fabrication processes (holes, mitres, notches, cleats and more) and a plate that matches the flange',
     detail: 'Each steel beam, column or box section post now has a Processes menu, in the Steel Beams, Columns & Posts calculator and in the steel inside a wall calculator: holes drilled in the web or flange (with the size), mitre cuts at an angle, notches, cleats, bearing stiffeners, splice plates, shot blasting and other fabrication by the hour. Each is priced as the fabricator\'s time plus any steel or fittings and appears in the quote wording. The welded plate also has a Flange width choice, and a new plate in the Steel Beams calculator starts as wide as the beam\'s flange. All figures are samples to check against a fabricator\'s quote. Nothing already priced changes.',
