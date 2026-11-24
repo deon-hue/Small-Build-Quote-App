@@ -9,6 +9,7 @@ import React from 'react'
 import { miniInput } from '@/components/assembly-ui'
 import BeamPlateFields from '@/components/BeamPlateFields'
 import SteelProcessFields from '@/components/SteelProcessFields'
+import SectionSpecPanel from '@/components/SectionSpecPanel'
 import { flangeWidthMm } from '@/lib/steel-processes'
 import { MEMBER_KINDS, KIND_BY_ID, sectionsFor, FINISH_LABEL, ENDS_LABEL, BY_LABEL, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy } from '@/lib/structural-steel-units'
 import { CONNECTION_KINDS, CONNECTION_BY_ID, LOAD_LABEL, beamFor, type LoadAbove } from '@/lib/structural-openings-units'
@@ -122,6 +123,7 @@ export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wa
               </div>
             )}
             {k.steel && k.post && <BeamPlateFields plate={m.plate} onChange={plate => setMember(m.id, { plate })} post />}
+            {k.steel && <SectionSpecPanel label={m.section === 'auto' ? sug.section.label : m.section} lengthMm={ownLength} qty={m.qty} grade={m.grade} onGrade={grade => setMember(m.id, { grade })} />}
             {k.steel && <SteelProcessFields processes={m.processes ?? []} onChange={processes => setMember(m.id, { processes })} steel={m.kind === 'beam' ? 'beam' : m.kind === 'column' ? 'column' : 'hollow'} />}
             {m.kind === 'beam' && (
               <>

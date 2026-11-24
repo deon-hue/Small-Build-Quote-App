@@ -9,6 +9,7 @@ import {
   type SteelMember, type MemberKind, type MemberFinish, type MemberEnds, type MemberBy, type SteelLine, type CuttingGroup,
 } from './structural-steel-units'
 import { cleanProcesses, processWords, type MemberProcess } from './steel-processes'
+import { isSteelGrade, type SteelGrade } from './steel-section-data'
 import { beamFor, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, CONNECTION_BY_ID, type LoadAbove, type OpeningConnection, type BeamPlate } from './structural-openings-units'
 
 /** One piece of steel (or timber) over or beside a wall opening: the Steel Beams, Columns & Posts calculator's member, with a length that can follow the opening */
@@ -37,6 +38,8 @@ export interface WallMember {
   plate: BeamPlate | null
   /** fabrication processes on a steel member: holes, mitre cuts, notches, cleats, stiffeners, splices, shot blasting, other hours */
   processes: MemberProcess[]
+  /** the grade of steel for the quote wording (S275 or S355); it does not change the price; none chosen says nothing */
+  grade?: SteelGrade
 }
 
 /** What the steel over one wall opening is set up as */
@@ -108,6 +111,7 @@ function cleanMember(x: unknown): WallMember {
     propped: s.propped === true,
     plate: KIND_BY_ID[kind].steel ? cleanPlate(s.plate) : null,
     processes: KIND_BY_ID[kind].steel ? cleanProcesses(s.processes, kind === 'beam' ? 'beam' : kind === 'column' ? 'column' : 'hollow') : [],
+    grade: KIND_BY_ID[kind].steel && isSteelGrade(s.grade) ? s.grade : undefined,
   }
 }
 
@@ -176,7 +180,7 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
   beams.forEach((m, i) => {
     const k = KIND_BY_ID[m.kind]
     const sec = resolvedSection(m, span, steel.loadAbove)
-    const phrase = `${countWords(m.qty)} ${sec} ${k.word}${m.qty === 1 ? '' : 's'} over`
+    const phrase = `${countWords(m.qty)} ${sec}${m.grade ? ' ' + m.grade : ''} ${k.word}${m.qty === 1 ? '' : 's'} over`
     if (i === 0) head = phrase; else bits.push(phrase)
     if (m.ends === 'masonry') { const pads = m.padstones ?? 2 * m.qty; if (pads > 0) bits.push(`on ${countWords(pads)} padstone${pads === 1 ? '' : 's'}`) } else bits.push('bolted through end plates')
     if (m.plate) bits.push('with ' + beamPlateWords(m.plate, beamPlateFor(m.plate, (m.lengthMm ?? widthMm + 2 * BEARING_EACH_END_MM) / 1000, wallThicknessMm).widthMm, m.qty))
@@ -188,7 +192,7 @@ export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessM
   posts.forEach(m => {
     const k = KIND_BY_ID[m.kind]
     const sec = resolvedSection(m, span, steel.loadAbove)
-    bits.push(`${countWords(m.qty)} ${sec} ${k.word}${m.qty === 1 ? '' : 's'}${m.pad ? ' on concrete pads' : ''}`)
+    bits.push(`${countWords(m.qty)} ${sec}${m.grade ? ' ' + m.grade : ''} ${k.word}${m.qty === 1 ? '' : 's'}${m.pad ? ' on concrete pads' : ''}`)
     if (m.plate && k.steel) { const pl = beamPlateFor(m.plate, DEFAULT_POST_PLATE_MM / 1000, DEFAULT_POST_PLATE_MM); bits.push('with ' + postPlateWords(m.plate, pl.widthMm, pl.lengthM * 1000, m.qty, k.word)) }
     if (k.steel) { const pw = processWords(m.processes, m.qty, k.word, m.kind === 'hollow' ? 'hollow' : 'column'); if (pw) bits.push('with ' + pw) }
     const f = finishWord(m); if (f) finishes.add(f)
@@ -223,6 +227,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number, 
         pad: m.pad, padLengthMm: m.padLengthMm, padWidthMm: m.padWidthMm, padDepthMm: m.padDepthMm, by: m.by, propped: m.propped,
         plate: m.plate ? (post ? m.plate : { ...m.plate, widthMm: m.plate.widthMm ?? wallThicknessMm }) : null,
         processes: m.processes,
+        grade: m.grade,
       })
     }
   }

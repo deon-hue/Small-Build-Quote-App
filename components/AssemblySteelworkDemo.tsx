@@ -24,6 +24,7 @@ import TilingCalcFrame, { TilingNumInput, TilingCheck, tilingSmall } from '@/com
 import BeamPlateFields from '@/components/BeamPlateFields'
 import SteelProcessFields from '@/components/SteelProcessFields'
 import CalcSummaryCard from '@/components/CalcSummaryCard'
+import SectionSpecPanel from '@/components/SectionSpecPanel'
 import { flangeWidthMm } from '@/lib/steel-processes'
 
 interface Props {
@@ -176,6 +177,7 @@ export default function AssemblySteelworkDemo({ onClose, onSave, labourTrades = 
                     <>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>{k.post ? 'Welded plate (base or cap plate)' : 'Welded plate (load spreader)'}</div>
                       <BeamPlateFields plate={x.plate} onChange={pl => update(x.id, { plate: pl })} beamLengthM={x.lengthMm / 1000} beams={x.qty} post={k.post} flangeMm={flangeWidthMm(x.section)} startAtFlange />
+                      <SectionSpecPanel label={x.section} lengthMm={x.lengthMm} qty={x.qty} grade={x.grade} onGrade={grade => update(x.id, { grade })} />
                       <SteelProcessFields processes={x.processes ?? []} onChange={processes => update(x.id, { processes })} steel={x.kind === 'beam' ? 'beam' : x.kind === 'column' ? 'column' : 'hollow'} />
                     </>
                   )}

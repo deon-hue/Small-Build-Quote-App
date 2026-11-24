@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-27T10:00:00+00:00',
+    title: 'Steel: a section details panel and a grade of steel',
+    detail: 'Each steel member in the Steel Beams, Columns & Posts calculator and in the steel inside a wall calculator now has a Section details button. It shows the section drawn to scale with its depth, width, web and flange thickness, plus its weight, area and bending properties, and what the member itself weighs. You can also state the grade of steel (S275 or S355), which goes on the quote wording and does not change the price. The figures are typical catalogue values to check against the maker\'s table.',
+  },
+  {
     at: '2026-11-26T18:00:00+00:00',
     title: 'Steel calculator: a live summary with an ex VAT / inc VAT switch',
     detail: 'The Steel Beams, Columns & Posts calculator now has a Summary card at the top of its side panel that updates as you change anything: steel and materials, subcontractors, plant, labour, profit and the total, plus the price per kilo of steel. Switch between ex VAT and inc VAT (rate typed in the card) to compare with a merchant\'s price. The price is still saved to the quote ex VAT: the quote adds the VAT.',

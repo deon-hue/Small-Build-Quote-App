@@ -12,6 +12,7 @@ import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS,
 
 import { planBars, type Bar } from './steel-stock'
 import { PROCESS_BY_ID, priceProcess, processWords, type MemberProcess } from './steel-processes'
+import { isSteelGrade, type SteelGrade } from './steel-section-data'
 
 export type MemberKind = 'beam' | 'column' | 'hollow' | 'lvl' | 'timber-post'
 export type MemberFinish = 'primed' | 'galvanised' | 'intumescent' | 'cased' | 'none'
@@ -118,6 +119,8 @@ export interface SteelMember {
   plate?: BeamPlate | null
   /** fabrication processes on a steel member: holes, mitre cuts, notches, cleats, stiffeners, splices, shot blasting, other hours (none to start) */
   processes?: MemberProcess[]
+  /** the grade of steel (S275 or S355) for the quote wording: it does not change the sample price; none chosen says nothing */
+  grade?: SteelGrade
   situationId?: string | null
   /** the length last given to this member by the line drawn in Take-off: it follows the line until a length is typed over it */
   planLengthMm?: number
@@ -211,6 +214,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
       const sec = steelSection(m.kind, m.section)
       if (!sec) throw new Error(`${name}: pick a section.`)
       sectionLabel = sec.label
+      const secText = sec.label + (isSteelGrade(m.grade) ? ' ' + m.grade : '')
       kg = sec.kgPerM * lengthM * qty
       totalKg += kg
       const eachKg = sec.kgPerM * lengthM
@@ -229,11 +233,11 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
         if (m.ends === 'masonry') {
           const pads = m.padstones ?? 2 * qty
           if (pads > 0) { add('padstone', 'padstones under the beam ends', 'nr', rate('padstone'), pads); brickHours += pads * HOURS.padstone }
-          parts.push(`${countText}${sec.label} steel ${m.qty === 1 ? 'beam' : 'beams'}, ${n2(lengthM)}m long, bearing on padstones`)
+          parts.push(`${countText}${secText} steel ${m.qty === 1 ? 'beam' : 'beams'}, ${n2(lengthM)}m long, bearing on padstones`)
         } else {
           add('endplates', 'end plates, bolts and nuts', 'nr', rate('endPlateSet'), 2 * qty)
           brickHours += 2 * qty * HOURS.endPlate
-          parts.push(`${countText}${sec.label} steel ${m.qty === 1 ? 'beam' : 'beams'}, ${n2(lengthM)}m long, bolted through end plates`)
+          parts.push(`${countText}${secText} steel ${m.qty === 1 ? 'beam' : 'beams'}, ${n2(lengthM)}m long, bolted through end plates`)
         }
         if (m.by === 'us') { brickHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * qty; labourHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * qty * LABOURER_ON_STEEL }
         // a plate welded to the beam to spread its load over the wall it bears on
@@ -273,7 +277,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
           anyPlate = true
         }
         if (m.by === 'us') { brickHours += HOURS.post * qty; labourHours += HOURS.post * qty * LABOURER_ON_STEEL }
-        parts.push(`${countText}${sec.label} ${m.qty === 1 ? k.word : k.word + 's'}, ${n2(lengthM)}m high, on base plates${m.pad ? ' on concrete pads' : ''}`)
+        parts.push(`${countText}${secText} ${m.qty === 1 ? k.word : k.word + 's'}, ${n2(lengthM)}m high, on base plates${m.pad ? ' on concrete pads' : ''}`)
         if (postPlateText) parts.push(postPlateText)
       }
       // fabrication processes: the fabricator's time (and any steel or fittings they add) for each
