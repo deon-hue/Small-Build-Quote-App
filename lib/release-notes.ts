@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-24T12:00:00+00:00',
+    title: 'Documents: a clear cross in the search box',
+    detail: 'The search box on the Documents page (supplier, date, job or price) now has a ✕ inside it once you have typed something. Press it, or press Esc, to clear the search and see every document again.',
+  },
+  {
     at: '2026-11-27T10:00:00+00:00',
     title: 'Steel: a section details panel and a grade of steel',
     detail: 'Each steel member in the Steel Beams, Columns & Posts calculator and in the steel inside a wall calculator now has a Section details button. It shows the section drawn to scale with its depth, width, web and flange thickness, plus its weight, area and bending properties, and what the member itself weighs. You can also state the grade of steel (S275 or S355), which goes on the quote wording and does not change the price. The figures are typical catalogue values to check against the maker\'s table.',
