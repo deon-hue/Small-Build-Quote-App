@@ -63,6 +63,10 @@ CREATE POLICY "Own job selection files" ON public.job_selection_files
   USING (user_id = get_effective_owner_id())
   WITH CHECK (user_id = get_effective_owner_id() AND EXISTS (SELECT 1 FROM public.job_selections s WHERE s.id = selection_id AND s.user_id = job_selection_files.user_id));
 
+-- This project grants every new table to anon automatically, which nothing above undoes: take it away explicitly (row security would still hide the rows, and every policy here is for signed-in users only, but nothing signed-out should have table access at all).
+REVOKE ALL ON public.job_selections      FROM anon;
+REVOKE ALL ON public.job_selection_files FROM anon;
+
 -- ── The portal client's side ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 -- Is the signed-in portal customer the client of this job? Returns the builder (company owner) of the job, or NULL. Same test the portal uses for a job's files.
