@@ -48,5 +48,7 @@ CREATE POLICY "Own sent items" ON public.sent_items
   );
 
 -- New tables need explicit grants (Supabase stopped granting API access automatically from 30 Oct 2026). Nothing for anon: a signed-out visitor never reads these.
+-- This project grants every new table to anon automatically, which nothing above undoes: take it away explicitly (row security would still hide the rows, but nothing signed-out should have table access at all).
+REVOKE ALL ON public.sent_items FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.sent_items TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.sent_items TO service_role;

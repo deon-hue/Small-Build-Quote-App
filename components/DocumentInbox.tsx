@@ -40,6 +40,7 @@ export default function DocumentInbox({ jobs }: Props) {
   const [openDoc, setOpenDoc] = useState<InboxDocument | null>(null)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Unfiltered — an already-assigned document must still show its job's real name even
   // if that job has since been archived.
@@ -177,12 +178,21 @@ export default function DocumentInbox({ jobs }: Props) {
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading > 0}>
             {uploading > 0 ? `Uploading ${uploading}…` : '📷 Scan / Upload'}
           </button>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search supplier, date, job…"
-            style={{ flex: 1, minWidth: 160, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-          />
+          {/* The search box has a ✕ inside it (shown once something is typed) that clears it; Esc does the same */}
+          <div style={{ flex: 1, minWidth: 160, position: 'relative', display: 'flex' }}>
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape' && search) { e.preventDefault(); setSearch('') } }}
+              placeholder="Search supplier, date, job…"
+              style={{ width: '100%', padding: '6px 30px 6px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+            />
+            {search && (
+              <button type="button" aria-label="Clear search" title="Clear search" onClick={() => { setSearch(''); searchRef.current?.focus() }}
+                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: '50%', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0 }}>✕</button>
+            )}
+          </div>
           {(['all', 'unallocated', 'allocated', 'archived'] as const).map(fk => (
             <button key={fk} onClick={() => setFilter(fk)} className={filter === fk ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} style={{ textTransform: 'capitalize' }}>{fk}</button>
           ))}

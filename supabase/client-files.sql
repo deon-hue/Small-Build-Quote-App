@@ -35,5 +35,7 @@ CREATE POLICY "Own client files" ON public.client_files
   WITH CHECK (user_id = get_effective_owner_id() AND EXISTS (SELECT 1 FROM public.clients c WHERE c.id = client_id AND c.user_id = client_files.user_id));
 
 -- Explicit grants (Supabase no longer grants new tables to the API automatically). Nothing for anon: nobody signed out can read these.
+-- This project grants every new table to anon automatically, which nothing above undoes: take it away explicitly (row security would still hide the rows, but nothing signed-out should have table access at all).
+REVOKE ALL ON public.client_files FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.client_files TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.client_files TO service_role;
