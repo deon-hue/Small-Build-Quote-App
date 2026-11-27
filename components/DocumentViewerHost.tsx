@@ -75,9 +75,10 @@ export default function DocumentViewerHost() {
   // Lock the page behind it from scrolling while it is open
   useEffect(() => {
     if (!doc) return
-    const prev = document.body.style.overflow
+    const prev = document.body.style.overflow, prevPull = document.documentElement.style.overscrollBehavior
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
+    document.documentElement.style.overscrollBehavior = 'none'   // dragging the plan must not pull the page down to reload it
+    return () => { document.body.style.overflow = prev; document.documentElement.style.overscrollBehavior = prevPull }
   }, [doc])
 
   if (!doc) return null

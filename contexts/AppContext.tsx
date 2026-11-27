@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
+import { accountState, neverArrived, portalFor, retryDelayMs, within } from '@/lib/account-check'
 import { createClient } from '@/lib/supabase/client'
 import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract, TaskAssignment } from '@/lib/types'
@@ -34,6 +35,8 @@ interface AppContextType {
   isOwner: boolean
   /** null until the first load finishes; false = signed in but has no company yet (customer, subcontractor, or a new registrant) */
   hasCompany: boolean | null
+  /** the account could not be reached (a weak signal) and is being tried again */
+  loadFailed?: boolean
   permissions: UserPermissions
 
   addJob: (job: Omit<Job, 'id'>) => Promise<Job>
@@ -230,15 +233,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentMember, setCurrentMember] = useState<TeamMember | null>(null)
   const [isOwner, setIsOwner] = useState(true)
   const [hasCompany, setHasCompany] = useState<boolean | null>(null)
+  // the account could not be reached (a weak signal): it is being tried again
+  const [loadFailed, setLoadFailed] = useState(false)
   const [permissions, setPermissions] = useState<UserPermissions>(FULL_PERMISSIONS)
   // Resolved owner ID used for all data inserts (ref avoids stale-closure in callbacks)
   const dataOwnerIdRef = useRef<string | null>(null)
 
   // ── Load all data on mount ──────────────────────────────────
+  // If the account or its main records cannot be reached (a weak signal on a phone) it is tried again, soon at first and then every 15 seconds, and at once when the phone is back online or the app is looked at again.
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+    let stopped = false, running = false, failed = false, attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    async function load(): Promise<'done' | 'retry' | 'left'> {
+      const who = await within(supabase.auth.getUser(), 15000, { data: { user: null }, error: { name: 'TooSlow' } } as never)
+      const user = who.data.user
+      const state = accountState(!!user, who.error)
+      if (state === 'unreachable') return 'retry'
+      if (!user) {
+        // certainly not signed in: clear what is left on this device and go to the sign-in page (onboarding does its own)
+        if (window.location.pathname === '/onboarding') { setLoading(false); return 'done' }
+        try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* nothing to clear */ }
+        window.location.replace('/login')
+        return 'left'
+      }
+      // a subcontractor or customer who has opened the builder's app goes straight to their own portal, before anything else is loaded (not asked on a device already known to be a builder's)
+      let knownBuilder = false
+      try { knownBuilder = localStorage.getItem('sbc-is-builder') === '1' } catch { /* storage blocked: ask */ }
+      if (!knownBuilder && window.location.pathname !== '/onboarding') {
+        const [contractor, role] = await Promise.all([supabase.rpc('is_contractor'), supabase.rpc('get_my_role')])
+        if (neverArrived([contractor, role])) return 'retry'
+        const portal = contractor.error || role.error ? null : portalFor(contractor.data, role.data, user.user_metadata?.invite_code)
+        if (portal) { window.location.replace(portal); return 'left' }
+      }
 
       // ── Resolve effective owner ID (sub-users get their owner's ID) ──
       let resolvedOwnerId = user.id
@@ -288,6 +314,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (async () => { try { return await supabase.from('contracts').select('*').order('created_at', { ascending: true }) } catch { return { data: null } } })(),
         (async () => { try { return await supabase.from('task_assignments').select('*') } catch { return { data: null, error: { message: 'unavailable' } } } })(),
       ])
+
+      // never carry on with an empty app because the signal dropped part-way
+      if (neverArrived([jobsRes, quotesRes, clientsRes, settingsRes])) return 'retry'
 
       // task_assignments only exists once supabase/task-assignments.sql has been run; until then the feature stays switched off
       if (assignRes && !('error' in assignRes && assignRes.error) && Array.isArray(assignRes.data)) {
@@ -491,8 +520,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(false)
+      return 'done'
     }
-    load()
+    async function run() {
+      if (stopped || running) return
+      running = true
+      clearTimeout(timer)
+      let outcome: 'done' | 'retry' | 'left' = 'retry'
+      try { outcome = await load() } catch (err) { console.error('Could not load the account:', err) }
+      running = false
+      if (stopped) return
+      failed = outcome === 'retry'
+      setLoadFailed(failed)
+      if (failed) timer = setTimeout(run, retryDelayMs(attempt++))
+    }
+    const wake = () => { if (failed && document.visibilityState !== 'hidden') run() }
+    window.addEventListener('online', wake)
+    document.addEventListener('visibilitychange', wake)
+    run()
+    return () => { stopped = true; clearTimeout(timer); window.removeEventListener('online', wake); document.removeEventListener('visibilitychange', wake) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Jobs ─────────────────────────────────────────────────────
@@ -1372,7 +1418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       jobs, quotes, deletedQuotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, contracts, customTemplates, loading, pageTitle, setPageTitle,
-      teamMembers, currentMember, isOwner, hasCompany, permissions,
+      teamMembers, currentMember, isOwner, hasCompany, loadFailed, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote, restoreQuote, purgeQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,

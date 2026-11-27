@@ -14,6 +14,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AppProvider, useApp } from '@/contexts/AppContext'
 import { seedStarterData } from '@/lib/back-office-queries'
+import { accountState } from '@/lib/account-check'
+import { AccountCheckHelp } from '@/components/AccountCheckScreen'
 import { PRODUCT_NAME } from '@/lib/product-config'
 
 type Stage = 'checking' | 'code' | 'details' | 'seeding' | 'unavailable'
@@ -78,7 +80,9 @@ function OnboardingInner() {
     if (started.current) return
     started.current = true
     ;(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: whoError } = await supabase.auth.getUser()
+      // no signal is not the same as signed out: stay here, where there is a Try again button
+      if (accountState(!!user, whoError) === 'unreachable') return
       if (!user) { router.replace('/login'); return }
       setUserId(user.id)
       const meta = (user.user_metadata || {}) as Record<string, string | undefined>
@@ -167,7 +171,7 @@ function OnboardingInner() {
         )}
 
         {stage === 'checking' && (
-          <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>Checking your account…</div>
+          <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>Checking your account…<AccountCheckHelp /></div>
         )}
 
         {stage === 'unavailable' && (

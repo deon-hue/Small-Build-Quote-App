@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import AccountCheckScreen from '@/components/AccountCheckScreen'
 import { AppProvider } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
@@ -188,7 +189,7 @@ const PAGE_TITLES: Record<string, string> = {
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { permissions, isOwner, loading, hasCompany, settings, currentMember, pageTitle, setPageTitle } = useApp()
+  const { permissions, isOwner, loading, hasCompany, loadFailed, settings, currentMember, pageTitle, setPageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
   // Has this phone/computer opened the builder's app as a builder before? Until we know (and until the account is known to be a builder's), show a plain
   // "Checking your account…" screen rather than the builder's screens, so a subcontractor or client who arrives here is not shown them for a moment
@@ -251,9 +252,8 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   }
 
   if (!loading && hasCompany === false) return null
-  if (seenAsBuilder !== true && (loading || hasCompany === null)) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 14 }}>Checking your account…</div>
-  }
+  // an account that cannot be reached is never shown as an empty app: this screen says so, tries again and offers a way out
+  if (loadFailed || (seenAsBuilder !== true && (loading || hasCompany === null))) return <AccountCheckScreen failed={loadFailed} />
 
   // The platform owner has paused this company (nothing is deleted; they can be re-opened)
   if (!loading && hasCompany && settings.paused === true) {
