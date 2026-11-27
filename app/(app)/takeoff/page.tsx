@@ -103,7 +103,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
-import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, singleSkinBrickSpec, timberFrameBrickSpec, calculatorOverridesMakeup, studWallSpec, masonryPartitionSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, paintedSides, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings, planWallMerge, mergeOpenings, polyLen } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, snapBesideNeighbour, moveWithPanels, panelsAttachedTo, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, resizeOpeningEdge, STRUCTURAL_KIND, type PlacedOpening, type PlacedKind, type WdPlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -2849,8 +2849,29 @@ export default function TakeoffPage() {
   }
   /** whether a wall is painted building to the left of its own line: a side of a closed run is painted INWARD (the run decides, whatever the make-up of each side), any other wall as it was drawn or flipped */
   const paintFlip = (el: DrawnElement, w: { flip: boolean }): boolean => { const o = wallDirOverride.get(el.id); return o !== undefined && el.type === 'line' ? o === -1 : w.flip }
-  /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
+  // Which side of its own line each wall is PAINTED on, read from the very runs the screen paints (the same walls, grouped the same way as renderWallVisuals). The painting groups walls by make-up and builds a run that
+  // closes into a loop inward, which can differ from wallDirOverride (found without the make-up): an extension against a house wall had the house wall painted one side of its line and its openings cut on the other.
+  const paintedSide = useMemo(() => {
+    const map = new Map<string, 1 | -1>()
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) return map
+    for (const els of [wallsOnSheet(), ghostWalls()]) {
+      const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
+      for (const el of els) {
+        const w = wallSpecFor(el)
+        if (!w) continue
+        const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
+        pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      }
+      for (const [id, side] of paintedSides(pieces, 3)) map.set(id, side)
+    }
+    return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.levels, project.activeLevelId, boSubPhases, allWallMakeups.length, hiddenPhases, wallDirOverride])
+  /** how a wall's own band is worked out so it matches how it is painted: the side it is painted on (paintedSide), else the run's direction, else as it was drawn */
   function wallPaintOpts(el: DrawnElement, ws: { ref: WallRef; flip: boolean }) {
+    const side = paintedSide.get(el.id)
+    if (side !== undefined && el.type === 'line') return { ref: ws.ref, closed: false, flip: side === -1 }
     const o = wallDirOverride.get(el.id)
     return o !== undefined && el.type === 'line' ? { ref: ws.ref, closed: false, flip: o === -1 } : { ref: ws.ref, closed: el.type !== 'line', flip: ws.flip }
   }
@@ -5070,7 +5091,7 @@ export default function TakeoffPage() {
       const moveIdx = res.aHold ? res.bIdx : res.aIdx
       const w = wallSpecFor(held)
       const h0 = held.points[hSeg], h1 = held.points[hSeg + 1]
-      const band = w && h0 && h1 ? wallBand([h0, h1], w.spec, mpp, { ref: w.ref, closed: false, flip: paintFlip(held, w) }) : null
+      const band = w && h0 && h1 ? wallBand([h0, h1], w.spec, mpp, { ref: w.ref, closed: false, flip: wallPaintOpts(held, w).flip }) : null
       if (band) {
         const m0 = mover.points[mSeg], m1 = mover.points[mSeg + 1]
         const farEnd = mover.points[moveIdx === mSeg ? mSeg + 1 : mSeg]
