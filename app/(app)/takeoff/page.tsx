@@ -2685,7 +2685,7 @@ export default function TakeoffPage() {
   // a door side panel placed while it was briefly listed under Windows has the old kind id: read it as the door side panel
   const allPlaced: PlacedOpening[] = rawPlaced.some(o => (o.kind as string) === 'win-side-panel') ? rawPlaced.map(o => ((o.kind as string) === 'win-side-panel' ? { ...o, kind: 'door-side-panel' as PlacedOpening['kind'] } : o)) : rawPlaced
   /** the steel the Structural Openings calculator holds for a placed structural opening (the calculator's opening that follows it): how many beams, how many posts and where, and the beam section */
-  const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null } => {
+  const structSteelFor = (o: PlacedOpening): { beams: number; posts: number; postRole: 'ends' | 'mid'; section: string; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null; lintel: boolean } => {
     // what the calculator holds for this opening (anything typed over there) while it is in step with the plan; once the steel has been changed on the plan since the calculator last followed it, what is chosen on the plan wins (the calculator takes it when it is next opened); else the usual
     const arr = (((structItem?.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>).AssemblyStructuralOpeningsDemo?.openings ?? []) as Record<string, unknown>[]
     const c = arr.find(x => x.planId === o.id)
@@ -2702,7 +2702,8 @@ export default function TakeoffPage() {
     const connections = Array.isArray(conns) ? conns.filter(q => q && q.kind !== 'fabrication').reduce((t, q) => t + (typeof q.qty === 'number' ? q.qty : 0), 0) : 0
     const list = Array.isArray(conns) ? conns.filter(q => q && typeof q.kind === 'string' && typeof q.qty === 'number').map(q => ({ kind: q.kind as string, qty: q.qty as number })) : []
     const plate = (pick('plate') ?? null) as NonNullable<NonNullable<PlacedOpening['struct']>['plate']> | null
-    return { plate, beams, posts: Math.round(n(pick('posts'), 0)), postRole: pick('postRole') === 'mid' ? 'mid' : 'ends', section, connections, choice: typeof sec === 'string' ? sec : 'auto', load, conns: list }
+    const lintel = typeof c?.over === 'string' && c.over !== 'steel'      // the calculator prices a lintel (or nothing) over this one, not steel
+    return { lintel, plate, beams, posts: Math.round(n(pick('posts'), 0)), postRole: pick('postRole') === 'mid' ? 'mid' : 'ends', section, connections, choice: typeof sec === 'string' ? sec : 'auto', load, conns: list }
   }
   // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
   const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))

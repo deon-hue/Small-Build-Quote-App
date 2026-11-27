@@ -8,16 +8,22 @@
  * the tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
   calculateWindowsDoors, newOpening, unitPrice, mergePlanOpenings, planOpeningSig, KINDS, KIND_BY_ID, isInternalDoor, isWindow, kindInScope, DEFAULT_WD_SITUATIONS,
   MATERIAL_LABEL, GLAZING_LABEL, SUPPLY_LABEL, SWING_LABEL, CILL_LABEL,
-  WALL_LABEL, FORMED_LABEL, LINTEL_LABEL, LINTELS_FOR, BEAM_SIZES, DEFAULT_BEAM, defaultWork, defaultLintel,
+  WALL_LABEL, FORMED_LABEL, LINTEL_LABEL, LINTELS_FOR, BEAM_SIZES, DEFAULT_BEAM, defaultWork, defaultLintel, withSteel, openingSteel, beamListName,
   type OpeningWork, type OpeningFormed, type WdWall, type LintelKind,
   type WdOpening, type PlanOpening, type WdResult, type WdScope, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
 } from '@/lib/wd-units'
+import { priceWallSteel, cleanWallSteel, type WallSteel } from '@/lib/wall-steel'
+import { parseStockLengths } from '@/lib/steel-stock'
+import WallSteelModal from '@/components/WallSteelModal'
+import WallSteelFields from '@/components/WallSteelFields'
+import { SteelSummaryRow, StockBarsFields, NO_STOCK } from '@/components/OpeningSteelPieces'
+import CalcSummaryCard from '@/components/CalcSummaryCard'
 import { describeWd, describeWdShort, type WdDescriptionInput } from '@/lib/wd-description'
 import { suggestWindowsDoorsLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -53,8 +59,14 @@ function nextRef(openings: WdOpening[], kind: OpeningKind): string {
 }
 
 /** The opening in the wall for one opening: not priced here (the wall calculator, or it is already there), formed as a new wall is built, or cut in an existing wall; and what goes over the top. */
-function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: Partial<WdOpening>) => void }) {
+function WorkSection({ o, update, steelCost }: { o: WdOpening; update: (id: string, patch: Partial<WdOpening>) => void; /** what the steel over this opening comes to */ steelCost: number }) {
   const w = o.work
+  const [steelOpen, setSteelOpen] = useState(false)
+  // the steel set up over it, in words, with its weight
+  let steelSum: { words: string; steelKg: number; beamLabel: string } | undefined
+  if (w?.lintel === 'steel-beam' && w.steel && o.widthMm > 0 && o.heightMm > 0 && w.thicknessMm > 0) {
+    try { steelSum = priceWallSteel([{ id: o.id, ref: o.ref, widthMm: o.widthMm, heightMm: o.heightMm, steel: w.steel as WallSteel }], w.thicknessMm).byOpening[o.id] } catch { steelSum = undefined }
+  }
   const setWork = (patch: Partial<OpeningWork>) => w && update(o.id, { work: { ...w, ...patch } })
   const chooseFormed = (v: string) => {
     if (v === 'none') { update(o.id, { work: undefined }); return }
@@ -66,7 +78,8 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
     const lintels = LINTELS_FOR[wall]
     const lintel: LintelKind = lintels.includes(w.lintel) ? w.lintel : defaultLintel(wall, o.widthMm)
     const cut = w.formed === 'cut-existing'
-    setWork({ wall, lintel, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, closers: wall === 'cavity' && lintel !== 'by-wall', loadBearing: cut && wall !== 'stud', engineer: cut && wall !== 'stud' })
+    const next: OpeningWork = { ...w, wall, lintel, thicknessMm: wall === 'solid' ? 215 : wall === 'block' ? 100 : wall === 'stud' ? 100 : 300, closers: wall === 'cavity' && lintel !== 'by-wall', loadBearing: cut && wall !== 'stud', engineer: cut && wall !== 'stud' }
+    update(o.id, { work: lintel !== w.lintel ? withSteel(next) : next })
   }
   const masonry = !!w && w.wall !== 'stud'
   return (
@@ -90,12 +103,12 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
         )}
         {w && (
           <PropRow label="What goes over the top">
-            <select value={w.lintel} onChange={e => setWork(e.target.value === 'by-wall' ? { lintel: 'by-wall', closers: false } : { lintel: e.target.value as LintelKind })} style={propInput}>
+            <select data-lintel value={w.lintel} onChange={e => (e.target.value === 'by-wall' ? setWork({ lintel: 'by-wall', closers: false }) : update(o.id, { work: withSteel({ ...w, lintel: e.target.value as LintelKind }) }))} style={propInput}>
               {LINTELS_FOR[w.wall].map(l => <option key={l} value={l}>{LINTEL_LABEL[l]}</option>)}
             </select>
           </PropRow>
         )}
-        {w && w.lintel === 'steel-beam' && (
+        {w && w.lintel === 'steel-beam' && !w.steel && (
           <PropRow label="Beam section (the designer's)">
             <select value={w.beamSize || DEFAULT_BEAM} onChange={e => setWork({ beamSize: e.target.value })} style={propInput}>
               {BEAM_SIZES.map(b => <option key={b} value={b}>{b}</option>)}
@@ -103,6 +116,20 @@ function WorkSection({ o, update }: { o: WdOpening; update: (id: string, patch: 
           </PropRow>
         )}
       </div>
+      {w && w.lintel === 'steel-beam' && !w.steel && (
+        <button type="button" data-use-steel onClick={() => setWork({ steel: openingSteel(w.formed, beamListName(w.beamSize || DEFAULT_BEAM)) })} title="Any number of beams, columns, box section posts and timber, with plates, processes and connections, priced the way the steel calculator prices them" style={{ marginTop: 6, ...tilingSmall, cursor: 'pointer' }}>Use the steel calculator&apos;s options</button>
+      )}
+      {w && w.lintel === 'steel-beam' && !!w.steel && (
+        <div style={{ marginTop: 8 }}>
+          <SteelSummaryRow words={steelSum?.words ?? ''} kg={steelSum?.steelKg} cost={steelCost || undefined} onOpen={() => setSteelOpen(true)} />
+          {steelOpen && (
+            <WallSteelModal title={`Steel over ${o.ref || 'the opening'} (${(o.widthMm / 1000).toFixed(2)} × ${(o.heightMm / 1000).toFixed(2)}m)`} subtitle="Beams, columns, box section posts and timber, priced the way the Steel Beams, Columns & Posts calculator prices them." cost={steelCost} onClose={() => setSteelOpen(false)}>
+              <WallSteelFields steel={cleanWallSteel(w.steel)} onChange={s => setWork({ steel: s })} widthMm={o.widthMm} heightMm={o.heightMm} wallMm={w.thicknessMm} newFinish={w.formed === 'cut-existing' ? 'cased' : undefined} summary={steelSum ? { beamLabel: steelSum.beamLabel, steelKg: steelSum.steelKg } : undefined}
+                intro={<><b>The steel over this opening.</b> Add the beams, columns, box section posts or timber it needs; each is priced the way the Steel Beams, Columns &amp; Posts calculator prices it, with its padstones, pads, fire protection and labour. The sections are the designer&apos;s: these are samples to price from.</>} />
+            </WallSteelModal>
+          )}
+        </div>
+      )}
       {w && o.wallLintel && w.lintel !== 'by-wall' && w.formed === 'new-wall' && (
         <div style={{ marginTop: 6, padding: '6px 8px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 11, color: '#92400e', lineHeight: 1.4 }}>
           The wall this is drawn on already prices a lintel over it. To avoid paying twice, choose <b>Already priced in the wall&apos;s calculator</b> for what goes over the top.
@@ -138,6 +165,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   const [openings, setOpenings] = useCalcState<WdOpening[]>(ID, 'openings', [])
   const [addKind, setAddKind] = useCalcState<OpeningKind>(ID, 'addKind', scope === 'doors' ? 'door-front' : 'win-casement')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'ground')
+  const [stockState, setStockState] = useCalcState(ID, 'steelStock', NO_STOCK)
 
   // the openings drawn on the plan: added here, kept in step with the drawing (one typed over stays as typed until the drawing's opening changes)
   const planKey = planOpenings ? planOpenings.map(planOpeningSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
@@ -156,9 +184,10 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   }
 
   const result = useMemo((): { ok: true; r: WdResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculateWindowsDoors({ openings, jobSituationId, situations: DEFAULT_WD_SITUATIONS, rates: {} }) } }
+    const stock = stockState.on ? { barsMm: parseStockLengths(stockState.bars), offcutPct: stockState.offcutPct } : undefined
+    try { return { ok: true, r: calculateWindowsDoors({ openings, jobSituationId, situations: DEFAULT_WD_SITUATIONS, rates: {}, stock }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [openings, jobSituationId])
+  }, [openings, jobSituationId, stockState])
   const r = result.ok ? result.r : null
 
   const count = (g: 'Windows' | 'External doors' | 'Internal doors') => openings.filter(o => KIND_BY_ID[o.kind]?.group === g).reduce((s, o) => s + (o.qty || 0), 0)
@@ -176,7 +205,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
       descShort={descInput ? describeWdShort(descInput) : ''} descFull={descInput ? describeWd(descInput) : ''}
       hasResult={!!r} onClose={onClose} onSave={onSave} labourTrades={labourTrades}
     >
-      {({ roomCost }) => ({
+      {({ roomCost, partCost, totals }) => ({
         main: (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -257,7 +286,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                       </PropRow>
                     )}
                   </div>
-                  <WorkSection o={o} update={update} />
+                  <WorkSection o={o} update={update} steelCost={+partCost(o.id, k => k.startsWith('st-')).toFixed(2)} />
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     {!internal && <TilingCheck label="Coloured (not white)" on={o.coloured} set={b => update(o.id, { coloured: b })} />}
                     {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Fit to a frame already in the wall (the door is trimmed to fit it)" on={!!o.existingFrame} set={b => update(o.id, { existingFrame: b, lining: !b })} />}
@@ -278,6 +307,8 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
               )
             })}
 
+            {openings.some(o => o.work?.lintel === 'steel-beam' && !!o.work.steel) && <StockBarsFields stock={stockState} onChange={setStockState} cutting={r?.cutting ?? []} />}
+
             {r && openings.length > 0 && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
                 {openings.length} line{openings.length === 1 ? '' : 's'}, {r.totalUnits} unit{r.totalUnits === 1 ? '' : 's'} ({count('Windows')} window{count('Windows') === 1 ? '' : 's'}, {count('External doors')} external door{count('External doors') === 1 ? '' : 's'}, {count('Internal doors')} internal door{count('Internal doors') === 1 ? '' : 's'}), {r.totalAreaM2}m² of openings, about {r.totalFitterHours} fitter hours.
@@ -286,6 +317,8 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
           </>
         ),
         side: (
+          <>
+            {openings.length > 0 && <CalcSummaryCard id={ID} totals={totals} />}
           <CollapsibleSection title="Job situation" borderColor="#bae6fd">
             <PropRow label="Access">
               <select value={jobSituationId} onChange={e => setJobSituationId(e.target.value)} style={propInput}>
@@ -294,6 +327,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
             </PropRow>
             <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>The extra is added to the fitting hours. Unless an opening says it is formed or cut here, its lintel, cavity closers and reveals are priced with the wall, not here.</div>
           </CollapsibleSection>
+          </>
         ),
       })}
     </TilingCalcFrame>

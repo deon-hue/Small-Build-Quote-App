@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-27T17:00:00+00:00',
+    title: 'Steel in Structural Openings and Windows & Doors, lintels, and many more sizes',
+    detail: 'Structural Openings now lets you choose what goes over each opening: concrete, steel cavity or steel box lintels for small ones, or steel set up with all the steel calculator options (any mix of beams, columns, box sections and timber, with plates, processes, padstones and pads), plus stock lengths and an ex or inc VAT summary. Windows and Doors offers the same steel set-up for an opening in a new or existing wall. There are now 52 beam, 18 column and 12 box section sizes in every steel calculator. Openings already priced stay as they are until you change them. Fixed: an older structural opening entered more than once only counted the steel fixing hours once.',
+  },
+  {
     at: '2026-11-27T12:00:00+00:00',
     title: 'Take-off: openings now cut through the wall, not beside it',
     detail: 'Where an extension was drawn against an existing house wall, a structural opening, window or door put on that wall could appear beside it instead of in it (the selection outline too). Openings now sit in the middle of the wall exactly as it is drawn, and openings already on a plan move into place by themselves.',

@@ -31,7 +31,7 @@ interface Props {
   onMoveAlong: (id: string, mm: number) => void
   onCentre: (id: string) => void
   /** the steel the calculator holds for an opening: the beam section, how many beams and posts, how many connections */
-  steelOf: (id: string) => { section: string; beams: number; posts: number; postRole: 'ends' | 'mid'; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<PlacedStruct['plate']> | null } | undefined
+  steelOf: (id: string) => { section: string; beams: number; posts: number; postRole: 'ends' | 'mid'; connections: number; choice: string; load: 'light' | 'floor' | 'heavy'; conns: { kind: string; qty: number }[]; plate: NonNullable<PlacedStruct['plate']> | null; /** the calculator prices a lintel, not steel, over it */ lintel?: boolean } | undefined
   /** a change to the steel chosen for an opening: the beam section, how many beams and posts, what is above, the connections */
   onSteel: (id: string, patch: PlacedStruct) => void
   /** the calculator's card: what it measures, its saved price, whether the plan has changed since, and the calculator itself */
@@ -101,7 +101,13 @@ export default function StructOpeningsPanel(p: Props) {
               <div><div style={tiny}>Width (the span)</div><Num value={selected.widthMm} onChange={n => p.onUpdate(selected.id, { widthMm: n })} suffix="mm" /></div>
               <div><div style={tiny}>Height</div><Num value={selected.heightMm} onChange={n => p.onUpdate(selected.id, { heightMm: n })} suffix="mm" /></div>
             </div>
-            {steel && (
+            {steel?.lintel && (
+              <div style={{ background: 'rgba(29,78,216,0.08)', border: `1px solid ${STEEL}`, borderRadius: 6, padding: 8, fontSize: 11.5, color: 'var(--to-text)', lineHeight: 1.45 }} data-testid="struct-lintel">
+                The calculator prices a lintel over this opening, not steel. Change what goes over it in the calculator.
+                <button type="button" onClick={p.card.onOpen} style={{ display: 'block', marginTop: 6, padding: '5px 9px', fontSize: 12, fontWeight: 700, borderRadius: 5, cursor: 'pointer', border: `1px solid ${STEEL}`, background: STEEL, color: '#fff' }}>Open the calculator…</button>
+              </div>
+            )}
+            {steel && !steel.lintel && (
               <div style={{ background: 'rgba(29,78,216,0.08)', border: `1px solid ${STEEL}`, borderRadius: 6, padding: '8px' }} data-testid="struct-steel">
                 <div style={{ ...label, color: STEEL }}>The steel beam</div>
                 <div style={tiny}>Beam section (from the steel beam sections)</div>
@@ -177,7 +183,7 @@ export default function StructOpeningsPanel(p: Props) {
                 {steel.conns.length === 0 && steel.beams > 0 && steel.posts > 0 && steel.postRole === 'ends' && (
                   <button type="button" onClick={() => p.onSteel(selected.id, { connections: usualConnections(steel.beams, steel.posts, steel.postRole) })} style={{ marginTop: 5, width: '100%', padding: '5px', fontSize: 11.5, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'transparent', color: 'var(--to-text)' }}>Add the usual: an end plate at each beam end</button>
                 )}
-                <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 6, lineHeight: 1.4 }}>Sections are indicative: the engineer designs the real steel and connections. The calculator below prices all of this and has the rest (pads, props, fire protection).</div>
+                <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 6, lineHeight: 1.4 }}>Sections are indicative: the engineer designs the real steel and connections. The calculator below prices all of this and has the rest: more beams or box sections, timber, processes, lintels, pads, props and fire protection.</div>
                 <button type="button" onClick={p.card.onOpen} style={{ marginTop: 6, padding: '5px 9px', fontSize: 12, fontWeight: 700, borderRadius: 5, cursor: 'pointer', border: `1px solid ${STEEL}`, background: STEEL, color: '#fff' }}>Open the calculator…</button>
               </div>
             )}

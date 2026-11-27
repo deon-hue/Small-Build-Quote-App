@@ -23,7 +23,7 @@ function Num({ v, set, min = 0, max = 99, step = 1, placeholder }: { v: number |
   return <input type="number" value={v ?? ''} min={min} max={max} step={step} placeholder={placeholder} onChange={e => { if (e.target.value === '') return set(null); const n = +e.target.value; if (Number.isFinite(n)) set(Math.min(max, Math.max(min, n))) }} style={miniInput} />
 }
 
-export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wallMm, summary }: {
+export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wallMm, summary, intro, newFinish }: {
   steel: WallSteel
   onChange: (s: WallSteel) => void
   /** the opening's clear width and height, mm */
@@ -33,17 +33,22 @@ export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wa
   wallMm: number
   /** what the engine made of it: the first beam's section and the weight of steel */
   summary?: { beamLabel: string; steelKg: number }
+  /** the first words, when this is not inside a wall calculator */
+  intro?: React.ReactNode
+  /** the finish a steel member added here starts with (else the steel calculator's own: shop primed) */
+  newFinish?: MemberFinish
 }) {
   const set = (patch: Partial<WallSteel>) => onChange({ ...steel, ...patch })
   const setMember = (id: string, patch: Partial<WallMember>) => set({ members: steel.members.map(m => (m.id === id ? { ...m, ...patch } : m)) })
   const spanM = widthMm / 1000
   const sug = beamFor(spanM, steel.loadAbove)
   const free = CONNECTION_KINDS.filter(k => !steel.connections.some(c => c.kind === k.id))
-  const addMember = (kind: MemberKind) => set({ members: [...steel.members, newWallMember(kind)].slice(0, 8) })
+  const fresh = (kind: MemberKind): WallMember => { const m = newWallMember(kind); return newFinish && KIND_BY_ID[kind].steel ? { ...m, finish: newFinish } : m }
+  const addMember = (kind: MemberKind) => set({ members: [...steel.members, fresh(kind)].slice(0, 8) })
   return (
     <div style={{ flexBasis: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 8px 10px', display: 'grid', gap: 8 }}>
       <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
-        <b>Steel from the Steel Beams, Columns &amp; Posts calculator.</b> Add the beams, columns, box section posts or timber beams that go over and beside this opening; they are priced the way that calculator prices them, and the wall adds only its own cavity tray and weeps. The sections are the designer&apos;s: these are samples to price from.
+        {intro ?? <><b>Steel from the Steel Beams, Columns &amp; Posts calculator.</b> Add the beams, columns, box section posts or timber beams that go over and beside this opening; they are priced the way that calculator prices them, and the wall adds only its own cavity tray and weeps. The sections are the designer&apos;s: these are samples to price from.</>}
         {summary?.steelKg ? <> Now: {summary.beamLabel ? <b>{summary.beamLabel}</b> : 'steel'}, about {summary.steelKg}kg of steel in all.</> : null}
       </div>
 
@@ -56,7 +61,7 @@ export default function WallSteelFields({ steel, onChange, widthMm, heightMm, wa
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={cell}>
                 <span style={lab}>Kind</span>
-                <select value={m.kind} onChange={e => { const nk = e.target.value as MemberKind; const d = newWallMember(nk); onChange({ ...steel, members: steel.members.map(x => (x.id === m.id ? { ...d, id: m.id, qty: m.qty } : x)) }) }} style={miniInput}>
+                <select value={m.kind} onChange={e => { const nk = e.target.value as MemberKind; const d = fresh(nk); onChange({ ...steel, members: steel.members.map(x => (x.id === m.id ? { ...d, id: m.id, qty: m.qty } : x)) }) }} style={miniInput}>
                   {MEMBER_KINDS.map(kk => <option key={kk.id} value={kk.id}>{kk.label}</option>)}
                 </select>
               </div>

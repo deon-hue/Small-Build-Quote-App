@@ -7,13 +7,21 @@
  * priced; the steel sections are indicative (the engineer designs the real ones). The engine is lib/structural-openings-units.ts; the body shared with the tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
-  calculateStructuralOpenings, newStructuralOpening, usualBeams, beamFor, mergePlanStructural, planStructuralSig, BEAM_CHOICES, POST_SECTIONS, CONNECTION_KINDS, CONNECTION_BY_ID, usualConnections, WALL_LABEL, WALL_THICKNESS, FORMED_LABEL, LOAD_LABEL, FINISH_LABEL, POST_ROLE_LABEL, DEFAULT_STRUCTURAL_SITUATIONS,
-  type StructuralOpening, type StructuralResult, type PlanStructural, type OpeningFormed, type OpeningWallKind, type LoadAbove, type SteelFinish, type SteelBy, type PostRole,
+  newStructuralOpening, beamFor, planStructuralSig, usualLintels, OVER_LABEL, OVER_FOR, BEAM_CHOICES, POST_SECTIONS, CONNECTION_KINDS, CONNECTION_BY_ID, usualConnections, WALL_LABEL, WALL_THICKNESS, FORMED_LABEL, LOAD_LABEL, FINISH_LABEL, POST_ROLE_LABEL, DEFAULT_STRUCTURAL_SITUATIONS,
+  type StructuralOpening, type PlanStructural, type OpeningFormed, type OpeningWallKind, type LoadAbove, type SteelFinish, type SteelBy, type PostRole, type OverKind, type OpeningExtra,
 } from '@/lib/structural-openings-units'
+import { priceOpenings, priceOpeningSteel, newFullOpening, toFullOpening, changeOpening, mergePlanFull, mirrorSteel, newOpeningSteel, type OpeningsResult } from '@/lib/structural-openings-steel'
+import { cleanWallSteel, type WallSteel } from '@/lib/wall-steel'
+import { KIND_BY_ID } from '@/lib/structural-steel-units'
+import { parseStockLengths } from '@/lib/steel-stock'
+import WallSteelModal from '@/components/WallSteelModal'
+import WallSteelFields from '@/components/WallSteelFields'
+import { SteelSummaryRow, StockBarsFields, NO_STOCK } from '@/components/OpeningSteelPieces'
+import CalcSummaryCard from '@/components/CalcSummaryCard'
 import { describeStructuralOpenings, describeStructuralOpeningsShort, type StructuralDescriptionInput } from '@/lib/structural-openings-description'
 import { suggestStructuralOpeningsLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -47,11 +55,14 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
   const [buildingControl, setBuildingControl] = useCalcState(ID, 'buildingControl', true)
   const [dustProtection, setDustProtection] = useCalcState(ID, 'dustProtection', false)
 
-  function addOpening() { setOpenings(p => [...p, newStructuralOpening('so-' + uid(), `SO${p.length + 1}`, addFormed)]) }
+  const [stockState, setStockState] = useCalcState(ID, 'steelStock', NO_STOCK)
+  // which opening's steel pop-up is open
+  const [steelOpenId, setSteelOpenId] = useState<string | null>(null)
+  function addOpening() { setOpenings(p => [...p, newFullOpening('so-' + uid(), `SO${p.length + 1}`, addFormed)]) }
   // the openings placed on the walls in Take-off: added here with the steel their wall usually needs, and kept in step with the drawing until a value is typed over
   const planKey = planOpenings ? planOpenings.map(planStructuralSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
   React.useEffect(() => {
-    if (planOpenings) setOpenings(p => mergePlanStructural(p, planOpenings))
+    if (planOpenings) setOpenings(p => mergePlanFull(p, planOpenings))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planKey])
   // the line drawn on the wall in Take-off IS the first opening: its length is the width, and the opening follows the line until a width is typed over it (one made by hand, or saved before this, is left alone)
@@ -59,38 +70,39 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
     if (!(externalLengthMm != null && externalLengthMm > 0)) return
     const w = Math.round(externalLengthMm)
     setOpenings(p => {
-      if (p.length === 0) return [{ ...newStructuralOpening('so-' + uid(), 'SO1', addFormed), widthMm: w, planWidthMm: w }]
+      if (p.length === 0) return [{ ...changeOpening(newFullOpening('so-' + uid(), 'SO1', addFormed), { widthMm: w }), planWidthMm: w }]
       const f = p[0]
       if (f.planWidthMm === undefined || f.planWidthMm === w) return p
-      return f.widthMm === f.planWidthMm ? [{ ...f, widthMm: w, planWidthMm: w }, ...p.slice(1)] : p
+      return f.widthMm === f.planWidthMm ? [{ ...changeOpening(f, { widthMm: w }), planWidthMm: w }, ...p.slice(1)] : p
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalLengthMm])
   function update(id: string, patch: Partial<StructuralOpening>) { setOpenings(p => p.map(x => (x.id === id ? { ...x, ...patch } : x))) }
-  /** a different kind of wall: its usual thickness and beams (the beam count only follows while it is still the usual for the old wall) */
-  function changeWall(x: StructuralOpening, wall: OpeningWallKind) {
-    const t = WALL_THICKNESS[wall]
-    update(x.id, { wall, thicknessMm: t, beams: x.beams === usualBeams(x.thicknessMm) ? usualBeams(t) : x.beams })
-  }
-  function changeThickness(x: StructuralOpening, mm: number) {
-    update(x.id, { thicknessMm: mm, beams: x.beams === usualBeams(x.thicknessMm) ? usualBeams(mm) : x.beams })
-  }
+  /** a change to the opening's size, wall or load: what was still the usual follows (lib/structural-openings-steel.ts) */
+  function change(id: string, patch: Partial<StructuralOpening>) { setOpenings(p => p.map(x => (x.id === id ? changeOpening(x, patch) : x))) }
+  const changeWall = (x: StructuralOpening, wall: OpeningWallKind) => change(x.id, { wall, thicknessMm: WALL_THICKNESS[wall] })
+  const changeThickness = (x: StructuralOpening, mm: number) => change(x.id, { thicknessMm: mm })
   /** cut or new wall: the things that only belong to one of them follow (a cut in a standing wall is load-bearing with the engineer to start; a new wall has neither) */
   function changeFormed(x: StructuralOpening, formed: OpeningFormed) {
-    update(x.id, { formed, loadBearing: formed === 'cut-existing', engineer: formed === 'cut-existing', makeGood: formed === 'cut-existing' })
+    change(x.id, { formed, loadBearing: formed === 'cut-existing', engineer: formed === 'cut-existing', makeGood: formed === 'cut-existing' })
   }
+  function setSteel(id: string, steelSpec: WallSteel) { setOpenings(p => p.map(x => (x.id === id ? mirrorSteel({ ...x, steelSpec }) : x))) }
+  function chooseOver(x: StructuralOpening, over: OverKind) { setOpenings(p => p.map(o => (o.id === x.id ? mirrorSteel({ ...o, over, steelSpec: o.steelSpec ?? newOpeningSteel(o.thicknessMm) }) : o))) }
+  const setExtras = (x: StructuralOpening, extras: OpeningExtra[]) => update(x.id, { extras })
 
-  const result = useMemo((): { ok: true; r: StructuralResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculateStructuralOpenings({ openings, jobSituationId, situations: DEFAULT_STRUCTURAL_SITUATIONS, buildingControl, dustProtection, rates: {} }) } }
+  const result = useMemo((): { ok: true; r: OpeningsResult } | { ok: false; error: string } => {
+    const stock = stockState.on ? { barsMm: parseStockLengths(stockState.bars), offcutPct: stockState.offcutPct } : undefined
+    try { return { ok: true, r: priceOpenings({ openings, jobSituationId, situations: DEFAULT_STRUCTURAL_SITUATIONS, buildingControl, dustProtection, rates: {}, stock }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [openings, jobSituationId, buildingControl, dustProtection])
+  }, [openings, jobSituationId, buildingControl, dustProtection, stockState])
   const r = result.ok ? result.r : null
 
   const descInput: StructuralDescriptionInput | null = r ? {
     openings: openings.map(x => ({ ref: x.ref, location: x.location, name: 'Structural opening', parts: r.openings.find(s => s.openingId === x.id)?.parts ?? [] })).filter(x => x.parts.length > 0),
     anyCut: openings.some(x => x.formed === 'cut-existing'),
     anyLoadBearing: openings.some(x => x.loadBearing),
-    anySteelContractor: openings.some(x => x.steelBy === 'sub' && (x.beams > 0 || x.posts > 0)),
+    anySteelContractor: openings.some(x => (x.over === undefined ? x.steelBy === 'sub' && (x.beams > 0 || x.posts > 0) : x.over === 'steel' && cleanWallSteel(x.steelSpec).members.some(m => m.by === 'sub' && KIND_BY_ID[m.kind].steel))),
+    anySteel: openings.some(x => (x.over === undefined ? x.beams > 0 || x.posts > 0 : x.over === 'steel' && cleanWallSteel(x.steelSpec).members.length > 0)),
     buildingControl: buildingControl && openings.some(x => x.loadBearing),
     occupied: jobSituationId === 'occupied' || openings.some(x => x.situationId === 'occupied'),
   } : null
@@ -102,7 +114,7 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
       descShort={descInput ? describeStructuralOpeningsShort(descInput) : ''} descFull={descInput ? describeStructuralOpenings(descInput) : ''}
       hasResult={!!r} onClose={onClose} onSave={onSave} labourTrades={labourTrades}
     >
-      {({ roomCost }) => ({
+      {({ roomCost, partCost, totals }) => ({
         main: (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -115,13 +127,19 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
 
             {openings.length === 0 && (
               <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
-                No openings yet. Pick whether it is cut in an existing wall or formed in a new one and press <strong>+ Add opening</strong>, then set its size, the wall and the steel.
+                No openings yet. Pick whether it is cut in an existing wall or formed in a new one and press <strong>+ Add opening</strong>, then set its size, the wall and what goes over it: a lintel for a small one, or steel.
               </div>
             )}
 
             {openings.map(x => {
               const sum = r?.openings.find(s => s.openingId === x.id)
               const cut = x.formed === 'cut-existing'
+              const full = x.over !== undefined
+              const spec = full ? cleanWallSteel(x.steelSpec) : null
+              const hasPosts = !!spec && spec.members.some(m => KIND_BY_ID[m.kind].post)
+              const hasBeams = !!spec && spec.members.some(m => !KIND_BY_ID[m.kind].post)
+              const steelCost = full ? +partCost(x.id, k => k.startsWith('st-')).toFixed(2) : 0
+              const priced = r?.openings.find(s => s.openingId === x.id)
               const widthM = x.widthMm / 1000
               const spanM = widthM / (x.postRole === 'mid' && x.posts > 0 ? x.posts + 1 : 1)
               const suggested = x.widthMm > 0 ? beamFor(spanM, x.loadAbove) : null
@@ -141,7 +159,7 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
 
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '2px 0 4px' }}>The opening</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
-                    <PropRow label="Width, the span (mm)"><TilingNumInput v={x.widthMm} set={n => update(x.id, { widthMm: n })} step={100} /></PropRow>
+                    <PropRow label="Width, the span (mm)"><TilingNumInput v={x.widthMm} set={n => change(x.id, { widthMm: n })} step={100} /></PropRow>
                     <PropRow label="Height (mm)"><TilingNumInput v={x.heightMm} set={n => update(x.id, { heightMm: n })} step={50} /></PropRow>
                     <PropRow label="Number of these"><TilingNumInput v={x.qty} set={n => update(x.id, { qty: Math.max(1, Math.round(n)) })} min={1} /></PropRow>
                     <PropRow label="What kind of wall">
@@ -151,12 +169,76 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
                     </PropRow>
                     <PropRow label="Wall thickness (mm)"><TilingNumInput v={x.thicknessMm} set={n => changeThickness(x, Math.max(1, n))} step={5} /></PropRow>
                     <PropRow label="What is above it">
-                      <select value={x.loadAbove} onChange={e => update(x.id, { loadAbove: e.target.value as LoadAbove })} style={propInput}>
+                      <select value={x.loadAbove} onChange={e => change(x.id, { loadAbove: e.target.value as LoadAbove })} style={propInput}>
                         {LOADS.map(k => <option key={k} value={k}>{LOAD_LABEL[k]}</option>)}
                       </select>
                     </PropRow>
                   </div>
 
+                  {full && (
+                    <>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>Over the opening</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8, marginBottom: 6 }}>
+                        <PropRow label="What goes over the opening">
+                          <select data-over value={x.over} onChange={e => chooseOver(x, e.target.value as OverKind)} style={propInput}>
+                            {OVER_FOR[x.wall].map(k => <option key={k} value={k}>{OVER_LABEL[k]}</option>)}
+                          </select>
+                        </PropRow>
+                        {x.over === 'concrete' && <PropRow label="Lintels side by side"><TilingNumInput v={x.lintelQty ?? usualLintels(x.wall, x.thicknessMm)} set={n => update(x.id, { lintelQty: Math.max(1, Math.round(n)) })} min={1} /></PropRow>}
+                        {x.over !== 'steel' && x.over !== 'none' && <PropRow label="Padstones under the lintel ends"><TilingNumInput v={x.lintelPads ?? 0} set={n => update(x.id, { lintelPads: Math.max(0, Math.round(n)) })} min={0} /></PropRow>}
+                        {x.over === 'steel' && hasPosts && hasBeams && (
+                          <PropRow label="What the posts do">
+                            <select value={x.postRole} onChange={e => update(x.id, { postRole: e.target.value as PostRole })} style={propInput}>
+                              {ROLES.map(k => <option key={k} value={k}>{POST_ROLE_LABEL[k]}</option>)}
+                            </select>
+                          </PropRow>
+                        )}
+                        {cut && x.loadBearing && <PropRow label="Weeks the props stay up"><TilingNumInput v={x.propWeeks} set={n => update(x.id, { propWeeks: Math.max(0, n) })} step={0.5} min={0} /></PropRow>}
+                        <PropRow label="Situation">
+                          <select value={x.situationId ?? ''} onChange={e => update(x.id, { situationId: e.target.value || null })} style={propInput}>
+                            <option value="">Same as the job</option>
+                            {DEFAULT_STRUCTURAL_SITUATIONS.map(o => <option key={o.id} value={o.id}>{o.label.split(' (')[0]}</option>)}
+                          </select>
+                        </PropRow>
+                      </div>
+                      {x.over === 'steel' && spec && (
+                        <>
+                          <SteelSummaryRow words={r ? priceOpeningSteel(x).words : ''} kg={priced?.steelKg} cost={steelCost || undefined} onOpen={() => setSteelOpenId(x.id)} />
+                          {steelOpenId === x.id && (
+                            <WallSteelModal title={`Steel for ${x.ref || 'the opening'} (${(x.widthMm / 1000).toFixed(2)} × ${(x.heightMm / 1000).toFixed(2)}m)`} subtitle="Any mix of beams, columns, box section posts and timber, with their padstones, pads, plates, processes and connections." cost={steelCost} onClose={() => setSteelOpenId(null)}>
+                              <WallSteelFields steel={spec} onChange={s => setSteel(x.id, s)} widthMm={x.widthMm} heightMm={x.heightMm} wallMm={x.thicknessMm} newFinish="cased"
+                                intro={<><b>The steel over this opening.</b> Add the beams, columns, box section posts or timber it needs; each is priced the way the Steel Beams, Columns &amp; Posts calculator prices it, with its padstones, pads, fire protection and labour. The sections are the designer&apos;s: these are samples to price from.</>} />
+                            </WallSteelModal>
+                          )}
+                        </>
+                      )}
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Anything else for this opening</div>
+                        {(x.extras ?? []).map((e, i) => {
+                          const patch = (p: Partial<OpeningExtra>) => setExtras(x, (x.extras ?? []).map((q, j) => (j === i ? { ...q, ...p } : q)))
+                          return (
+                            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                              <input value={e.name} onChange={ev => patch({ name: ev.target.value })} placeholder="What it is" style={{ fontSize: 12, flex: '1 1 180px', border: '1px solid #e2e8f0', borderRadius: 4, padding: '4px 6px' }} />
+                              <div style={{ width: 70 }}><TilingNumInput v={e.qty} set={n => patch({ qty: Math.max(0, n) })} min={0} /></div>
+                              <span style={{ fontSize: 11, color: '#64748b' }}>at £</span>
+                              <div style={{ width: 90 }}><TilingNumInput v={e.unitCost} set={n => patch({ unitCost: Math.max(0, n) })} min={0} step={5} /></div>
+                              <select value={e.category} onChange={ev => patch({ category: ev.target.value as OpeningExtra['category'] })} style={{ ...tilingSmall }}>
+                                <option value="materials">Materials</option><option value="plant">Plant hire</option><option value="subcontractors">Subcontractor</option>
+                              </select>
+                              <button type="button" onClick={() => setExtras(x, (x.extras ?? []).filter((_, j) => j !== i))} title="Remove" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                            </div>
+                          )
+                        })}
+                        <button type="button" onClick={() => setExtras(x, [...(x.extras ?? []), { name: '', qty: 1, unitCost: 0, category: 'materials' }])} style={{ ...tilingSmall, cursor: 'pointer' }}>+ Add something else</button>
+                      </div>
+                    </>
+                  )}
+                  {!full && (
+                    <>
+                  <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 8px', margin: '10px 0 4px', fontSize: 11.5, color: '#713f12', lineHeight: 1.45 }}>
+                    This opening was set up with the older steel boxes. They still work. For lintels, several different beams, box section posts, timber and fabrication processes, move it across (its steel is kept, and the figures then follow the steel calculators).
+                    <button type="button" data-use-full onClick={() => setOpenings(p => p.map(o => (o.id === x.id ? toFullOpening(o) : o)))} style={{ ...tilingSmall, cursor: 'pointer', marginLeft: 8 }}>Use the full steel options</button>
+                  </div>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 4px' }}>The steel</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
                     <PropRow label="Beams over the opening"><TilingNumInput v={x.beams} set={n => update(x.id, { beams: Math.max(0, Math.round(n)) })} min={0} /></PropRow>
@@ -241,15 +323,20 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
                       )}
                     </div>
                   </div>
+                    </>
+                  )}
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
+                    {full && x.wall === 'cavity' && <TilingCheck label={x.over === 'steel' || x.over === 'concrete' ? 'Cavity tray, weep vents and cavity closers' : 'Cavity closers down both jambs'} on={!!x.cavityWork} set={b => update(x.id, { cavityWork: b })} />}
                     <TilingCheck label="It carries load (needles and props, and the engineer)" on={x.loadBearing} set={b => update(x.id, { loadBearing: b, engineer: b && cut })} />
                     {x.loadBearing && <TilingCheck label="Include the structural engineer's calculations" on={x.engineer} set={b => update(x.id, { engineer: b })} />}
-                    {x.beams + x.posts > 0 && x.steelBy === 'us' && <TilingCheck label="A Hiab or lorry crane lifts the steel in" on={x.hiab} set={b => update(x.id, { hiab: b })} />}
+                    {!full && x.beams + x.posts > 0 && x.steelBy === 'us' && <TilingCheck label="A Hiab or lorry crane lifts the steel in" on={x.hiab} set={b => update(x.id, { hiab: b })} />}
                     {cut && <TilingCheck label="Make good the jambs (bricks, mortar and DPC, and the bricklayer)" on={x.makeGood} set={b => update(x.id, { makeGood: b })} />}
                   </div>
                 </div>
               )
             })}
+
+            {openings.some(x => x.over === 'steel') && <StockBarsFields stock={stockState} onChange={setStockState} cutting={r?.cutting ?? []} />}
 
             {r && openings.length > 0 && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
@@ -260,6 +347,7 @@ export default function AssemblyStructuralOpeningsDemo({ onClose, onSave, labour
         ),
         side: (
           <>
+            {openings.length > 0 && <CalcSummaryCard id={ID} totals={totals} />}
             <CollapsibleSection title="Job situation" borderColor="#bae6fd">
               <PropRow label="The work is">
                 <select value={jobSituationId} onChange={e => setJobSituationId(e.target.value)} style={propInput}>

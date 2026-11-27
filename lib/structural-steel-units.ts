@@ -8,8 +8,9 @@
 //
 // Every rate and hour is a SAMPLE, editable in the calculator, to be checked against real jobs. The sections' weights and surfaces are rounded catalogue values.
 
-import { BEAM_SECTIONS, POST_SECTIONS, RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
+import { RATES as OPEN_RATES, HOURS as OPEN_HOURS, LABOURER_ON_STEEL, LABOURER_ON_CASING, SPOIL_BULK, LIGHT_LIFT_KG, DEFAULT_STRUCTURAL_SITUATIONS, checkBeamPlate, beamPlateFor, beamPlateWords, postPlateWords, DEFAULT_POST_PLATE_MM, DEFAULT_PLATE_WIDTH_MM, PLATE_RATE_NOTE, type BeamPlate, type StructuralSituation } from './structural-openings-units'
 
+import { UB_SECTIONS, UC_SECTIONS, SHS_SECTIONS } from './steel-sections'
 import { planBars, type Bar } from './steel-stock'
 import { PROCESS_BY_ID, priceProcess, processWords, type MemberProcess } from './steel-processes'
 import { isSteelGrade, type SteelGrade } from './steel-section-data'
@@ -30,28 +31,11 @@ export const MEMBER_KINDS: MemberKindInfo[] = [
 export const KIND_BY_ID: Record<string, MemberKindInfo> = Object.fromEntries(MEMBER_KINDS.map(k => [k.id, k]))
 
 export interface SteelSection { label: string; kgPerM: number; surfaceM2PerM: number; boxGirthMm: number }
-/** Universal beams: the ones the openings calculator knows, and the bigger floor and ridge beams */
-export const STEEL_BEAMS: SteelSection[] = [
-  ...BEAM_SECTIONS.map(b => ({ label: b.label, kgPerM: b.kgPerM, surfaceM2PerM: b.surfaceM2PerM, boxGirthMm: b.boxGirthMm })),
-  { label: '305 × 127 UB 37', kgPerM: 37, surfaceM2PerM: 1.09, boxGirthMm: 837 },
-  { label: '356 × 171 UB 45', kgPerM: 45, surfaceM2PerM: 1.38, boxGirthMm: 975 },
-  { label: '406 × 178 UB 54', kgPerM: 54, surfaceM2PerM: 1.5, boxGirthMm: 1083 },
-  { label: '457 × 191 UB 67', kgPerM: 67, surfaceM2PerM: 1.65, boxGirthMm: 1197 },
-  { label: '533 × 210 UB 82', kgPerM: 82, surfaceM2PerM: 1.87, boxGirthMm: 1366 },
-]
-/** Universal columns */
-export const STEEL_COLUMNS: SteelSection[] = [
-  ...POST_SECTIONS.map(p => ({ label: p.label, kgPerM: p.kgPerM, surfaceM2PerM: p.surfaceM2PerM, boxGirthMm: p.boxGirthMm })),
-  { label: '254 × 254 UC 73', kgPerM: 73, surfaceM2PerM: 1.51, boxGirthMm: 1120 },
-  { label: '305 × 305 UC 97', kgPerM: 97, surfaceM2PerM: 1.82, boxGirthMm: 1330 },
-]
-/** Square hollow sections */
-export const STEEL_HOLLOW: SteelSection[] = [
-  { label: '80 × 80 × 5 SHS', kgPerM: 11.3, surfaceM2PerM: 0.32, boxGirthMm: 620 },
-  { label: '100 × 100 × 5 SHS', kgPerM: 14.7, surfaceM2PerM: 0.4, boxGirthMm: 700 },
-  { label: '150 × 150 × 6.3 SHS', kgPerM: 27.4, surfaceM2PerM: 0.6, boxGirthMm: 900 },
-  { label: '200 × 200 × 8 SHS', kgPerM: 47, surfaceM2PerM: 0.8, boxGirthMm: 1100 },
-]
+/** Universal beams, universal columns and square hollow sections: the shared list (lib/steel-sections.ts) */
+const priced = (s: SteelSection): SteelSection => ({ label: s.label, kgPerM: s.kgPerM, surfaceM2PerM: s.surfaceM2PerM, boxGirthMm: s.boxGirthMm })
+export const STEEL_BEAMS: SteelSection[] = UB_SECTIONS.map(priced)
+export const STEEL_COLUMNS: SteelSection[] = UC_SECTIONS.map(priced)
+export const STEEL_HOLLOW: SteelSection[] = SHS_SECTIONS.map(priced)
 /** Engineered timber beams and posts: a sample £ per metre (no weight: they are not steel) */
 export interface TimberSection { label: string; perLm: number }
 export const LVL_BEAMS: TimberSection[] = [
@@ -395,7 +379,7 @@ export function calculateSteelwork(input: SteelInput): SteelResult {
     if (anyBareSteel) warnings.push('No finish is priced to some of the steel: confirm with the engineer and Building Control whether it needs fire protection or a paint system.')
     if (anyPostNoPad) warnings.push('A post or column with no pad priced stands on a foundation priced elsewhere: it must not bear on the floor slab alone.')
     if (anySub) warnings.push('A steelwork contractor\'s price covers supplying, delivering and fixing the steel: the pads, fire protection and lifting stay here.')
-    if (anySteel) warnings.push('Steel over an opening in a wall is priced with that wall\'s calculator or in Structural Openings: do not list it here as well, so it is not counted twice.')
+    if (anySteel) warnings.push('Steel over an opening in a wall is priced with that wall\'s calculator, in Structural Openings or in Windows and Doors: do not list it here as well, so it is not counted twice.')
     if (anyTimber) warnings.push('Engineered timber beams and posts are sized by their maker\'s software or the engineer: check the span, the bearing and the fire rating.')
     warnings.push('Not included: the foundation under a column beyond the pad shown, floor or roof timbers carried by the beam, making good, plastering or decorating.')
   }

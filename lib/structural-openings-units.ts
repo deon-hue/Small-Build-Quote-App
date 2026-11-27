@@ -7,12 +7,42 @@
 //
 // Every rate and hour here is a SAMPLE, and every steel section is INDICATIVE (the engineer designs the real one): editable in the calculator, to be checked against real jobs. Self-contained (no imports), so it can be hand-tested with plain Node.
 
+import { UB_SECTIONS, UC_SECTIONS, SECTION_BY_LABEL, iProperties } from './steel-sections'
+
 export type OpeningWallKind = 'cavity' | 'solid' | 'block'
 export type OpeningFormed = 'cut-existing' | 'new-wall'
 export type LoadAbove = 'light' | 'floor' | 'heavy'
 export type SteelBy = 'us' | 'sub'
 export type SteelFinish = 'board' | 'intumescent' | 'none'
 export type PostRole = 'ends' | 'mid'
+/** what goes over the opening: steel set up with the steel calculators' options, a lintel, or nothing priced */
+export type OverKind = 'steel' | 'concrete' | 'steel-cavity' | 'steel-box' | 'none'
+export const OVER_LABEL: Record<OverKind, string> = {
+  steel: 'Steel (beams, columns, posts, plates: set up below)', concrete: 'Precast concrete lintel(s)', 'steel-cavity': 'Steel cavity lintel (one, spans both leaves)', 'steel-box': 'Steel box lintel', none: 'Nothing priced here (by others)',
+}
+/** the choices that make sense for each kind of wall */
+export const OVER_FOR: Record<OpeningWallKind, OverKind[]> = {
+  cavity: ['steel', 'steel-cavity', 'concrete', 'none'],
+  solid: ['steel', 'concrete', 'steel-box', 'none'],
+  block: ['steel', 'concrete', 'steel-box', 'none'],
+}
+/** the widest opening that starts on a lintel rather than steel */
+export const LINTEL_UP_TO_MM = 1500
+/** what a new opening starts with over it: a lintel for a small one (up to 1.5m, not under a heavy load), else steel */
+export const defaultOver = (wall: OpeningWallKind, widthMm: number, load: LoadAbove): OverKind => (widthMm <= LINTEL_UP_TO_MM && load !== 'heavy' ? (wall === 'cavity' ? 'steel-cavity' : 'concrete') : 'steel')
+/** how many precast concrete lintels sit side by side across a wall: one for each leaf */
+export const usualLintels = (wall: OpeningWallKind, thicknessMm: number) => (wall === 'cavity' ? 2 : Math.max(1, Math.round(thicknessMm / 110)))
+/** anything else an opening needs, typed in: its own line */
+export interface OpeningExtra { name: string; qty: number; unitCost: number; category: 'materials' | 'plant' | 'subcontractors' }
+/** what the steel calculators' engine made of one opening's steel (lib/structural-openings-steel.ts works it out and hands it in): for ONE of the opening */
+export interface OpeningSteelPriced {
+  lines: { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors' | 'other'; unit: string; unitCost: number; qty: number }[]
+  hours: { bricklayer: number; labourer: number; carpenter: number }
+  words: string
+  beamLabel: string
+  steelKg: number
+  warnings: string[]
+}
 
 export const WALL_LABEL: Record<OpeningWallKind, string> = { cavity: 'Cavity wall (brick and block, about 300mm)', solid: 'Solid brick wall (215mm or more)', block: 'Solid block wall (100 to 215mm)' }
 export const WALL_WORD: Record<OpeningWallKind, string> = { cavity: 'cavity wall', solid: 'solid brick wall', block: 'solid block wall' }
@@ -24,8 +54,8 @@ export const FINISH_LABEL: Record<SteelFinish, string> = { board: 'Cased in fire
 export const POST_ROLE_LABEL: Record<PostRole, string> = { ends: 'Carry the ends of the beam', mid: 'Stand under the beam, splitting its span' }
 
 /** Indicative steel beams (universal beams): weight, the surface to coat, the girth of a casing round it, and the longest clear span in metres for each load above. The engineer's section replaces it. */
-export interface BeamSection { label: string; kgPerM: number; surfaceM2PerM: number; boxGirthMm: number; maxSpanM: Record<LoadAbove, number> }
-export const BEAM_SECTIONS: BeamSection[] = [
+export interface BeamSection { label: string; kgPerM: number; surfaceM2PerM: number; boxGirthMm: number; /** only the sizes in the sample span chart carry one */ maxSpanM?: Record<LoadAbove, number> }
+export const BEAM_SECTIONS: (BeamSection & { maxSpanM: Record<LoadAbove, number> })[] = [
   { label: '152 × 89 UB 16', kgPerM: 16, surfaceM2PerM: 0.53, boxGirthMm: 493, maxSpanM: { light: 2.4, floor: 1.8, heavy: 1.2 } },
   { label: '178 × 102 UB 19', kgPerM: 19, surfaceM2PerM: 0.6, boxGirthMm: 558, maxSpanM: { light: 3.0, floor: 2.3, heavy: 1.7 } },
   { label: '203 × 133 UB 25', kgPerM: 25, surfaceM2PerM: 0.78, boxGirthMm: 639, maxSpanM: { light: 3.6, floor: 2.9, heavy: 2.2 } },
@@ -36,23 +66,20 @@ export const BEAM_SECTIONS: BeamSection[] = [
   { label: '305 × 165 UB 40', kgPerM: 40, surfaceM2PerM: 1.19, boxGirthMm: 871, maxSpanM: { light: 6.4, floor: 5.4, heavy: 4.5 } },
   { label: '305 × 165 UB 54', kgPerM: 54, surfaceM2PerM: 1.22, boxGirthMm: 886, maxSpanM: { light: 7.4, floor: 6.4, heavy: 5.4 } },
 ]
-/** Steel posts (universal columns) */
+/** Steel posts (universal columns): every column in the shared list (the 152 × 152 × 23 first, which a new post starts as) */
 export interface PostSection { label: string; kgPerM: number; surfaceM2PerM: number; boxGirthMm: number }
-export const POST_SECTIONS: PostSection[] = [
-  { label: '152 × 152 UC 23', kgPerM: 23, surfaceM2PerM: 0.92, boxGirthMm: 700 },
-  { label: '203 × 203 UC 46', kgPerM: 46, surfaceM2PerM: 1.19, boxGirthMm: 900 },
-]
+export const POST_SECTIONS: PostSection[] = UC_SECTIONS.map(s => ({ label: s.label, kgPerM: s.kgPerM, surfaceM2PerM: s.surfaceM2PerM, boxGirthMm: s.boxGirthMm }))
 export const BEAM_BY_LABEL: Record<string, BeamSection> = Object.fromEntries(BEAM_SECTIONS.map(b => [b.label, b]))
-/** The bigger universal beams (the ones the Steel Beams calculator also has), for choosing by hand: the span chart here never picks them on its own, so a span beyond the table still says the engineer must specify. */
-export const EXTRA_BEAM_SECTIONS: BeamSection[] = [
-  { label: '305 × 127 UB 37', kgPerM: 37, surfaceM2PerM: 1.09, boxGirthMm: 837, maxSpanM: { light: 6.0, floor: 5.0, heavy: 4.2 } },
-  { label: '356 × 171 UB 45', kgPerM: 45, surfaceM2PerM: 1.38, boxGirthMm: 975, maxSpanM: { light: 8.0, floor: 6.8, heavy: 5.8 } },
-  { label: '406 × 178 UB 54', kgPerM: 54, surfaceM2PerM: 1.5, boxGirthMm: 1083, maxSpanM: { light: 9.2, floor: 8.0, heavy: 6.8 } },
-  { label: '457 × 191 UB 67', kgPerM: 67, surfaceM2PerM: 1.65, boxGirthMm: 1197, maxSpanM: { light: 10.6, floor: 9.2, heavy: 7.8 } },
-  { label: '533 × 210 UB 82', kgPerM: 82, surfaceM2PerM: 1.87, boxGirthMm: 1366, maxSpanM: { light: 12.0, floor: 10.6, heavy: 9.0 } },
-]
-/** every beam section that can be chosen by hand (the table first, then the bigger ones) */
-export const BEAM_CHOICES: BeamSection[] = [...BEAM_SECTIONS, ...EXTRA_BEAM_SECTIONS]
+/** a few sizes outside the chart that do carry a sample span, for the warning when one is chosen by hand */
+const HAND_SPANS: Record<string, Record<LoadAbove, number>> = {
+  '305 × 127 UB 37': { light: 6.0, floor: 5.0, heavy: 4.2 },
+  '356 × 171 UB 45': { light: 8.0, floor: 6.8, heavy: 5.8 },
+  '406 × 178 UB 54': { light: 9.2, floor: 8.0, heavy: 6.8 },
+  '457 × 191 UB 67': { light: 10.6, floor: 9.2, heavy: 7.8 },
+  '533 × 210 UB 82': { light: 12.0, floor: 10.6, heavy: 9.0 },
+}
+/** every universal beam that can be chosen by hand, smallest first (the shared list). The span chart above never picks anything outside itself, so a span beyond it still says the engineer must specify. */
+export const BEAM_CHOICES: BeamSection[] = UB_SECTIONS.map(s => BEAM_SECTIONS.find(b => b.label === s.label) ?? { label: s.label, kgPerM: s.kgPerM, surfaceM2PerM: s.surfaceM2PerM, boxGirthMm: s.boxGirthMm, maxSpanM: HAND_SPANS[s.label] })
 export const BEAM_CHOICE_BY_LABEL: Record<string, BeamSection> = Object.fromEntries(BEAM_CHOICES.map(b => [b.label, b]))
 export const POST_BY_LABEL: Record<string, PostSection> = Object.fromEntries(POST_SECTIONS.map(p => [p.label, p]))
 
@@ -63,6 +90,13 @@ export function beamFor(spanM: number, load: LoadAbove): { section: BeamSection;
 }
 
 export const BEARING_MM = 150
+
+/** Is a beam chosen by hand lighter than the sample chart suggests for this span and load? Its own sample span where it has one, else its plastic modulus against that of the size the chart picks. */
+export function lighterThanChart(sec: BeamSection, spanM: number, load: LoadAbove): boolean {
+  if (sec.maxSpanM) return spanM > sec.maxSpanM[load]
+  const wpl = (label: string) => { const s = SECTION_BY_LABEL[label]; return s ? iProperties(s).wplCm3 : 0 }
+  return wpl(sec.label) < wpl(beamFor(spanM, load).section.label)
+}
 
 /** Sample rates, £ */
 export const RATES = {
@@ -81,6 +115,12 @@ export const RATES = {
   intumescentPerM2: 28,   // £ per m²: intumescent coating applied by a specialist
   engineer: 175,          // £ per opening: the structural engineer's calculations
   buildingControl: 280,   // £ per job: the Building Control notice and inspections
+  lintelConcrete: 38,     // £ each: a precast concrete lintel up to 1.5m with its bearings, then in proportion
+  lintelSteelCavity: 68,  // £ each: a steel cavity lintel, the same way
+  lintelSteelBox: 85,     // £ each: a steel box lintel, the same way
+  cavityTray: 9.5,        // £ per opening: cavity tray over a separate lintel or beam
+  weep: 0.85,             // £ each: weep vent
+  closerPerM: 3.2,        // £ per metre: cavity closer down the jambs
   dust: 60,               // £ per job: dust sheets and a temporary screen
   fabPerHour: 55,         // £ per hour: a fabricator or welder for other fabrication
 } as const
@@ -93,6 +133,7 @@ export const HOURS = {
   setBeamBase: 1.5, setBeamPerM: 0.6, padstone: 0.3, post: 1.5,
   padDigPerM3: 5, padPourPerM3: 1.5, padMin: 0.5,
   casePerLm: 1.0, caseSetup: 0.8,
+  lintelConcrete: 0.5, lintelSteelCavity: 0.5, lintelSteelBox: 0.75, cavityWork: 0.5,
 } as const
 export const LABOURER_ON_STEEL = 0.5     // a labourer helps set steel: this share of the bricklayer's hours
 export const LABOURER_ON_CASING = 0.25
@@ -221,6 +262,17 @@ export interface StructuralOpening {
   /** the structural opening placed on a wall in Take-off that this one follows (it keeps following until typed over), and what it was last fed from it */
   planId?: string
   fromPlan?: string
+  /** what goes over the opening. An opening saved before this has none: it is priced from the beam and post fields above, as it was. */
+  over?: OverKind
+  /** the steel over it, as the steel calculators have it (lib/wall-steel.ts WallSteel), when `over` is 'steel' */
+  steelSpec?: unknown
+  /** precast concrete lintels side by side: null = one for each leaf of the wall */
+  lintelQty?: number | null
+  /** padstones under the ends of a lintel: none to start */
+  lintelPads?: number
+  /** a cavity wall: the tray, weep vents and cavity closers */
+  cavityWork?: boolean
+  extras?: OpeningExtra[]
 }
 
 export function newStructuralOpening(id: string, ref: string, formed: OpeningFormed = 'cut-existing'): StructuralOpening {
@@ -320,6 +372,8 @@ export interface StructuralInput {
   /** dust sheets and a temporary screen (once for the job) */
   dustProtection: boolean
   rates: Partial<Record<StructuralRateKey, number>>
+  /** the steel of the openings set up with the steel calculators' options, by opening id */
+  steel?: Record<string, OpeningSteelPriced>
 }
 
 const money = (n: number) => +n.toFixed(2)
@@ -370,6 +424,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     let brickHours = 0, labourHours = 0, carpHours = 0
     const bits: string[] = []
     totalOpenings += qty
+    const full = o.over !== undefined                              // set up with "what goes over the opening"
     if (cut) anyCut = true; else anyNew = true
     if (o.loadBearing) anyLoad = true
 
@@ -383,12 +438,12 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     let beamLm = 0
     let boxGirthMm = 0, surfaceM2 = 0
     const auto = o.section === 'auto' || !BEAM_CHOICE_BY_LABEL[o.section]
-    if (o.beams > 0) {
+    if (!full && o.beams > 0) {
       const picked = auto ? beamFor(spanM, o.loadAbove) : { section: BEAM_CHOICE_BY_LABEL[o.section], beyond: false }
       const sec = picked.section
       beamLabel = sec.label
       if (auto && picked.beyond) { warnings.push(`${label}: a ${n2(spanM)}m span with ${LOAD_WORD[o.loadAbove]} is beyond the sample table: the largest section is priced, and the engineer must specify the real one.`) }
-      if (!auto && spanM > sec.maxSpanM[o.loadAbove]) warnings.push(`${label}: ${sec.label} is lighter than the sample table suggests for ${n2(spanM)}m with ${LOAD_WORD[o.loadAbove]}: check it with the engineer.`)
+      if (!auto && lighterThanChart(sec, spanM, o.loadAbove)) warnings.push(`${label}: ${sec.label} is lighter than the sample table suggests for ${n2(spanM)}m with ${LOAD_WORD[o.loadAbove]}: check it with the engineer.`)
       beamLm = lengthM * o.beams * qty
       const kg = sec.kgPerM * lengthM * o.beams
       openingKg += kg
@@ -416,7 +471,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
       }
     }
     let postKg = 0
-    if (o.posts > 0) {
+    if (!full && o.posts > 0) {
       anyPost = true
       const ps = POST_BY_LABEL[o.postSection] ?? POST_SECTIONS[0]
       const postM = o.postHeightMm / 1000
@@ -432,7 +487,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
       const padM3 = (o.padLengthMm / 1000) * (o.padWidthMm / 1000) * (o.padDepthMm / 1000)
       add('pad-concrete', `concrete pad ${o.padLengthMm} x ${o.padWidthMm} x ${o.padDepthMm}mm under each post`, 'm³', rate('concretePerM3'), padM3 * o.posts * qty)
       add('pad-spoil', 'soil from the pad holes: skip share', 'm³', rate('rubblePerM3'), padM3 * SPOIL_BULK * o.posts * qty)
-      labourHours += (padM3 * o.posts * HOURS.padDigPerM3 + padM3 * o.posts * HOURS.padPourPerM3 + HOURS.padMin * o.posts)
+      labourHours += (padM3 * o.posts * HOURS.padDigPerM3 + padM3 * o.posts * HOURS.padPourPerM3 + HOURS.padMin * o.posts) * qty
       bits.push(`${countWord(o.posts)} ${ps.label} steel ${o.posts === 1 ? 'post on a concrete pad' : 'posts on concrete pads'}`)
       if (o.padDepthMm < 300) warnings.push(`${label}: a pad under a post is not usually thinner than 300mm: the engineer sizes it for the ground and the load.`)
     }
@@ -446,21 +501,21 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     }
 
     // padstones under the beam ends (a post that carries a beam end takes the place of one)
-    if (o.beams > 0) {
+    if (!full && o.beams > 0) {
       const defaultPads = Math.max(0, 2 * o.beams - (o.postRole === 'ends' ? o.posts : 0))
       const pads = o.padstones ?? defaultPads
-      if (pads > 0) { add('padstone', 'padstones under the beam ends', 'nr', rate('padstone'), pads * qty); brickHours += pads * HOURS.padstone }
+      if (pads > 0) { add('padstone', 'padstones under the beam ends', 'nr', rate('padstone'), pads * qty); brickHours += pads * HOURS.padstone * qty }
       if (o.steelBy === 'us') {
-        brickHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * o.beams
-        labourHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * o.beams * LABOURER_ON_STEEL
+        brickHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * o.beams * qty
+        labourHours += (HOURS.setBeamBase + HOURS.setBeamPerM * lengthM) * o.beams * LABOURER_ON_STEEL * qty
       }
       if (pads > 0) bits.push(`${countWord(pads)} padstone${pads === 1 ? '' : 's'}`)
     }
-    if (o.posts > 0 && o.steelBy === 'us') { brickHours += HOURS.post * o.posts; labourHours += HOURS.post * o.posts * LABOURER_ON_STEEL }
+    if (!full && o.posts > 0 && o.steelBy === 'us') { brickHours += HOURS.post * o.posts * qty; labourHours += HOURS.post * o.posts * LABOURER_ON_STEEL * qty }
     if (o.hiab && openingKg > 0) { add('hiab', 'Hiab or lorry crane to lift the steel in', 'visit', rate('hiab'), qty, 'plant') }
 
     // connections and fabrications that go with the steel
-    for (const c of o.connections ?? []) {
+    for (const c of full ? [] : o.connections ?? []) {
       const info = CONNECTION_BY_ID[c.kind]
       if (!info) continue
       if (!(c.qty >= 0) || !Number.isFinite(c.qty)) throw new Error(`${name}: the number of ${info.short}s cannot be negative.`)
@@ -488,8 +543,59 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     } else if (openingKg > 0 && o.finish === 'intumescent') {
       add('intumescent', 'intumescent coating to the steel (applied by a specialist)', 'm²', rate('intumescentPerM2'), surfaceM2 * qty, 'subcontractors')
       bits.push('an intumescent coating to the steel')
-    } else if (openingKg > 0) {
+    } else if (!full && openingKg > 0) {
       warnings.push(`${label}: no fire protection is priced to the steel: confirm with the engineer and Building Control whether it needs any (a floor above usually does).`)
+    }
+
+    // ── set up with "what goes over the opening": the steel calculators' steel, or a lintel ────────
+    let extraCarpHours = 0
+    if (full && o.over === 'steel') {
+      const st = input.steel?.[o.id]
+      if (st) {
+        for (const l of st.lines) lines.push({ ...l, id: `${l.id}|${o.id}`, qty: +(l.qty * qty).toFixed(3), category: l.category, roomId: o.id })
+        brickHours += st.hours.bricklayer * qty; labourHours += st.hours.labourer * qty; extraCarpHours += st.hours.carpenter * qty
+        openingKg += st.steelKg
+        totalSteelKg += st.steelKg * qty
+        beamLabel = st.beamLabel
+        if (st.words) bits.push(st.words)
+        for (const w of st.warnings) if (!warnings.includes(w)) warnings.push(w)
+        if (st.lines.length === 0 && o.loadBearing) warnings.push(`${label}: it is marked as load-bearing but no beam or post is set up over it: check with the engineer.`)
+      }
+    } else if (full && o.over !== 'none') {
+      const kind = o.over as 'concrete' | 'steel-cavity' | 'steel-box'
+      const lintelM = widthM + 2 * (BEARING_MM / 1000)
+      const factor = Math.max(1, lintelM / 1.5)
+      const n = kind === 'concrete' ? Math.max(1, Math.round(o.lintelQty ?? usualLintels(o.wall, o.thicknessMm))) : 1
+      const rk = kind === 'concrete' ? 'lintelConcrete' : kind === 'steel-cavity' ? 'lintelSteelCavity' : 'lintelSteelBox'
+      const word = kind === 'concrete' ? 'precast concrete lintel' : kind === 'steel-cavity' ? 'steel cavity lintel' : 'steel box lintel'
+      add('lintel', `${word}${n === 1 ? '' : 's'}, ${n2(lintelM)}m with bearings`, 'nr', rate(rk) * factor, n * qty)
+      brickHours += HOURS[rk] * n * qty; labourHours += HOURS[rk] * n * LABOURER_ON_STEEL * qty
+      const pads = Math.max(0, Math.round(o.lintelPads ?? 0))
+      if (pads > 0) { add('lintelpads', 'padstones under the lintel ends', 'nr', rate('padstone'), pads * qty); brickHours += pads * HOURS.padstone * qty }
+      beamLabel = word
+      bits.push(`${n === 1 ? 'a' : countWord(n)} ${word}${n === 1 ? '' : 's'} over${pads > 0 ? `, on ${countWord(pads)} padstone${pads === 1 ? '' : 's'}` : ''}`)
+      if (kind === 'steel-cavity' && o.wall !== 'cavity') warnings.push(`${label}: a steel cavity lintel is for a cavity wall: choose another lintel for a ${wallWord}.`)
+      if (widthM > 2.4) warnings.push(`${label}: an opening ${n2(widthM)}m wide normally needs a steel beam specified by the engineer rather than a standard lintel.`)
+      else if (o.loadAbove === 'heavy') warnings.push(`${label}: with a heavy load above, check with the engineer that a standard lintel is enough.`)
+    } else if (full) {
+      warnings.push(`${label}: nothing is priced over this opening: someone else is supplying it, or it is not a structural one.`)
+    }
+    // a cavity wall: the tray over a separate lintel or beam with its weeps, and the closers down the jambs
+    if (full && o.cavityWork && o.wall === 'cavity') {
+      if (o.over === 'steel' || o.over === 'concrete') {
+        add('tray', 'cavity tray over the opening', 'nr', rate('cavityTray'), qty)
+        add('weeps', 'weep vents', 'nr', rate('weep'), Math.max(2, Math.ceil((widthM + 0.3) / 0.9)) * qty)
+      }
+      add('closers', 'cavity closers down both jambs', 'm', rate('closerPerM'), 2 * heightM * qty)
+      brickHours += HOURS.cavityWork * qty
+      bits.push(o.over === 'steel' || o.over === 'concrete' ? 'a cavity tray, weep vents and cavity closers' : 'cavity closers')
+    }
+    // anything else typed in for this opening
+    for (const [i, e] of (full ? o.extras ?? [] : []).entries()) {
+      if (!e.name.trim() || !(e.qty > 0)) continue
+      if (!(e.unitCost >= 0)) throw new Error(`${name}: the price of "${e.name.trim()}" cannot be negative.`)
+      add(`extra${i}`, e.name.trim(), 'nr', e.unitCost, e.qty * qty, e.category)
+      bits.push(e.name.trim())
     }
 
     // ── the wall itself ──────────────────────────────────────────────────────────
@@ -521,7 +627,7 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
       if (o.engineer) add('engineer', 'structural engineer: calculations for the opening', 'nr', rate('engineer'), qty, 'subcontractors')
       parts.push(`an opening ${n2(widthM)} x ${n2(heightM)}m formed in the new ${wallWord}${bits.length ? ', with ' + list(bits) : ''}`)
     }
-    if (o.beams === 0 && o.posts === 0 && o.loadBearing) warnings.push(`${label}: it is marked as load-bearing but no beam or post is priced over it: check with the engineer.`)
+    if (!full && o.beams === 0 && o.posts === 0 && o.loadBearing) warnings.push(`${label}: it is marked as load-bearing but no beam or post is priced over it: check with the engineer.`)
 
     // ── hours ────────────────────────────────────────────────────────────────────
     const mult = uplift
@@ -529,19 +635,22 @@ export function calculateStructuralOpenings(input: StructuralInput): StructuralR
     let hrsOpening = 0
     if (brickHours > 0) {
       const h = hoursOf(brickHours * mult)
-      labour.push({ key: `bricks|${o.id}`, roomId: o.id, trade: 'bricklayer', task: `${label} — ${cut ? 'cut the opening, set the steel and make good' : 'form the opening and set the steel'}`, hours: h, basis: `${n1(brickHours / qty)}h each${qty > 1 ? ` x ${qty}` : ''}${upNote}` }); hrsOpening += h
+      labour.push({ key: `bricks|${o.id}`, roomId: o.id, trade: 'bricklayer', task: `${label} — ${cut ? `cut the opening, set the ${full && o.over !== 'steel' ? 'lintel' : 'steel'} and make good` : `form the opening and set the ${full && o.over !== 'steel' ? 'lintel' : 'steel'}`}`, hours: h, basis: `${n1(brickHours / qty)}h each${qty > 1 ? ` x ${qty}` : ''}${upNote}` }); hrsOpening += h
     }
     if (labourHours > 0) {
       const h = hoursOf(labourHours * mult)
-      labour.push({ key: `labour|${o.id}`, roomId: o.id, trade: 'labourer', task: `${label} — ${cut ? 'props, break out, dig the pads and clear the rubble' : 'help form the opening, set the steel and dig the pads'}`, hours: h, basis: 'labourer with the bricklayer' }); hrsOpening += h
+      labour.push({ key: `labour|${o.id}`, roomId: o.id, trade: 'labourer', task: `${label} — ${full && o.over !== 'steel' ? (cut ? 'props, break out and clear the rubble' : 'help form the opening and set the lintel') : cut ? 'props, break out, dig the pads and clear the rubble' : 'help form the opening, set the steel and dig the pads'}`, hours: h, basis: 'labourer with the bricklayer' }); hrsOpening += h
     }
-    if (carpHours > 0) {
-      const h = hoursOf(carpHours * qty * mult)
-      labour.push({ key: `carp|${o.id}`, roomId: o.id, trade: 'carpenter', task: `${label} — frame and board the steel casing`, hours: h, basis: `${n1(carpHours)}h each${qty > 1 ? ` x ${qty}` : ''}${upNote}` }); hrsOpening += h
-      const hl = hoursOf(carpHours * qty * mult * LABOURER_ON_CASING)
+    // (the casing hours of the older steel fields are for one opening; the steel calculators' carpentry already counts them all)
+    const carpAll = carpHours * qty + extraCarpHours
+    if (carpAll > 0) {
+      const h = hoursOf(carpAll * mult)
+      labour.push({ key: `carp|${o.id}`, roomId: o.id, trade: 'carpenter', task: `${label} — ${full ? 'case the steel and fix any timber' : 'frame and board the steel casing'}`, hours: h, basis: `${n1(carpAll / qty)}h each${qty > 1 ? ` x ${qty}` : ''}${upNote}` }); hrsOpening += h
+      const hl = hoursOf(carpAll * mult * LABOURER_ON_CASING)
       labour.push({ key: `casehelp|${o.id}`, roomId: o.id, trade: 'labourer', task: `${label} — help lift the casing board`, hours: hl, basis: `${Math.round(LABOURER_ON_CASING * 100)}% of the carpenter's hours` }); hrsOpening += hl
     }
     totalHours += hrsOpening
+    if (full && o.over === 'steel') anyPost = anyPost || (input.steel?.[o.id]?.lines.some(l => /pad-concrete/.test(l.id)) ?? false)
     summaries.push({ openingId: o.id, ref: name, name: label, parts, beamLabel, steelKg: Math.round(openingKg * qty), hours: hrsOpening })
   }
 

@@ -1,7 +1,9 @@
 // The dimensions and section properties of the steel sections the calculators offer (universal beams, universal columns, square hollow sections), for a section spec panel: depth, width, web and flange thickness, weight, area and,
 // for beams and columns, the second moment of area and the elastic and plastic moduli about the major axis. Typical catalogue figures (the 'Blue Book' tables as widely published) written out by hand: check them against
 // the maker's or merchant's table before relying on one. They are not used to price anything (the price uses the weight a metre in structural-steel-units.ts) and not to design anything: the engineer designs the real member.
-// Pure: no imports.
+// The sizes themselves are the shared list (lib/steel-sections.ts): the sizes with figures typed below keep them, the rest are worked out from their dimensions. Pure.
+
+import { ALL_SECTIONS, iProperties } from './steel-sections'
 
 export type SectionFamily = 'UB' | 'UC' | 'SHS'
 
@@ -30,7 +32,7 @@ const ub = (label: string, depthMm: number, widthMm: number, webMm: number, flan
 const uc = (label: string, depthMm: number, widthMm: number, webMm: number, flangeMm: number, kgPerM: number, ixxCm4: number, welCm3: number, wplCm3: number): SectionSpec => ({ label, family: 'UC', depthMm, widthMm, webMm, flangeMm, kgPerM, ixxCm4, welCm3, wplCm3 })
 const shs = (label: string, sideMm: number, wallMm: number, kgPerM: number): SectionSpec => ({ label, family: 'SHS', depthMm: sideMm, widthMm: sideMm, webMm: wallMm, flangeMm: wallMm, kgPerM })
 
-export const SECTION_SPECS: SectionSpec[] = [
+const TYPED: SectionSpec[] = [
   ub('152 × 89 UB 16', 152.4, 88.7, 4.5, 7.7, 16.0, 834, 109, 123),
   ub('178 × 102 UB 19', 177.8, 101.2, 4.8, 7.9, 19.0, 1356, 153, 171),
   ub('203 × 133 UB 25', 203.2, 133.2, 5.7, 7.8, 25.1, 2340, 230, 258),
@@ -54,6 +56,14 @@ export const SECTION_SPECS: SectionSpec[] = [
   shs('150 × 150 × 6.3 SHS', 150, 6.3, 27.4),
   shs('200 × 200 × 8 SHS', 200, 8, 47.0),
 ]
+/** every size the calculators offer, in the shared list's order */
+export const SECTION_SPECS: SectionSpec[] = ALL_SECTIONS.map(s => {
+  const typed = TYPED.find(t => t.label === s.label)
+  if (typed) return typed
+  if (s.family === 'SHS') return shs(s.label, s.widthMm, s.webMm, s.kgPerM)
+  const p = iProperties(s)
+  return (s.family === 'UB' ? ub : uc)(s.label, s.depthMm, s.widthMm, s.webMm, s.flangeMm, s.kgPerM, Math.round(p.ixxCm4), Math.round(p.welCm3), Math.round(p.wplCm3))
+})
 export const SECTION_SPEC_BY_LABEL: Record<string, SectionSpec> = Object.fromEntries(SECTION_SPECS.map(s => [s.label, s]))
 
 /** The dimensions and properties of a section by its name, or null if it is not one of these (timber, a typed name, 'auto') */
