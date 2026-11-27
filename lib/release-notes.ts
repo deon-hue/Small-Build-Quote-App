@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-27T20:00:00+00:00',
+    title: 'Take-off rooms: name them as you go, close them in two clicks, and they follow the walls',
+    detail: 'When your walls close a new room, a small card asks what it is called (you can switch this off). Click a room name on the plan to change it. A new Close a room button draws a line across a doorway or open side in two clicks. Rectangle rooms snap to the inside of the walls and now stretch and move with them, and a name stays with its room when a wall is moved.',
+  },
+  {
     at: '2026-11-27T17:00:00+00:00',
     title: 'Steel in Structural Openings and Windows & Doors, lintels, and many more sizes',
     detail: 'Structural Openings now lets you choose what goes over each opening: concrete, steel cavity or steel box lintels for small ones, or steel set up with all the steel calculator options (any mix of beams, columns, box sections and timber, with plates, processes, padstones and pads), plus stock lengths and an ex or inc VAT summary. Windows and Doors offers the same steel set-up for an opening in a new or existing wall. There are now 52 beam, 18 column and 12 box section sizes in every steel calculator. Openings already priced stay as they are until you change them. Fixed: an older structural opening entered more than once only counted the steel fixing hours once.',

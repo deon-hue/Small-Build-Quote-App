@@ -35,6 +35,8 @@ import OpeningsPanel, { type OpeningsCard } from './components/OpeningsPanel'
 import StructOpeningsPanel from './components/StructOpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
 import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
+import { followWalls, reanchorLabels, newUnnamedRooms, type FollowWall } from '@/lib/room-follow'
+import RoomNameCard from './components/RoomNameCard'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
@@ -1094,6 +1096,13 @@ export default function TakeoffPage() {
   const [gridSnap, setGridSnap] = useState(false)
   const [gridStep, setGridStep] = useState(1)
   const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
+  // the card that names a room on the plan: the point of the room it is for, and whether it came up by itself (a room just closed) or was asked for (its name was clicked)
+  const [nameCard, setNameCard] = useState<{ x: number; y: number; auto: boolean } | null>(null)
+  const [askNames, setAskNames] = useState(true)
+  // the room edge being drawn was started with the 'Close a room' button (it goes back to Select afterwards)
+  const closeRoomRef = useRef(false)
+  // set when a wall, a room edge or a drawn room has just been made: the rooms as they were then, so a new one can be asked about
+  const askNameRef = useRef<{ rooms: DetectedRoom[]; view: string; at: number } | null>(null)
   // the rectangle or polygon tool is drawing a ROOM (picked while the Rooms tool was active, or from the Rooms panel), not a priced drawing
   const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
   useEffect(() => { if (tool !== 'rect' && tool !== 'polygon' && tool !== 'line') setRoomDraw(false) }, [tool])
@@ -1121,6 +1130,7 @@ export default function TakeoffPage() {
         if (typeof r.halo === 'boolean') setViewHalo(r.halo)
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
         if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
+        if (typeof r.askNames === 'boolean') setAskNames(r.askNames)
         if (typeof r.ghost === 'boolean') setViewGhost(r.ghost)
         if (typeof r.dimOut === 'boolean') setViewDimOut(r.dimOut)
         if (typeof r.dimIn === 'boolean') setViewDimIn(r.dimIn)
@@ -1138,7 +1148,7 @@ export default function TakeoffPage() {
     } catch {}
     setViewPrefsReady(true)
   }, [])
-  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep, guides: viewGuides, guideSnap: guideSnapOn, drawAlign })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewGuides, guideSnapOn, drawAlign, viewPrefsReady])
+  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, askNames, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep, guides: viewGuides, guideSnap: guideSnapOn, drawAlign })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewGuides, guideSnapOn, drawAlign, askNames, viewPrefsReady])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -2154,6 +2164,12 @@ export default function TakeoffPage() {
       }
       return
     }
+    // a room edge is two clicks: one side of the opening, then the other
+    if (roomDraw === 'edge' && tool === 'line' && drawPoints.length > 0) {
+      const from = drawPoints[drawPoints.length - 1]
+      if (Math.hypot(pt.x - from.x, pt.y - from.y) > 4 / zoom) addRoomEdge([...drawPoints, pt])
+      return
+    }
     // line / polygon: accumulate points
     setDrawPoints(prev => [...prev, pt])
     setIsDrawing(true)
@@ -2169,7 +2185,7 @@ export default function TakeoffPage() {
       if (pts.length >= 2) setMeasureDone({ points: pts })
       return
     }
-    if (tool === 'select' || tool === 'rect') return
+    if (tool === 'select' || tool === 'rect' || tool === 'room') return
     if (tool === 'floor' && floorDrawMode === 'rect') return
     e.preventDefault()
     // the double-click's two clicks leave a repeated point (or one a pixel away) at the end: drop points within a few screen pixels of the one before, so there is no stub or zero length side
@@ -2192,7 +2208,8 @@ export default function TakeoffPage() {
     setProject(p => setRoomShapes(p, [...roomShapesOf(p), { id: uid(), points: poly, ...(type === 'rect' ? { rect: true } : {}) }]))
     setRoomDraw(false); setTool('room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
     setSelectedRoomPt(room.labelAt)
-    showToast(`Room drawn: ${room.areaM2.toFixed(1)} m². Name it and say what kind of room it is in the panel.`)
+    if (askNames) setNameCard({ x: room.labelAt.x, y: room.labelAt.y, auto: true })
+    showToast(`Room drawn: ${room.areaM2.toFixed(1)} m². Name it on the card or in the panel.`)
   }
 
   /** One wall for each side of a wall drawn as one run (a line of several sides, a rectangle or a polygon): each side keeps the wall's type, height and typed openings (on the first side), and starts with no priced calculator (its length has changed) */
@@ -2287,10 +2304,13 @@ export default function TakeoffPage() {
     for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
     if (!(len * mpp > 0.05)) { showToast('That line is too short to be a room edge'); return }
     const id = uid()
+    askNameRef.current = { rooms: roomData?.rooms ?? [], view: viewKey(project), at: Date.now() }
     setProject(p => setRoomEdges(p, [...roomEdgesOf(p), { id, points: pts }]))
-    setRoomDraw(false); setTool('room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
-    setSelectedEdgeId(id)
-    showToast(`Room edge added (${(len * mpp).toFixed(2)} m). Rooms are found again a moment after.`)
+    const fromButton = closeRoomRef.current
+    closeRoomRef.current = false
+    setRoomDraw(false); setTool(fromButton ? 'select' : 'room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
+    setSelectedEdgeId(fromButton ? null : id)
+    showToast(fromButton ? `Closed with a ${(len * mpp).toFixed(2)} m line. To delete it, pick the Rooms tool and click it.` : `Room edge added (${(len * mpp).toFixed(2)} m). Rooms are found again a moment after.`)
   }
 
   function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[], isFloor = false) {
@@ -2304,6 +2324,8 @@ export default function TakeoffPage() {
       ? `Floor area ${shortId}`
       : `${activePhase} ${shortId}`
     const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color, ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}) }
+    if (phase === 'External Walls' || phase === 'Internal Walls & Partitions') askNameRef.current = { rooms: roomData?.rooms ?? [], view: viewKey(project), at: Date.now() }
+    setNameCard(null)
     // Capture floor makeup before state update
     if (isFloor) queuedFloorMakeupRef.current = activeFloorMakeup
     setDrawPoints(_ => {
@@ -3026,6 +3048,74 @@ export default function TakeoffPage() {
   }, [plumbFixKey])
   const selectedRoomIdx = roomData && selectedRoomPt ? roomIndexAt(roomData.rooms, selectedRoomPt) : -1
 
+  // a name stays with its room: when a wall moves past the point it was written at, it goes to the room as it is now
+  const labelRoomsRef = useRef<{ view: string; rooms: Map<string, DetectedRoom> } | null>(null)
+  useEffect(() => {
+    if (!roomCore) return
+    let kept = labelRoomsRef.current
+    if (!kept || kept.view !== roomCore.sheetId) kept = labelRoomsRef.current = { view: roomCore.sheetId, rooms: new Map() }
+    const labels = roomLabelsOf(project)
+    const moved = reanchorLabels(labels, Array.from(kept.rooms.values()), roomCore.found)
+    for (const l of moved ?? labels) {
+      const r = roomCore.found.find(x => pointInPolygon(l, x.polygon))
+      if (r) kept.rooms.set(l.id, r)
+    }
+    if (moved) setProject(p => setRoomLabels(p, moved))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCore])
+
+  // a room drawn as a shape, and a room edge, keep to their walls: when a wall they sit on is moved (dragged, nudged, joined, resized, or put back by undo) they move with it
+  const followRef = useRef<{ key: string; walls: FollowWall[]; seen: Set<string> } | null>(null)
+  useEffect(() => {
+    const mpp = project.calibration.mpp
+    const key = project.id + '|' + viewKey(project)
+    const walls: FollowWall[] = !(mpp > 0) ? [] : wallsOnSheet().map(el => {
+      const pts = el.type === 'rect' ? cornersOf(el) : el.points
+      const w = wallSpecFor(el)
+      const band = w ? wallBand(pts, w.spec, mpp, wallPaintOpts(el, w)) : null
+      const half = project.items.find(it => it.elementId === el.id)?.wallBandPx ?? 9
+      return { id: el.id, points: pts.map(q => ({ x: q.x, y: q.y })), closed: el.type !== 'line', lo: band ? band.lo : -half, hi: band ? band.hi : half }
+    })
+    const sigOf = (p: typeof project) => JSON.stringify([roomShapesOf(p), roomEdgesOf(p)])
+    const sig = sigOf(project)
+    const prev = followRef.current
+    const now = { key, walls, seen: new Set([sig]) }
+    followRef.current = now
+    // another take-off, sheet or level, or outlines that changed some other way (a take-off loaded from the account): nothing to follow
+    if (!prev || prev.key !== key || !prev.seen.has(sig) || !(mpp > 0)) return
+    const moved = (p: typeof project) => {
+      const shapes = roomShapesOf(p), edges = roomEdgesOf(p)
+      if (shapes.length + edges.length === 0) return null
+      const res = followWalls(prev.walls, walls, [...shapes.map(s => ({ points: s.points, kind: 'room' as const, rect: s.rect ?? isAxisRect(s.points) })), ...edges.map(e => ({ points: e.points, kind: 'edge' as const }))], 0.12 / mpp)
+      if (res.every(r => !r)) return null
+      let labels = roomLabelsOf(p)
+      shapes.forEach((s, i) => {
+        const next = res[i]
+        if (next) labels = labels.map(l => { if (!pointInPolygon(l, s.points)) return l; const at = labelAfterEdit(l, next, mpp); return { ...l, x: at.x, y: at.y } })
+      })
+      let q = setRoomShapes(p, shapes.map((s, i) => (res[i] ? { ...s, points: res[i]! } : s)))
+      q = setRoomEdges(q, edges.map((e, i) => (res[shapes.length + i] ? { ...e, points: res[shapes.length + i]! } : e)))
+      return setRoomLabels(q, labels)
+    }
+    if (!moved(project)) return
+    setProject(p => { const q = moved(p) ?? p; now.seen.add(sigOf(q)); return q })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.elements, project.roomShapes, project.roomEdges, project.sheets, project.activeSheetId, project.levels, project.activeLevelId, project.id, project.calibration.mpp])
+
+  // a room that has just been closed by a wall or a room edge: ask for its name
+  const roomsSig = roomData ? roomData.sheetId + ';' + roomData.rooms.map(r => Math.round(r.areaM2 * 10) + ':' + Math.round(r.labelAt.x) + ',' + Math.round(r.labelAt.y)).join(';') : ''
+  useEffect(() => {
+    const asked = askNameRef.current
+    if (!asked || !roomData) return
+    if (asked.view !== roomData.sheetId || Date.now() - asked.at > 5000) { askNameRef.current = null; return }
+    const fresh = newUnnamedRooms(asked.rooms, roomData.rooms, roomLabelsOf(project))
+    if (fresh.length === 0) return
+    askNameRef.current = null
+    if (askNames && viewRooms) setNameCard({ x: fresh[0].labelAt.x, y: fresh[0].labelAt.y, auto: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomsSig])
+  useEffect(() => { setNameCard(null) }, [activeSheetId, activeLevelId, project.id])
+
   /** every wall as the rings it fills (joined where walls meet, as they are painted) */
   function wallSolids(els: DrawnElement[]): TakeoffPoint[][][] {
     const mpp = project.calibration.mpp
@@ -3121,9 +3211,20 @@ export default function TakeoffPage() {
     const move = (ev: MouseEvent) => {
       const pt = toPlan(ev)
       let points: TakeoffPoint[], delta: { dx: number; dy: number } | undefined
-      if (mode.kind === 'move') { delta = { dx: pt.x - start.x, dy: pt.y - start.y }; points = moveOutline(orig, delta.dx, delta.dy) }
+      if (mode.kind === 'move') {
+        delta = { dx: pt.x - start.x, dy: pt.y - start.y }
+        // a room being moved settles against the walls: the nearest corner to a face pulls it flush, across and up and down
+        let fx = 0, fy = 0, bx = Infinity, by = Infinity
+        for (const c of moveOutline(orig, delta.dx, delta.dy)) {
+          const to = roomSnapPoint(c), cx = to.x - c.x, cy = to.y - c.y
+          if (Math.abs(cx) > 0.01 && Math.abs(cx) < bx) { bx = Math.abs(cx); fx = cx }
+          if (Math.abs(cy) > 0.01 && Math.abs(cy) < by) { by = Math.abs(cy); fy = cy }
+        }
+        delta = { dx: delta.dx + fx, dy: delta.dy + fy }
+        points = moveOutline(orig, delta.dx, delta.dy)
+      }
       else {
-        const to = drawingPoint(pt).pt
+        const to = roomSnapPoint(pt)
         points = isRect && opposite ? rectFromCorners(opposite, to) : orig.map((p, i) => (i === mode.index ? to : p))
       }
       editDrawnShape(shapeId, points, delta)
@@ -3179,8 +3280,9 @@ export default function TakeoffPage() {
     showToast('The drawn outline' + (ids.size > 1 ? 's' : '') + ' under the walls removed')
   }
   function startRoomDraw(kind: 'rect' | 'polygon' | 'edge') {
+    if (kind !== 'edge') closeRoomRef.current = false
     setRoomDraw(kind === 'edge' ? 'edge' : 'room'); setTool(kind === 'edge' ? 'line' : kind); setDrawPoints([]); setIsDrawing(false); setTyped('')
-    showToast(kind === 'edge' ? 'Click where the room edge starts and where it ends (it closes the room along that line); double-click to finish' : kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
+    showToast(kind === 'edge' ? 'Close a room: click one side of the opening, then the other' : kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
   }
   function roomRemoveName(idx: number) {
     const li = roomLabelIdx[idx]
@@ -3213,6 +3315,27 @@ export default function TakeoffPage() {
                 </text>
               )}
             </g>
+          )
+        })}
+      </g>
+    )
+  }
+
+  /** with the Select or Rooms tool, a room's name on the plan can be clicked to name it */
+  function renderRoomNameHits() {
+    if (!roomData || !shadeRooms || roomData.sheetId !== viewKey(project) || (tool !== 'select' && tool !== 'room')) return null
+    const mpp = project.calibration.mpp
+    return (
+      <g data-print-hide="1">
+        {roomData.rooms.map((r, i) => {
+          if (!((r.widthM / mpp) * zoom > 50)) return null
+          const w = Math.max(64, (roomInfos[i]?.name.length ?? 6) * 7.5 + 14) / zoom
+          return (
+            <rect key={'rn-' + i} data-testid="room-name-hit" x={r.labelAt.x - w / 2} y={r.labelAt.y - 16 / zoom} width={w} height={32 / zoom} rx={4 / zoom} fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }}
+              onMouseDown={ev => { ev.stopPropagation() }}
+              onClick={ev => { ev.stopPropagation(); setNameCard({ x: r.labelAt.x, y: r.labelAt.y, auto: false }); if (tool === 'room') setSelectedRoomPt(r.labelAt) }}>
+              <title>Click to name this room</title>
+            </rect>
           )
         })}
       </g>
@@ -5281,7 +5404,7 @@ export default function TakeoffPage() {
       ? (calibPts.length === 1 ? calibPts[0] : undefined)
       : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
     // drawing an internal wall: it snaps to the INSIDE face of the outside walls (and to the corners of the room), not to the line the outside walls were drawn along
-    const floorSnap = snapOn && floorFaceSnap(tool, activePhase)
+    const floorSnap = snapOn && (floorFaceSnap(tool, activePhase) || (!!roomDraw && (tool === 'line' || tool === 'rect' || tool === 'polygon')))   // a drawn room and a room edge sit between the walls, like a floor
     const inside = snapOn && ((activePhase === 'Internal Walls & Partitions' && (tool === 'line' || tool === 'polygon')) || floorSnap) ? insideFaces() : null
     // a floor also snaps to both faces of the partitions (not the line they were drawn along)
     const parts = floorSnap ? partitionFaces() : null
@@ -5294,6 +5417,13 @@ export default function TakeoffPage() {
     // construction guides: the lines themselves (anywhere along them) and where they cross (a guide being dragged is not snapped to)
     const gp = snapOn ? guideSnapParts(guideDragRef.current?.id) : null
     return snapPoint(raw, { anchors: [...(below.length ? [...anchors, ...anchorsFor(below)] : anchors), ...(gp ? gp.anchors : [])], last, radius: snapPx / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: gp || below.length ? [...(below.length ? [...(segs ?? []), ...segmentsFor(below)] : (segs ?? [])), ...(gp ? gp.segments : [])] : segs })
+  }
+
+  /** a point snapped to the faces and corners of the walls: for a drawn room's corner being dragged */
+  function roomSnapPoint(raw: TakeoffPoint): TakeoffPoint {
+    if (!snapOn) return raw
+    const a = insideFaces(), b = partitionFaces()
+    return snapPoint(raw, { anchors: [...a.corners, ...b.corners].map(c => ({ ...c, kind: 'end' as const })), radius: snapPx / zoom, snap: true, ortho: false, segments: [...a.segments, ...b.segments] }).pt
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -9256,10 +9386,22 @@ export default function TakeoffPage() {
     { t: 'drain',    icon: '🕳', label: 'Place Chamber / Manhole / Gully', pinned: true, show: activePhase === 'Drainage & Services' },
     { t: 'click',    icon: '💠', label: 'Click to Place Item',     pinned: false, show: true },
   ]
+  // 'Close a room' sits with the wall tools: two clicks across an opening make the room, then it is back to Select
+  const wallPhase = activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions'
+  const closingRoom = roomDraw === 'edge' && tool === 'line'
+  const CLOSE_ROOM_TIP = 'Close a room: a line across an opening or an open side (not a wall)'
+  function startCloseRoom() {
+    if (closingRoom) { setDrawPoints([]); setIsDrawing(false); setTyped(''); setRoomDraw(false); setTool('select'); return }
+    closeRoomRef.current = true
+    startRoomDraw('edge')
+  }
   /** shows the Schedule / Properties panel: the side column on a computer, the pull-out panel on a tablet */
   function openSidePanel() { if (coarse) setTabPanel(true); else setPanelOpen(true) }
   function chooseTool(t: DrawingTool) {
     if (tool === 'measure' || t === 'measure' || tool === 'guide' || t === 'guide') { setDrawPoints([]); setIsDrawing(false) }
+    closeRoomRef.current = false
+    // picking a tool leaves 'Close a room' behind (its line would otherwise stay a room edge)
+    if (closingRoom) { setRoomDraw(false); setDrawPoints([]); setIsDrawing(false) }
     if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t)
     if (t === 'select') { setDrawPoints([]); setIsDrawing(false) }
     if (t === 'electric' || t === 'plumb' || t === 'drain') { setPanelMode('properties'); openSidePanel() }
@@ -9545,8 +9687,9 @@ export default function TakeoffPage() {
         return (
           <>
             {toolDefs.filter(d => d.show && d.pinned).map(d => (
-              <button key={d.t} className={cls} data-tip={d.label} aria-label={d.label} aria-pressed={tool === d.t} onClick={() => chooseTool(d.t)} style={ibx(tb, d.label, tool === d.t)}>{d.icon}{lab(tb, d.label)}</button>
+              <button key={d.t} className={cls} data-tip={d.label} aria-label={d.label} aria-pressed={tool === d.t && !closingRoom} onClick={() => chooseTool(d.t)} style={ibx(tb, d.label, tool === d.t && !closingRoom)}>{d.icon}{lab(tb, d.label)}</button>
             ))}
+            {wallPhase && <button data-testid="close-room" className={cls} data-tip={CLOSE_ROOM_TIP} aria-label="Close a room" aria-pressed={closingRoom} onClick={startCloseRoom} style={ibx(tb, 'Close a room', closingRoom)}>┆{lab(tb, 'Close a room')}</button>}
             {toolDefs.some(d => d.show && !d.pinned) && (
               <div data-menu style={{ position: 'relative' }}>
                 <button className={cls} data-tip="More tools" aria-label="More tools" onClick={() => setOpenMenu(m => (m === 'more' ? null : 'more'))} style={ibStyle(openMenu === 'more' || toolDefs.some(d => d.show && !d.pinned && tool === d.t))}>⋯</button>
@@ -9638,6 +9781,9 @@ export default function TakeoffPage() {
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Shade the rooms the walls make, with their name and floor area">
                     <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="When the walls close a new room, a small card asks what it is called">
+                    <input type="checkbox" checked={askNames} onChange={e => setAskNames(e.target.checked)} style={{ width: 'auto' }} /> Ask me to name new rooms
                   </label>
                   <div style={{ borderTop: '1px solid var(--to-border)', paddingTop: 8, fontSize: 11, color: 'var(--to-muted)' }}>Measurements on the plan</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="The unit the measurements are written in">
@@ -9819,6 +9965,12 @@ export default function TakeoffPage() {
                 <span style={{ fontSize: 10, lineHeight: 1.1 }}>{d.label.split(' ')[0].replace('Place', 'Place')}</span>
               </button>
             ))}
+            {wallPhase && (
+              <button type="button" aria-label="Close a room" onClick={startCloseRoom}
+                style={{ width: 60, minHeight: 58, borderRadius: 12, border: closingRoom ? '2px solid var(--to-active-bd)' : '1px solid var(--to-border)', background: closingRoom ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', padding: 0 }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>┆</span><span style={{ fontSize: 10 }}>Close room</span>
+              </button>
+            )}
             <div style={{ flex: 1 }} />
             <button type="button" aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} style={{ width: 60, minHeight: 50, borderRadius: 12, border: '1px solid var(--to-border)', background: snapOn ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', cursor: 'pointer', fontSize: 11 }}>🧲<br />Snap</button>
             <button type="button" aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} style={{ width: 60, minHeight: 50, borderRadius: 12, border: '1px solid var(--to-border)', background: orthoOn ? 'var(--to-hover)' : 'transparent', color: 'var(--to-text)', cursor: 'pointer', fontSize: 11 }}>⊾<br />Straight</button>
@@ -9971,6 +10123,17 @@ export default function TakeoffPage() {
               The picture for <strong>{sheetName(project, activeSheetId)}</strong> is not on this computer or in your account. Press <strong>Add Plan</strong> to load it again: it fills this sheet and keeps its drawings and scale.
             </div>
           )}
+          {nameCard && roomData && roomData.sheetId === viewKey(project) && (() => {
+            const i = roomIndexAt(roomData.rooms, nameCard)
+            if (i < 0) return null
+            const lab = roomLabelIdx[i] >= 0 ? roomLabels[roomLabelIdx[i]] : undefined
+            return (
+              <RoomNameCard key={Math.round(nameCard.x) + ',' + Math.round(nameCard.y)} left={panOffset.x + roomData.rooms[i].labelAt.x * zoom} top={panOffset.y + roomData.rooms[i].labelAt.y * zoom} areaW={svgSize.w} areaH={svgSize.h}
+                shownName={roomInfos[i].name} typedName={lab?.name ?? ''} kind={lab?.kind} areaM2={roomData.rooms[i].areaM2} autoFocus={!nameCard.auto}
+                onName={name => roomLabelPatch(i, { name })} onKind={kind => { roomKindPatch(i, kind); setNameCard(null) }} onClose={() => setNameCard(null)}
+                onStopAsking={nameCard.auto ? () => { setAskNames(false); setNameCard(null); showToast('Take-off will not ask for room names. Click a room\'s name to name it, or switch it back on in the View menu.') } : undefined} />
+            )
+          })()}
           <svg
             ref={svgRef}
             className={viewTags ? 'to-tags-on' : undefined}
@@ -9990,7 +10153,7 @@ export default function TakeoffPage() {
             onClick={handleSvgClick}
             onDoubleClick={handleSvgDblClick}
             onMouseMove={handleMouseMove}
-            onMouseDownCapture={e => { handleGuideMouseDown(e); handleAddJoistDown(e) }}
+            onMouseDownCapture={e => { if (nameCard) setNameCard(null); handleGuideMouseDown(e); handleAddJoistDown(e) }}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -10058,6 +10221,7 @@ export default function TakeoffPage() {
               {renderStructuralOpenings()}
               {renderDimensions()}
               <g data-print-hide="1">{renderRoomEditors()}{renderJoinPick()}</g>
+              {renderRoomNameHits()}
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
@@ -10343,7 +10507,7 @@ export default function TakeoffPage() {
             <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
               (pipeDraw && tool === 'line') ? 'Drawing a HEATING PIPE: start on the boiler or a radiator, click each bend, double-click to finish (the ends snap to radiators and pipes)' :
-              (roomDraw === 'edge' && tool === 'line') ? 'Drawing a ROOM EDGE: click its start and end (it closes a room, it is not a wall)' :
+              (roomDraw === 'edge' && tool === 'line') ? 'Closing a room: click one side of the opening, then the other (it is not a wall)' :
               (roomDraw && tool === 'rect') ? 'Drawing a ROOM: click two corners (or type the size)' :
               (roomDraw && tool === 'polygon') ? 'Drawing a ROOM: click each corner, double-click to finish' :
               tool === 'select' ? 'Select' :
