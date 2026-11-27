@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-27T22:00:00+00:00',
+    title: 'Phones: no more getting stuck on "Checking your account"',
+    detail: 'If the signal is weak the app now keeps trying and offers Try again and the subcontractor and customer sign-ins. Subcontractors and customers who open the main app are sent straight to their own portal. With no signal you get a plain No signal page. Plans on phones and tablets are drawn more lightly so zooming a large drawing should not restart the app.',
+  },
+  {
     at: '2026-11-27T20:00:00+00:00',
     title: 'Take-off rooms: name them as you go, close them in two clicks, and they follow the walls',
     detail: 'When your walls close a new room, a small card asks what it is called (you can switch this off). Click a room name on the plan to change it. A new Close a room button draws a line across a doorway or open side in two clicks. Rectangle rooms snap to the inside of the walls and now stretch and move with them, and a name stays with its room when a wall is moved.',

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { pdfjsResources } from '@/lib/pdfjs-resources'
+import PhonePdfPages from '@/components/PhonePdfPages'
 
 interface Props {
   url: string | null
@@ -27,10 +28,13 @@ export default function DocumentPreviewPane({ url, isPdf, fileName }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const [panning, setPanning] = useState(false)
+  // a phone or tablet draws a PDF lightly (PhonePdfPages): every page at full size can run it out of memory and reload the app
+  const [touch, setTouch] = useState<boolean | null>(null)
+  useEffect(() => { setTouch(window.matchMedia('(pointer: coarse)').matches) }, [])
 
   // Render every page of a PDF to an image once the signed URL is available.
   useEffect(() => {
-    if (!url || !isPdf) { setPages([]); return }
+    if (!url || !isPdf || touch !== false) { setPages([]); if (touch) setZoom(1); return }
     let cancelled = false
     setLoading(true); setError(null); setPages([]); setZoom(1)
     ;(async () => {
@@ -64,7 +68,7 @@ export default function DocumentPreviewPane({ url, isPdf, fileName }: Props) {
       }
     })()
     return () => { cancelled = true }
-  }, [url, isPdf])
+  }, [url, isPdf, touch])
 
   // Grab-to-pan: drag anywhere in the pane to scroll around.
   function onMouseDown(e: React.MouseEvent) {
@@ -123,8 +127,10 @@ export default function DocumentPreviewPane({ url, isPdf, fileName }: Props) {
           <span style={msg}>Loading preview…</span>
         ) : error ? (
           <span style={msg}>{error}</span>
+        ) : isPdf && touch ? (
+          <PhonePdfPages url={url} fileName={fileName} widthPct={widthPct} scroller={scrollRef} />
         ) : isPdf ? (
-          loading ? (
+          loading || touch === null ? (
             <span style={msg}>Rendering pages…</span>
           ) : (
             <div style={{ width: widthPct, display: 'flex', flexDirection: 'column', gap: 10, margin: '0 auto' }}>
@@ -161,7 +167,7 @@ const paneStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden',
 }
 const scrollArea: React.CSSProperties = {
-  flex: 1, overflow: 'auto', padding: 10, display: 'flex',
+  flex: 1, overflow: 'auto', overscrollBehavior: 'contain', padding: 10, display: 'flex',
   alignItems: 'flex-start', justifyContent: 'center',
 }
 const pageImg: React.CSSProperties = {
