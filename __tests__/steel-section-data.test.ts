@@ -18,7 +18,7 @@ t('every section the calculators offer has a spec', all.every(s => !!sectionSpec
 t('and nothing in the table is a section the calculators do not offer', SECTION_SPECS.every(s => all.some(a => a.label === s.label)), SECTION_SPECS.filter(s => !all.some(a => a.label === s.label)).map(s => s.label))
 t('labels are unique', new Set(SECTION_SPECS.map(s => s.label)).size === SECTION_SPECS.length)
 t('the catalogue weight is within 0.5 kg/m of the weight the calculators price', all.every(s => Math.abs(sectionSpec(s.label)!.kgPerM - s.kgPerM) <= 0.5), all.filter(s => Math.abs(sectionSpec(s.label)!.kgPerM - s.kgPerM) > 0.5).map(s => [s.label, s.kgPerM, sectionSpec(s.label)!.kgPerM]))
-t('the depth and width in the name match the table (203 × 133 is 203mm deep and 133mm wide, to the nearest 10mm)', SECTION_SPECS.filter(s => s.family !== 'SHS').every(s => { const m = /^(\d+) × (\d+) /.exec(s.label)!; return Math.abs(+m[1] - s.depthMm) < 8 && Math.abs(+m[2] - s.widthMm) < 8 }), SECTION_SPECS.map(s => s.label))
+t('the depth and width in the name match the table (a name is the serial size: a heavy section is a little deeper)', SECTION_SPECS.filter(s => s.family !== 'SHS').every(s => { const m = /^(\d+) × (\d+) /.exec(s.label)!; return Math.abs(+m[1] - s.depthMm) < 30 && Math.abs(+m[2] - s.widthMm) < 8 }), SECTION_SPECS.map(s => s.label))
 t('the flange width the plate uses is the width in the table', SECTION_SPECS.filter(s => s.family !== 'SHS').every(s => Math.abs(flangeWidthMm(s.label)! - s.widthMm) < 8))
 // a check of the hand-typed figures against geometry: the area of two flanges and a web is within 12% of the catalogue's, and Ixx of an I-shape within 8% (the root radius adds a little)
 const I = SECTION_SPECS.filter(s => s.family !== 'SHS')

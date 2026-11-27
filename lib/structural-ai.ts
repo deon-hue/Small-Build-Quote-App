@@ -7,6 +7,7 @@ import { isObj, between, whole, str } from './ai-spec'
 import type { AssemblyOpening } from './assembly-calc'
 import * as TFB from './timber-frame-brick-wall'
 import * as SO from './structural-openings-units'
+import { toFullOpening, mirrorSteel } from './structural-openings-steel'
 
 export const STRUCTURAL_AI_IDS = ['ew-timber-frame-brick', 'sf-openings-calc'] as const
 export const STRUCTURAL_AI_SET: ReadonlySet<string> = new Set<string>(STRUCTURAL_AI_IDS)
@@ -110,7 +111,7 @@ function structuralOpenings(spec: Record<string, unknown>): AiStructural | null 
   const raws = items(spec.openings, 20)
   if (raws.length === 0) return null
   const assumed: string[] = []
-  const noWall: string[] = [], noLoad: string[] = [], noHeight: string[] = []
+  const noWall: string[] = [], noLoad: string[] = [], noHeight: string[] = [], onLintel: string[] = []
   const out: SO.StructuralOpening[] = []
   raws.forEach((raw, i) => {
     const w = between(raw.widthM, 0.3, 12)
@@ -137,11 +138,18 @@ function structuralOpenings(spec: Record<string, unknown>): AiStructural | null 
     const eng = bool(raw.engineer); if (eng !== null && o.loadBearing) o.engineer = eng
     const pw = between(raw.propWeeks, 0, 26); if (pw !== null) o.propWeeks = pw
     if (bool(raw.makeGood) !== null) o.makeGood = raw.makeGood as boolean
-    out.push(o)
+    // opened in the calculator with all its choices: steel, or a lintel when the scope says so, or for a small opening with no steel mentioned
+    let full = toFullOpening(o)
+    full = { ...full, cavityWork: full.wall === 'cavity' && full.formed === 'cut-existing' }
+    const said = pick(raw.over, SO.OVER_FOR[full.wall])
+    const over = said ?? (beams === null && posts === null ? SO.defaultOver(full.wall, full.widthMm, full.loadAbove) : 'steel')
+    if (over !== 'steel') { full = mirrorSteel({ ...full, over }); if (!said) onLintel.push(full.ref) }
+    out.push(full)
   })
   if (out.length === 0) return null
   if (noWall.length) assumed.push(`what kind of wall ${list(noWall)} ${noWall.length === 1 ? 'is' : 'are'} in (taken as a solid brick wall)`)
   if (noLoad.length) assumed.push(`what is above ${list(noLoad)} (taken as one floor and the roof)`)
+  if (onLintel.length) assumed.push(`a lintel, not a steel beam, over ${list(onLintel)} (${onLintel.length === 1 ? 'a small opening' : 'small openings'})`)
   if (noHeight.length) assumed.push(`the height of ${list(noHeight)} (taken as 2.1m, a door)`)
   const total = out.reduce((s, o) => s + o.qty, 0)
   return {
@@ -166,5 +174,5 @@ export function structuralPromptGuide(): string {
   const bricks = Object.keys(TFB.LEAF_BRICK_LABEL).join('|')
   const studs = Object.values(TFB.STUD_SECTIONS).map(s => s.depthMm).join('|')
   return `For the "Timber Frame with Brick Outer Leaf" line (one external wall at a time), add "calc": {"lengthM": <m>, "heightM": <m>, "brick": "${bricks}", "mortar": "cement"|"lime", "studDepthMm": <${studs}>, "studCentresMm": 400|600, "cavityMm": <mm, 50 or more>, "sheathing": "osb"|"ply", "insulation": "mineral"|"pir"|"none", "outerInsulationMm": <mm of PIR over the sheathing>, "vcl": true|false, "lining": "none"|"one"|"two" (layers of plasterboard), "movementJointSpacingM": <m>, "openings": [{"kind": "window"|"door"|"bifold", "widthM": <m>, "heightM": <m>, "count": <n>}]}. Give a wall ONLY with a stated length; for a two-storey extension give one object per wall per floor only if the scope separates them. Only openings with a stated width and height.
-  For the "Structural Openings (by opening)" line (an opening cut through an existing wall, or formed in a new one, with the steel over it), add "calc": {"situation": "clear"|"occupied"|"hard", "buildingControl": true|false, "openings": [{"location": "kitchen to dining room", "formed": "cut-existing"|"new-wall", "wall": "cavity"|"solid"|"block", "thicknessMm": <mm>, "widthM": <m, the span: required>, "heightM": <m>, "qty": <n>, "loadAbove": "light"|"floor"|"heavy", "loadBearing": true|false, "beams": <n>, "posts": <n>, "postRole": "ends"|"mid", "steelBy": "us"|"sub", "finish": "board"|"intumescent"|"none", "hiab": true|false, "engineer": true|false}]}. Only openings with a stated width. Do NOT use this line for taking out a whole wall (Demolition) or for the door or window itself (Windows & Doors).`
+  For the "Structural Openings (by opening)" line (an opening cut through an existing wall, or formed in a new one, with the steel over it), add "calc": {"situation": "clear"|"occupied"|"hard", "buildingControl": true|false, "openings": [{"location": "kitchen to dining room", "formed": "cut-existing"|"new-wall", "wall": "cavity"|"solid"|"block", "thicknessMm": <mm>, "widthM": <m, the span: required>, "heightM": <m>, "qty": <n>, "loadAbove": "light"|"floor"|"heavy", "loadBearing": true|false, "over": "steel"|"concrete" (precast lintels)|"steel-cavity" (cavity wall lintel)|"steel-box" (only if stated), "beams": <n>, "posts": <n>, "postRole": "ends"|"mid", "steelBy": "us"|"sub", "finish": "board"|"intumescent"|"none", "hiab": true|false, "engineer": true|false}]}. Only openings with a stated width. Do NOT use this line for taking out a whole wall (Demolition) or for the door or window itself (Windows & Doors).`
 }

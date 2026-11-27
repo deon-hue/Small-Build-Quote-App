@@ -144,7 +144,7 @@ export function cleanWallSteel(x: unknown): WallSteel {
   return newWallSteel()
 }
 
-export interface WallSteelItem { id: string; ref: string; widthMm: number; heightMm: number; steel: WallSteel }
+export interface WallSteelItem { id: string; ref: string; widthMm: number; heightMm: number; steel: WallSteel; /** the span a beam picked from the span works across, when posts stand under it (else the opening's width) */ spanMm?: number }
 export interface WallSteelLine { id: string; name: string; category: SteelLine['category']; unit: string; unitCost: number; qty: number; roomId?: string }
 export interface WallSteelResult {
   /** the priced lines, ready to become the wall's cost lines (materials, plant, subcontractors) */
@@ -169,8 +169,8 @@ const resolvedSection = (m: WallMember, spanM: number, load: LoadAbove): string 
  * The steel over an opening in words, for the quote: 'two 203 × 133 UB 25 steel beams over, on two padstones, with a 10mm x 328mm steel plate welded to the underside of each beam to spread the load over the wall, 4 end plates,
  * two 152 × 152 UC 23 steel columns on concrete pads, the steel cased in two layers of fire-resisting board, supplied and fixed by a steelwork contractor'.
  */
-export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessMm: number): string {
-  const span = widthMm / 1000
+export function wallSteelWords(steel: WallSteel, widthMm: number, wallThicknessMm: number, spanMm?: number): string {
+  const span = (spanMm ?? widthMm) / 1000
   const bits: string[] = []
   const beams = steel.members.filter(m => KIND_BY_ID[m.kind] && !KIND_BY_ID[m.kind].post)
   const posts = steel.members.filter(m => KIND_BY_ID[m.kind]?.post)
@@ -216,7 +216,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number, 
   const owner = new Map<string, string>()
   const resolved = new Map<string, string>()
   for (const { it, steel } of cleaned) {
-    const span = it.widthMm / 1000
+    const span = (it.spanMm ?? it.widthMm) / 1000
     for (const m of steel.members) {
       const id = `${it.id}~${m.id}`
       const post = KIND_BY_ID[m.kind].post
@@ -263,7 +263,7 @@ export function priceWallSteel(items: WallSteelItem[], wallThicknessMm: number, 
   for (const { it, steel } of cleaned) {
     const firstBeam = steel.members.find(m => m.kind === 'beam')
     const beamLabel = firstBeam ? resolved.get(`${it.id}~${firstBeam.id}`) ?? '' : ''
-    out.byOpening[it.id] = { beamLabel, steelKg: kgBy.get(it.id) ?? 0, parts: r.members.filter(s => owner.get(s.memberId) === it.id).flatMap(s => s.parts), words: wallSteelWords(steel, it.widthMm, wallThicknessMm) }
+    out.byOpening[it.id] = { beamLabel, steelKg: kgBy.get(it.id) ?? 0, parts: r.members.filter(s => owner.get(s.memberId) === it.id).flatMap(s => s.parts), words: wallSteelWords(steel, it.widthMm, wallThicknessMm, it.spanMm) }
   }
   return out
 }
