@@ -511,6 +511,26 @@ export function chainWalls(pieces: WallPiece[], tol = 3): WallChain[] {
 }
 
 /**
+ * Which side of its OWN line each open wall is painted on: 1 = to the right of the way it was drawn, -1 = to the left. Worked out from the very runs that are painted (chainWalls): a run that closes into a loop is built
+ * inward whatever side each piece asked for, so anything cut into or measured on a single wall (its doors, windows and structural openings, its outline) must ask this and not work the side out a second way, or it
+ * lands on the other side of the line from the paint. Rectangle and polygon walls are not included: their side follows from their own outline.
+ */
+export function paintedSides(pieces: WallPiece[], tol = 3): Map<string, 1 | -1> {
+  const byId = new Map(pieces.map(p => [p.id, p]))
+  const out = new Map<string, 1 | -1>()
+  for (const ch of chainWalls(pieces, tol)) {
+    let dir = ch.closed && signedArea(ch.points) < 0 ? -1 : 1
+    if (ch.flip) dir = -dir
+    for (const id of ch.ids) {
+      const p = byId.get(id)
+      if (!p || p.closed) continue
+      out.set(id, ((p.flip ? -dir : dir)) as 1 | -1)   // a flipped wall was taken into the run from its other end
+    }
+  }
+  return out
+}
+
+/**
  * The straight sides of a run of walls, corner to corner: consecutive pieces that point the same way (within `tolDeg`) are ONE side, so a straight stretch built from two or three walls is measured once, from one
  * corner to the next. For a closed run the side that crosses the start is joined up too. Each side is [from, to].
  */

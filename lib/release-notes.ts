@@ -10,6 +10,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    at: '2026-11-27T12:00:00+00:00',
+    title: 'Take-off: openings now cut through the wall, not beside it',
+    detail: 'Where an extension was drawn against an existing house wall, a structural opening, window or door put on that wall could appear beside it instead of in it (the selection outline too). Openings now sit in the middle of the wall exactly as it is drawn, and openings already on a plan move into place by themselves.',
+  },
+  {
     at: '2026-11-24T12:00:00+00:00',
     title: 'Documents: a clear cross in the search box',
     detail: 'The search box on the Documents page (supplier, date, job or price) now has a ✕ inside it once you have typed something. Press it, or press Esc, to clear the search and see every document again.',
